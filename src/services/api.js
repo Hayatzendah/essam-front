@@ -26,9 +26,15 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
+    console.log('🔧 Interceptor running for:', config.url);
+    console.log('🔑 Token from localStorage:', token ? token.substring(0, 20) + '...' : 'null');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('✅ Authorization header added');
+    } else {
+      console.log('❌ No token found in localStorage');
     }
+    console.log('📤 Final headers:', config.headers);
     return config;
   },
   (error) => {
@@ -50,9 +56,9 @@ api.interceptors.response.use(
         url: error.config?.url,
       });
       
-      // معالجة خاصة لخطأ 401 (Unauthorized) - Token منتهي
+      // معالجة خاصة لخطأ 401 (Unauthorized) - Token منتهي أو غير صالح
       if (error.response.status === 401) {
-        console.error('🔒 Token منتهي - إعادة توجيه للـ login');
+        console.error('🔒 401 Unauthorized - Token منتهي أو غير صالح');
         // حذف tokens
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -61,6 +67,12 @@ api.interceptors.response.use(
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
+      }
+
+      // 403 Forbidden = ما عندك صلاحية (مش مشكلة token)
+      if (error.response.status === 403) {
+        console.error('🚫 403 Forbidden - ليس لديك صلاحية لهذا الإجراء');
+        // لا تحذف الـ tokens! المستخدم مسجل دخول لكن ما عنده صلاحية
       }
       
       // معالجة خاصة لخطأ 502
@@ -118,14 +130,26 @@ export const authAPI = {
     console.log('Logging in with data:', { ...data, password: '***' });
     console.log('API URL:', API_BASE_URL);
     console.log('Full URL:', `${API_BASE_URL}/auth/login`);
-    
+
     try {
       const response = await api.post('/auth/login', data);
+      console.log('✅ Login response received:', {
+        hasAccessToken: !!response.data.accessToken,
+        hasRefreshToken: !!response.data.refreshToken,
+        hasUser: !!response.data.user,
+        tokenPreview: response.data.accessToken ? response.data.accessToken.substring(0, 20) + '...' : 'null'
+      });
+
       // حفظ tokens في localStorage
       if (response.data.accessToken) {
         localStorage.setItem('accessToken', response.data.accessToken);
         localStorage.setItem('refreshToken', response.data.refreshToken);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+
+        console.log('✅ Tokens saved to localStorage');
+        console.log('📦 Verification - accessToken in localStorage:', localStorage.getItem('accessToken') ? 'موجود ✅' : 'غير موجود ❌');
+      } else {
+        console.error('❌ No accessToken in login response!');
       }
       return response.data;
     } catch (error) {
@@ -159,6 +183,98 @@ export const authAPI = {
       localStorage.removeItem('user');
     }
   },
+};
+
+// 1. جلب قائمة مواضيع القواعد
+export const getGrammarTopics = async (level) => {
+  console.log('📚 Fetching grammar topics for level:', level);
+  console.log('📚 Full URL will be:', `${API_BASE_URL}/grammar/topics?level=${level}`);
+
+  const response = await api.get('/grammar/topics', {
+    params: { level },
+  });
+
+  console.log('📚 Response:', response.data);
+  return response.data;
+};
+
+// 2. جلب موضوع قواعد محدد
+export const getGrammarTopic = async (slug, level) => {
+  const response = await api.get(`/grammar/topics/${slug}`, {
+    params: { level },
+  });
+  return response.data;
+};
+
+// 3. جلب أسئلة القواعد المتعلقة بالموضوع
+export const getGrammarQuestions = async ({ level, tags, page = '1', limit = '20' }) => {
+  const response = await api.get('/questions/grammar', {
+    params: {
+      level,
+      tags,
+      page,
+      limit,
+    },
+  });
+  return response.data;
+};
+
+// 4. جلب قائمة الامتحانات المنشورة (Public)
+export const getPublicExams = async ({ level, provider, page = 1, limit = 20 }) => {
+  console.log('📝 Fetching public exams with params:', { level, provider, page, limit });
+  const response = await api.get('/exams/public', {
+    params: {
+      level,
+      provider,
+      page,
+      limit,
+    },
+  });
+  console.log('📝 Public exams response:', response.data);
+  return response.data;
+};
+
+// 5. جلب تفاصيل امتحان معين (Public)
+export const getExamDetails = async (examId) => {
+  console.log('📝 Fetching exam details for:', examId);
+  const response = await api.get(`/exams/${examId}/public`);
+  console.log('📝 Exam details response:', response.data);
+  return response.data;
+};
+
+// 6. إنشاء محاولة امتحان جديدة
+export const createAttempt = async (examId, mode = 'exam') => {
+  console.log('🎯 Creating attempt for exam:', examId, 'mode:', mode);
+  const response = await api.post('/attempts', {
+    examId,
+    mode,
+  });
+  console.log('🎯 Attempt created:', response.data);
+  return response.data;
+};
+
+// 7. جلب محاولة امتحان معينة
+export const getAttempt = async (attemptId) => {
+  console.log('🎯 Fetching attempt:', attemptId);
+  const response = await api.get(`/attempts/${attemptId}`);
+  console.log('🎯 Attempt response:', response.data);
+  return response.data;
+};
+
+// 8. إرسال إجابات المحاولة
+export const submitAttempt = async (attemptId, answers) => {
+  console.log('🎯 Submitting attempt:', attemptId, 'answers:', answers);
+  const response = await api.post(`/attempts/${attemptId}/submit`, { answers });
+  console.log('🎯 Submit response:', response.data);
+  return response.data;
+};
+
+// 9. إصلاح أقسام الامتحان الفارغة (admin only)
+export const fixExamSections = async (examId) => {
+  console.log('🔧 Fixing empty sections for exam:', examId);
+  const response = await api.post(`/exams/${examId}/fix-sections`);
+  console.log('✅ Sections fixed:', response.data);
+  return response.data;
 };
 
 export default api;

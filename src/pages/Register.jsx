@@ -1,21 +1,26 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
-import './Auth.css';
 
 function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('student');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (password !== confirmPassword) {
+      setError('كلمتا المرور غير متطابقتين.');
+      return;
+    }
 
     if (password.length < 6) {
       setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
@@ -38,16 +43,20 @@ function Register() {
         console.log('Email check failed, continuing with registration:', checkError);
       }
 
-      const registerResult = await authAPI.register(email, password, role);
+      const registerResult = await authAPI.register(email, password, 'student');
       console.log('Registration successful:', registerResult);
-      
+
       // بعد التسجيل الناجح، انتظر قليلاً ثم سجل الدخول تلقائياً
       // (لإعطاء الوقت لقاعدة البيانات لحفظ البيانات)
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       try {
         await authAPI.login(email, password);
-        navigate('/welcome');
+
+        // إذا في redirect parameter، روح عليه
+        // وإلا روح على /welcome
+        const redirectTo = searchParams.get('redirect') || '/welcome';
+        navigate(redirectTo);
       } catch (loginError) {
         console.error('Auto-login failed after registration:', loginError);
         // إذا فشل تسجيل الدخول التلقائي، اعرض رسالة نجاح واطلب من المستخدم تسجيل الدخول يدوياً
@@ -66,14 +75,14 @@ function Register() {
       console.error('Request URL:', err.config?.url);
       console.error('Request data:', err.config?.data);
       console.error('===================================');
-      
+
       if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
         setError('لا يمكن الاتصال بالخادم. تأكد من أن API يعمل على https://api.deutsch-tests.com');
       } else if (err.response?.status === 400) {
         // خطأ 400 - Bad Request
         const errorData = err.response?.data;
         let errorMessage = 'بيانات غير صحيحة';
-        
+
         if (errorData?.message) {
           errorMessage = errorData.message;
         } else if (errorData?.error) {
@@ -84,29 +93,29 @@ function Register() {
           // إذا كان هناك أخطاء متعددة
           errorMessage = Object.values(errorData.errors).flat().join(', ');
         }
-        
+
         // ترجمة رسائل الخطأ الشائعة
-        if (errorMessage.toLowerCase().includes('email already') || 
+        if (errorMessage.toLowerCase().includes('email already') ||
             errorMessage.toLowerCase().includes('already in use') ||
             errorMessage.toLowerCase().includes('email exists')) {
           errorMessage = 'البريد الإلكتروني مستخدم بالفعل. جرب بريداً آخر أو سجل الدخول';
         }
-        
+
         setError(errorMessage);
       } else if (err.response?.status === 409) {
         // Conflict - Email already exists
         const errorData = err.response?.data;
         let errorMessage = 'البريد الإلكتروني مستخدم بالفعل';
-        
+
         if (errorData?.message) {
           errorMessage = errorData.message;
         } else if (errorData?.error) {
           errorMessage = errorData.error;
         }
-        
+
         // إضافة نص توضيحي
         errorMessage += `. البريد "${email.trim().toLowerCase()}" موجود في النظام. جرب بريداً آخر أو سجل الدخول`;
-        
+
         setError(errorMessage);
       } else if (err.response?.status === 500) {
         setError('حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً');
@@ -121,65 +130,146 @@ function Register() {
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h1 className="auth-title">إنشاء حساب جديد</h1>
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="form-group">
-            <label htmlFor="email">البريد الإلكتروني</label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="أدخل بريدك الإلكتروني"
-            />
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* زر الرجوع للرئيسية */}
+      <div className="w-full px-6 py-4">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-slate-600 hover:text-rose-600 transition-colors group"
+        >
+          <svg
+            className="w-5 h-5 transform group-hover:-translate-x-1 transition-transform"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+          <span className="text-sm font-medium">الرئيسية</span>
+        </Link>
+      </div>
+
+      <div className="flex-1 flex items-stretch">
+        {/* العمود اليسار: صورة + نص تعريفي */}
+        <div className="hidden lg:flex flex-1 items-center justify-center bg-white">
+        <div className="max-w-lg px-8 pr-8">
+          <div className="mb-6 text-sm font-semibold text-rose-600">
+            Deutsch Learning App
           </div>
-
-          <div className="form-group">
-            <label htmlFor="password">كلمة المرور</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="أدخل كلمة المرور (6 أحرف على الأقل)"
-              minLength={6}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="role">الدور</label>
-            <select
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="form-select"
-            >
-              <option value="student">طالب</option>
-              <option value="teacher">معلم</option>
-              <option value="admin">مدير</option>
-            </select>
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-          {success && <div className="success-message">{success}</div>}
-
-          <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? 'جاري التسجيل...' : 'إنشاء حساب'}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          <p>
-            لديك حساب بالفعل؟{' '}
-            <Link to="/login" className="auth-link">
-              سجل الدخول
-            </Link>
+          <h1 className="text-3xl font-bold text-slate-900 mb-4 leading-snug">
+            حساب واحد، كل اختبارات الألمانية في مكان واحد 🤍
+          </h1>
+          <p className="text-slate-600 text-sm mb-8">
+            بعد إنشاء الحساب يمكنك حلّ اختبارات &quot;Leben in Deutschland&quot;،
+            امتحانات Goethe و TELC، ومتابعة نتائجك وتقدّمك بسهولة.
           </p>
+          <div className="relative rounded-2xl overflow-hidden">
+            <img
+              src="/src/images/47163.jpg"
+              alt="تعلم الألمانية"
+              className="w-full h-auto object-cover"
+            />
+          </div>
         </div>
+      </div>
+
+      {/* العمود اليمين: فورم التسجيل */}
+      <div className="w-full lg:max-w-md flex items-center justify-center px-4 py-8 lg:mr-8">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-md border border-slate-100 px-6 py-7">
+          <div className="flex flex-col items-center mb-6">
+            <div className="h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center mb-3">
+              <span className="text-2xl">📝</span>
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              إنشاء حساب جديد
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              سجّل كطالب لبدء حل اختبارات الألمانية.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* الإيميل */}
+            <div className="space-y-1 text-sm">
+              <label className="block font-medium text-slate-700">
+                البريد الإلكتروني
+              </label>
+              <input
+                type="email"
+                required
+                dir="ltr"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            {/* كلمة المرور */}
+            <div className="space-y-1 text-sm">
+              <label className="block font-medium text-slate-700">
+                كلمة المرور
+              </label>
+              <input
+                type="password"
+                required
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-400">
+                يفضّل أن تحتوي على حروف كبيرة وصغيرة وأرقام.
+              </p>
+            </div>
+
+            {/* تأكيد كلمة المرور */}
+            <div className="space-y-1 text-sm">
+              <label className="block font-medium text-slate-700">
+                تأكيد كلمة المرور
+              </label>
+              <input
+                type="password"
+                required
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                placeholder="أعد كتابة كلمة المرور"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            {success && (
+              <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">
+                {success}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-rose-500 text-white text-sm font-semibold py-2.5 mt-2 hover:bg-rose-600 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? "جارٍ إنشاء الحساب..." : "إنشاء حساب كطالب"}
+            </button>
+
+            <p className="text-xs text-center text-slate-500 mt-3">
+              لديك حساب بالفعل؟{" "}
+              <Link
+                to={searchParams.get('redirect') ? `/login?redirect=${searchParams.get('redirect')}` : '/login'}
+                className="text-rose-600 font-medium hover:text-rose-700"
+              >
+                سجّل الدخول
+              </Link>
+            </p>
+          </form>
+        </div>
+      </div>
       </div>
     </div>
   );

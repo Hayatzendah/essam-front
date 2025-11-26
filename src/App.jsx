@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Welcome from './pages/Welcome';
+import Home from './pages/Home';
 import Dashboard from './pages/admin/Dashboard';
 import CreateQuestion from './pages/admin/CreateQuestion';
 import EditQuestion from './pages/admin/EditQuestion';
@@ -12,10 +13,24 @@ import ExamsList from './pages/admin/ExamsList';
 import LebenInDeutschland from './pages/student/LebenInDeutschland';
 import ExamPage from './pages/student/ExamPage';
 import ExamResults from './pages/student/ExamResults';
+import Wortschatz from './pages/Wortschatz';
+import WortschatzTopicPage from './pages/WortschatzTopicPage';
+import GrammatikPage from './pages/GrammatikPage';
+import GrammarTopicPage from './pages/grammar/GrammarTopicPage';
+import GrammarExercisePage from './pages/grammar/GrammarExercisePage';
+import PruefungenPage from './pages/PruefungenPage';
+import ExamDetailsPage from './pages/ExamDetailsPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
-  return token ? children : <Navigate to="/login" />;
+  const location = window.location.pathname + window.location.search;
+
+  if (!token) {
+    // حفظ الصفحة المطلوبة في query parameter
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location)}`} />;
+  }
+
+  return children;
 }
 
 function AdminRoute({ children }) {
@@ -37,6 +52,7 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
@@ -127,7 +143,34 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/wortschatz" element={<Wortschatz />} />
+        <Route
+          path="/wortschatz/:level/:topicSlug"
+          element={
+            <PrivateRoute>
+              <WortschatzTopicPage />
+            </PrivateRoute>
+          }
+        />
+        <Route path="/grammatik" element={<GrammatikPage />} />
+        <Route
+          path="/grammatik/:level/:topicSlug"
+          element={
+            <PrivateRoute>
+              <GrammarTopicPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/grammatik/:level/:topicSlug/exercise"
+          element={
+            <PrivateRoute>
+              <GrammarExercisePage />
+            </PrivateRoute>
+          }
+        />
+        <Route path="/pruefungen" element={<PruefungenPage />} />
+        <Route path="/pruefungen/exam/:examId" element={<ExamDetailsPage />} />
       </Routes>
     </Router>
   );

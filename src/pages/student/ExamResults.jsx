@@ -23,8 +23,9 @@ function ExamResults() {
       
       console.log('📊 Attempt results (full):', JSON.stringify(attemptData, null, 2));
       console.log('📊 Attempt items:', attemptData.items);
-      console.log('📊 Attempt score:', attemptData.score);
-      console.log('📊 Attempt totalPoints:', attemptData.totalPoints);
+      console.log('📊 Attempt finalScore:', attemptData.finalScore);
+      console.log('📊 Attempt totalMaxScore:', attemptData.totalMaxScore);
+      console.log('📊 Attempt totalAutoScore:', attemptData.totalAutoScore);
       
       if (!attemptData) {
         throw new Error('لم يتم إرجاع بيانات المحاولة');
@@ -87,13 +88,48 @@ function ExamResults() {
   }
 
   // حساب الإحصائيات
-  const totalQuestions = attempt.items?.length || 0;
-  const correctCount = attempt.items?.filter(item => item.isCorrect === true).length || 0;
-  const wrongCount = totalQuestions - correctCount;
-  const score = attempt.score || 0;
-  const totalPoints = attempt.totalPoints || 0;
-  const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+  // ملاحظة: الـ API يرجع finalScore و totalMaxScore (وليس score و totalPoints)
+  
+  // قراءة القيم من الـ response الصحيح
+  const totalMaxScore = attempt.totalMaxScore ?? 0;
+  const finalScore = attempt.finalScore ?? attempt.totalAutoScore ?? 0;
+  
+  // حساب الإجابات الصحيحة والخاطئة
+  // إذا كان items موجود، نستخدمه للحساب الدقيق
+  // وإلا نستخدم totalMaxScore و finalScore (نفترض أن كل سؤال = 1 نقطة)
+  let totalQuestions = 0;
+  let correctCount = 0;
+  let wrongCount = 0;
+  
+  if (attempt.items && Array.isArray(attempt.items) && attempt.items.length > 0) {
+    // حساب من items (دقيق)
+    totalQuestions = attempt.items.length;
+    correctCount = attempt.items.filter(item => 
+      item.isCorrect === true || item.isCorrect === 'true' || item.correct === true
+    ).length;
+    wrongCount = totalQuestions - correctCount;
+  } else {
+    // حساب من totalMaxScore و finalScore (تقريبي - نفترض أن كل سؤال = 1 نقطة)
+    // إذا كانت النقاط مختلفة، قد لا يكون دقيقاً 100%
+    totalQuestions = totalMaxScore;
+    correctCount = finalScore; // نفترض أن كل نقطة = إجابة صحيحة
+    wrongCount = totalMaxScore - finalScore;
+  }
+  
+  const percentage = totalMaxScore > 0 ? Math.round((finalScore / totalMaxScore) * 100) : 0;
   const isPassed = percentage >= 50; // يمكن تعديل النسبة حسب متطلبات الامتحان
+  
+  console.log('📊 Calculated values:', {
+    finalScore,
+    totalMaxScore,
+    percentage,
+    isPassed,
+    correctCount,
+    wrongCount,
+    totalQuestions,
+    hasItems: !!attempt.items,
+    itemsLength: attempt.items?.length || 0
+  });
 
   return (
     <div className="results-page">
@@ -121,7 +157,7 @@ function ExamResults() {
               <div className="score-details">
                 <div className="score-item">
                   <span className="score-label">الدرجة:</span>
-                  <span className="score-value">{score} / {totalPoints}</span>
+                  <span className="score-value">{finalScore} / {totalMaxScore}</span>
                 </div>
                 <div className="score-item">
                   <span className="score-label">الإجابات الصحيحة:</span>

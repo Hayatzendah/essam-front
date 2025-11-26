@@ -188,10 +188,10 @@ function ExamPage() {
 
   if (loading) {
     return (
-      <div className="exam-page">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>جاري تحميل الامتحان...</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mb-4"></div>
+          <p className="text-sm text-slate-600">جاري تحميل الامتحان...</p>
         </div>
       </div>
     );
@@ -199,11 +199,17 @@ function ExamPage() {
 
   if (!attempt || !attempt.items || attempt.items.length === 0) {
     return (
-      <div className="exam-page">
-        <div className="error-container">
-          <p>❌ لا توجد أسئلة في هذا الامتحان</p>
-          <button onClick={() => navigate('/student/liden')} className="back-btn">
-            العودة
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl p-6 mb-4">
+            <p className="font-semibold mb-2">❌ لا توجد أسئلة في هذا الامتحان</p>
+            <p className="text-xs text-slate-600">يرجى التواصل مع المدرس لإضافة الأسئلة</p>
+          </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm"
+          >
+            ← رجوع
           </button>
         </div>
       </div>
@@ -218,228 +224,218 @@ function ExamPage() {
   const isSubmitted = attempt.status === 'submitted';
 
   return (
-    <div className="exam-page">
-      <div className="exam-header">
-        <div className="exam-progress">
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
-            />
-          </div>
-          <p className="progress-text">
-            السؤال {currentQuestionIndex + 1} من {totalQuestions}
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        {/* الشريط العلوي */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            ← رجوع
+          </button>
+          <span className="text-xs font-semibold text-rose-500">
+            {attempt.exam?.title || 'امتحان'}
+          </span>
+        </div>
+
+        {/* عنوان الامتحان */}
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-slate-900 mb-1">
+            {attempt.exam?.title || 'امتحان'}
+          </h1>
+          <p className="text-sm text-slate-600">
+            {totalQuestions} سؤال • أجب على جميع الأسئلة ثم اضغط "تسليم الامتحان"
           </p>
         </div>
-        <div className="exam-actions">
-          <button onClick={() => navigate('/student/liden')} className="back-btn">
-            ← العودة
-          </button>
-          <button 
-            onClick={handleSubmit} 
-            className="submit-btn" 
-            disabled={submitting || isSubmitted}
-          >
-            {submitting ? 'جاري التسليم...' : isSubmitted ? 'تم التسليم' : 'تسليم الامتحان'}
-          </button>
-        </div>
-      </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-        </div>
-      )}
-
-      {isSubmitted && (
-        <div className="info-banner" style={{ 
-          background: '#fef3c7', 
-          color: '#92400e', 
-          padding: '15px', 
-          borderRadius: '10px', 
-          margin: '20px 0',
-          textAlign: 'center',
-          fontWeight: 'bold'
-        }}>
-          ⚠️ تم تسليم هذا الامتحان. لا يمكنك تعديل الإجابات. 
-          <button 
-            onClick={() => navigate(`/student/attempt/${attemptId}/results`)}
-            style={{
-              marginLeft: '15px',
-              padding: '8px 15px',
-              background: '#f59e0b',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
-          >
-            عرض النتائج
-          </button>
-        </div>
-      )}
-
-      <div className="exam-content">
-        <div className="question-card">
-          <div className="question-header">
-            <span className="question-number">السؤال {currentQuestionIndex + 1}</span>
-            {currentQuestion.points && (
-              <span className="question-points">{currentQuestion.points} نقطة</span>
-            )}
+        {/* رسالة خطأ */}
+        {error && (
+          <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl p-4 mb-6">
+            {error}
           </div>
+        )}
 
-          <div className="question-body">
-            <p className="question-text">{currentQuestion.prompt}</p>
+        {/* رسالة إذا تم التسليم */}
+        {isSubmitted && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-xl p-4 mb-6 text-center">
+            <p className="font-semibold mb-2">⚠️ تم تسليم هذا الامتحان</p>
+            <p className="text-sm mb-3">لا يمكنك تعديل الإجابات</p>
+            <button
+              onClick={() => navigate(`/student/attempt/${attemptId}/results`)}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm font-semibold"
+            >
+              عرض النتائج
+            </button>
+          </div>
+        )}
 
-            {/* Media (Audio/Image/Video) */}
-            {currentQuestion.mediaUrl && (
-              <div className="question-media">
-                {currentQuestion.mediaType === 'audio' && (
-                  <audio controls src={currentQuestion.mediaUrl} className="media-player">
-                    المتصفح لا يدعم تشغيل الملفات الصوتية
-                  </audio>
-                )}
-                {currentQuestion.mediaType === 'image' && (
-                  <img src={currentQuestion.mediaUrl} alt="Question" className="media-image" />
-                )}
-                {currentQuestion.mediaType === 'video' && (
-                  <video controls src={currentQuestion.mediaUrl} className="media-player">
-                    المتصفح لا يدعم تشغيل الفيديو
-                  </video>
+        {/* عرض كل الأسئلة */}
+        <div className="space-y-6 mb-6">
+          {attempt.items.map((item, itemIndex) => (
+            <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+              {/* رقم السؤال */}
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
+                  سؤال {itemIndex + 1}
+                </span>
+                {item.points && (
+                  <span className="text-[10px] text-slate-400">
+                    {item.points} نقطة
+                  </span>
                 )}
               </div>
-            )}
 
-            {/* Answer Options */}
-            <div className="answer-options">
-              {currentQuestion.qType === 'mcq' && currentQuestion.options && (
-                <div className="mcq-options">
-                  {currentQuestion.options.map((option, index) => {
-                    const currentAnswer = answers[currentQuestionIndex];
+              {/* نص السؤال */}
+              <h3 className="text-base font-semibold text-slate-900 mb-3">
+                {item.prompt}
+              </h3>
+
+              {/* Media (Audio/Image/Video) */}
+              {item.mediaUrl && (
+                <div className="mb-4">
+                  {item.mediaType === 'audio' && (
+                    <audio controls src={item.mediaUrl} className="w-full">
+                      المتصفح لا يدعم تشغيل الملفات الصوتية
+                    </audio>
+                  )}
+                  {item.mediaType === 'image' && (
+                    <img src={item.mediaUrl} alt="Question" className="w-full max-w-md rounded-lg" />
+                  )}
+                  {item.mediaType === 'video' && (
+                    <video controls src={item.mediaUrl} className="w-full">
+                      المتصفح لا يدعم تشغيل الفيديو
+                    </video>
+                  )}
+                </div>
+              )}
+
+              {/* MCQ */}
+              {item.qType === 'mcq' && item.options && (
+                <div className="space-y-2">
+                  {item.options.map((option, optIdx) => {
+                    const currentAnswer = answers[itemIndex];
                     const selectedIndexes = currentAnswer?.studentAnswerIndexes || [];
-                    const isSelected = Array.isArray(selectedIndexes) && selectedIndexes.includes(index);
-                    
+                    const isSelected = selectedIndexes.includes(optIdx);
+
                     return (
-                      <label key={index} className={`option-label ${isSelected ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          disabled={isSubmitted}
-                          onChange={(e) => {
-                            const currentAnswers = currentAnswer?.studentAnswerIndexes || [];
-                            let newAnswers;
-                            if (e.target.checked) {
-                              // إضافة الخيار المحدد
-                              newAnswers = [...currentAnswers, index];
-                            } else {
-                              // إزالة الخيار غير المحدد
-                              newAnswers = currentAnswers.filter((i) => i !== index);
-                            }
-                            
-                            console.log('🔘 Checkbox changed:', {
-                              index,
-                              checked: e.target.checked,
-                              currentAnswers,
-                              newAnswers,
-                            });
-                            
-                            handleAnswerChange(currentQuestionIndex, newAnswers, 'mcq');
-                            saveAnswer(currentQuestionIndex, currentQuestion.questionId, newAnswers);
-                          }}
-                        />
+                      <button
+                        key={optIdx}
+                        onClick={() => {
+                          const currentAnswers = currentAnswer?.studentAnswerIndexes || [];
+                          let newAnswers;
+                          if (isSelected) {
+                            newAnswers = currentAnswers.filter((i) => i !== optIdx);
+                          } else {
+                            newAnswers = [...currentAnswers, optIdx];
+                          }
+                          handleAnswerChange(itemIndex, newAnswers, 'mcq');
+                          saveAnswer(itemIndex, item.questionId, newAnswers);
+                        }}
+                        disabled={isSubmitted}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
+                          isSelected
+                            ? 'bg-rose-50 border-rose-400'
+                            : 'bg-slate-50 border-slate-200 hover:border-rose-400'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'border-rose-500' : 'border-slate-300'
+                        }`}>
+                          {isSelected && (
+                            <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                          )}
+                        </div>
                         <span>{option}</span>
-                      </label>
+                      </button>
                     );
                   })}
                 </div>
               )}
 
-              {currentQuestion.qType === 'true_false' && (
-                <div className="true-false-options">
-                  <label className={`option-label ${answers[currentQuestionIndex]?.studentAnswerBoolean === true ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name={`question-${currentQuestionIndex}`}
-                      checked={answers[currentQuestionIndex]?.studentAnswerBoolean === true}
-                      disabled={isSubmitted}
-                      onChange={() => {
-                        handleAnswerChange(currentQuestionIndex, true, 'true_false');
-                        saveAnswer(currentQuestionIndex, currentQuestion.questionId, true);
-                      }}
-                    />
+              {/* True/False */}
+              {item.qType === 'true_false' && (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      handleAnswerChange(itemIndex, true, 'true_false');
+                      saveAnswer(itemIndex, item.questionId, true);
+                    }}
+                    disabled={isSubmitted}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
+                      answers[itemIndex]?.studentAnswerBoolean === true
+                        ? 'bg-rose-50 border-rose-400'
+                        : 'bg-slate-50 border-slate-200 hover:border-rose-400'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      answers[itemIndex]?.studentAnswerBoolean === true
+                        ? 'border-rose-500'
+                        : 'border-slate-300'
+                    }`}>
+                      {answers[itemIndex]?.studentAnswerBoolean === true && (
+                        <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                      )}
+                    </div>
                     <span>صحيح</span>
-                  </label>
-                  <label className={`option-label ${answers[currentQuestionIndex]?.studentAnswerBoolean === false ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name={`question-${currentQuestionIndex}`}
-                      checked={answers[currentQuestionIndex]?.studentAnswerBoolean === false}
-                      disabled={isSubmitted}
-                      onChange={() => {
-                        handleAnswerChange(currentQuestionIndex, false, 'true_false');
-                        saveAnswer(currentQuestionIndex, currentQuestion.questionId, false);
-                      }}
-                    />
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAnswerChange(itemIndex, false, 'true_false');
+                      saveAnswer(itemIndex, item.questionId, false);
+                    }}
+                    disabled={isSubmitted}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
+                      answers[itemIndex]?.studentAnswerBoolean === false
+                        ? 'bg-rose-50 border-rose-400'
+                        : 'bg-slate-50 border-slate-200 hover:border-rose-400'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      answers[itemIndex]?.studentAnswerBoolean === false
+                        ? 'border-rose-500'
+                        : 'border-slate-300'
+                    }`}>
+                      {answers[itemIndex]?.studentAnswerBoolean === false && (
+                        <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                      )}
+                    </div>
                     <span>خطأ</span>
-                  </label>
+                  </button>
                 </div>
               )}
 
-              {currentQuestion.qType === 'fill' && (
-                <div className="fill-answer">
+              {/* Fill */}
+              {item.qType === 'fill' && (
+                <div>
                   <textarea
-                    value={answers[currentQuestionIndex]?.studentAnswerText || ''}
+                    value={answers[itemIndex]?.studentAnswerText || ''}
                     disabled={isSubmitted}
                     onChange={(e) => {
-                      handleAnswerChange(currentQuestionIndex, e.target.value, 'fill');
-                      // حفظ تلقائي بعد 1 ثانية من التوقف عن الكتابة
+                      handleAnswerChange(itemIndex, e.target.value, 'fill');
                       clearTimeout(window.saveTimeout);
                       window.saveTimeout = setTimeout(() => {
-                        saveAnswer(currentQuestionIndex, currentQuestion.questionId, e.target.value);
+                        saveAnswer(itemIndex, item.questionId, e.target.value);
                       }, 1000);
                     }}
                     placeholder="اكتب إجابتك هنا..."
-                    className="fill-input"
+                    className="w-full p-3 border-2 border-slate-200 rounded-lg text-sm resize-vertical min-h-[100px] focus:outline-none focus:border-rose-400"
                     rows={4}
                   />
                 </div>
               )}
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Navigation */}
-        <div className="question-navigation">
+        {/* زر تسليم الامتحان */}
+        <div className="flex justify-end mt-8">
           <button
-            onClick={() => setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))}
-            disabled={currentQuestionIndex === 0}
-            className="nav-btn prev-btn"
+            onClick={handleSubmit}
+            disabled={submitting || isSubmitted}
+            className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
           >
-            ← السابق
-          </button>
-
-          <div className="question-dots">
-            {attempt.items.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentQuestionIndex(index)}
-                className={`question-dot ${
-                  index === currentQuestionIndex ? 'active' : ''
-                } ${answers[index] ? 'answered' : ''}`}
-                title={`السؤال ${index + 1}`}
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setCurrentQuestionIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
-            disabled={currentQuestionIndex === totalQuestions - 1}
-            className="nav-btn next-btn"
-          >
-            التالي →
+            {submitting ? 'جاري التسليم…' : isSubmitted ? 'تم التسليم' : '✅ تسليم الامتحان'}
           </button>
         </div>
       </div>
