@@ -62,13 +62,28 @@ export default function GrammarExercisePage() {
         const receivedAttemptId = attemptRes.data?.attemptId || attemptRes.data?._id;
         const receivedItems = attemptRes.data?.items || [];
 
+        console.log('💾 Raw items:', receivedItems);
+
+        // استخراج بيانات الأسئلة من questionSnapshot
+        const formattedItems = receivedItems.map((item) => ({
+          id: item._id || item.questionId,
+          questionId: item.questionId,
+          points: item.points,
+          // البيانات المهمة من questionSnapshot
+          text: item.questionSnapshot?.text,
+          prompt: item.questionSnapshot?.prompt,
+          qType: item.questionSnapshot?.qType,
+          options: item.questionSnapshot?.options || [],
+        }));
+
+        console.log('💾 Formatted items:', formattedItems);
         console.log('💾 Setting state:', {
           attemptId: receivedAttemptId,
-          itemsCount: receivedItems.length
+          itemsCount: formattedItems.length
         });
 
         setAttemptId(receivedAttemptId);
-        setAttemptItems(receivedItems);
+        setAttemptItems(formattedItems);
 
         console.log('✅ State should be updated now');
       } catch (err) {
@@ -534,7 +549,7 @@ export default function GrammarExercisePage() {
                 {item.qType === 'true_false' && (
                   <>
                     <h3 className="text-base font-semibold text-slate-900 mb-3">
-                      {question.prompt || question.question || question.text}
+                      {item.text || item.prompt || 'نص السؤال'}
                     </h3>
                     <div className="space-y-2">
                       <button
@@ -584,7 +599,7 @@ export default function GrammarExercisePage() {
                   <div>
                     <div className="text-base text-slate-900 mb-4">
                       {renderFillQuestion(
-                        question.prompt || question.question || question.text,
+                        item.text || item.prompt || 'نص السؤال',
                         answers[itemIndex] || '',
                         (value) => {
                           setAnswers((prev) => ({
