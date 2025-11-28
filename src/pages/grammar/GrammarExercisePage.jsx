@@ -37,13 +37,10 @@ export default function GrammarExercisePage() {
           return;
         }
 
-        // 3. بدء محاولة على الامتحان الموجود
+        // 3. بدء محاولة على الامتحان الموجود - استخدام POST /exams/:examId/attempts
         console.log('📤 Starting attempt for exam:', topicData.examId);
 
-        const attemptRes = await api.post('/attempts', {
-          examId: topicData.examId,
-          mode: 'exam', // أو 'training' حسب احتياجك
-        });
+        const attemptRes = await api.post(`/exams/${topicData.examId}/attempts`, {});
 
         console.log('✅ Attempt started successfully:', attemptRes.data);
         console.log('🔍 Attempt Response Full Object:', attemptRes.data);
