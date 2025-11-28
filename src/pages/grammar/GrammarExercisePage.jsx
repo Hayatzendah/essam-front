@@ -206,21 +206,26 @@ export default function GrammarExercisePage() {
         const userAnswer = answers[index];
 
         console.log(`📝 Question ${index + 1}:`, {
-          itemId: item.id,
+          questionId: item.questionId,
           qType: item.qType,
           rawAnswer: userAnswer,
           options: item.options
         });
 
         const answerObj = {
-          itemId: item.id,  // استخدام itemId مش itemIndex
+          questionId: item.questionId,  // استخدام questionId
         };
 
         // تحويل الإجابة حسب النوع
         if (item.qType === 'mcq') {
           // MCQ: إرسال optionId في array
-          const selectedOption = item.options[userAnswer];
-          answerObj.selectedOptionIds = selectedOption?._id ? [selectedOption._id] : [];
+          // الباك بيعمل generate للـ IDs بصيغة: questionId-opt-{index}
+          if (userAnswer !== undefined && userAnswer !== null) {
+            const optionId = `${item.questionId}-opt-${userAnswer}`;
+            answerObj.selectedOptionIds = [optionId];
+          } else {
+            answerObj.selectedOptionIds = [];
+          }
         } else if (item.qType === 'true_false') {
           // True/False: إرسال boolean
           answerObj.studentAnswerBoolean = userAnswer;
