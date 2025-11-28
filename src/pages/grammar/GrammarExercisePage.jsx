@@ -63,21 +63,31 @@ export default function GrammarExercisePage() {
         const receivedItems = attemptRes.data?.items || [];
 
         console.log('💾 Raw items:', receivedItems);
+        console.log('💾 First item structure:', JSON.stringify(receivedItems[0], null, 2));
 
         // استخراج بيانات الأسئلة من questionSnapshot
-        const formattedItems = receivedItems.map((item) => ({
-          id: item._id || item.questionId,
-          questionId: item.questionId,
-          points: item.points,
-          // البيانات المهمة من questionSnapshot
-          text: item.questionSnapshot?.text,
-          prompt: item.questionSnapshot?.prompt,
-          qType: item.questionSnapshot?.qType,
-          options: (item.questionSnapshot?.options || []).map((opt, idx) => ({
-            ...opt,
-            _id: opt._id || `opt-${idx}`, // التأكد من وجود _id
-          })),
-        }));
+        const formattedItems = receivedItems.map((item, idx) => {
+          console.log(`Item ${idx} - _id:`, item._id);
+          console.log(`Item ${idx} - questionSnapshot:`, item.questionSnapshot);
+          console.log(`Item ${idx} - options:`, item.questionSnapshot?.options);
+
+          return {
+            id: item._id,  // استخدام attempt item _id فقط
+            questionId: item.questionId,
+            points: item.points,
+            // البيانات المهمة من questionSnapshot
+            text: item.questionSnapshot?.text,
+            prompt: item.questionSnapshot?.prompt,
+            qType: item.questionSnapshot?.qType,
+            options: (item.questionSnapshot?.options || []).map((opt, optIdx) => {
+              console.log(`  Option ${optIdx}:`, opt);
+              return {
+                ...opt,
+                _id: opt._id || opt.id || `temp-${optIdx}`,
+              };
+            }),
+          };
+        });
 
         console.log('💾 Formatted items:', formattedItems);
         console.log('💾 Setting state:', {
