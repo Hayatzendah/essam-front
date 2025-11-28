@@ -479,8 +479,7 @@ export default function GrammarExercisePage() {
         {/* عرض كل الأسئلة */}
         <div className="space-y-6 mb-6">
           {attemptItems.map((item, itemIndex) => {
-            // الأسئلة موجودة في attemptItems مباشرة
-            const question = item.question || item;
+            console.log(`📝 Item ${itemIndex}:`, item);
 
             return (
               <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
@@ -502,10 +501,10 @@ export default function GrammarExercisePage() {
                 {item.qType === 'mcq' && (
                   <>
                     <h3 className="text-base font-semibold text-slate-900 mb-3">
-                      {question.prompt || question.question || question.text}
+                      {item.text || item.prompt || item.question?.text || 'نص السؤال'}
                     </h3>
                     <div className="space-y-2">
-                      {question.options?.map((opt, optIdx) => (
+                      {item.options?.map((opt, optIdx) => (
                         <button
                           key={optIdx}
                           onClick={() => handleAnswer(itemIndex, optIdx)}
