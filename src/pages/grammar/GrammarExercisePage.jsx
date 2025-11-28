@@ -479,17 +479,8 @@ export default function GrammarExercisePage() {
         {/* عرض كل الأسئلة */}
         <div className="space-y-6 mb-6">
           {attemptItems.map((item, itemIndex) => {
-            const question = questions.find((q) => q._id === item.questionId);
-
-            if (!question) {
-              return (
-                <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                  <div className="text-center text-sm text-slate-500">
-                    ⚠️ السؤال {itemIndex + 1} غير متاح
-                  </div>
-                </div>
-              );
-            }
+            // الأسئلة موجودة في attemptItems مباشرة
+            const question = item.question || item;
 
             return (
               <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
