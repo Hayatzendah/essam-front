@@ -48,54 +48,14 @@ export default function GrammarExercisePage() {
           return;
         }
 
-        // 3. البحث عن Exam جاهز للموضوع (من المدرس)
-        console.log('🔍 Searching for existing exam...');
-        console.log('📋 Search params:', { level, topic: topicSlug });
+        // 3. بدء محاولة ديناميكية باستخدام الـ grammar topics endpoint
+        console.log('📤 Starting dynamic attempt for topic:', topicSlug);
 
-        // نحاول نجيب exam موجود مسبقاً
-        let examId = null;
-
-        try {
-          // محاولة جلب الامتحانات المتاحة
-          const examsRes = await api.get('/exams', {
-            params: {
-              level: level,
-              // يمكن البحث بـ title أو tags حسب الـ API
-            }
-          });
-
-          // نبحث عن exam مناسب للموضوع
-          const availableExams = examsRes.data.items || examsRes.data || [];
-          console.log('📚 Available exams:', availableExams.length);
-
-          // نبحث عن exam يحتوي على نفس العنوان أو الموضوع
-          const matchingExam = availableExams.find(exam =>
-            exam.title?.toLowerCase().includes(topicSlug.toLowerCase()) ||
-            exam.title?.toLowerCase().includes(topicData.title?.toLowerCase())
-          );
-
-          if (matchingExam) {
-            examId = matchingExam._id;
-            console.log('✅ Found matching exam:', matchingExam.title);
-          } else {
-            console.log('⚠️ No matching exam found');
+        const attemptRes = await api.post(`/grammar/topics/${topicSlug}/attempts`, null, {
+          params: {
+            level: level,
+            questionsCount: 20, // عدد الأسئلة المطلوبة
           }
-        } catch (err) {
-          console.error('❌ Error fetching exams:', err);
-        }
-
-        // إذا ما لقينا exam جاهز، نعرض رسالة
-        if (!examId) {
-          setError('عذراً، التمرين لهذا الموضوع قيد الإعداد من قبل المدرس. يرجى المحاولة لاحقاً.');
-          setLoading(false);
-          return;
-        }
-
-        // 4. بدء محاولة على الـ Exam الموجود
-        console.log('📤 Starting attempt for exam:', examId);
-
-        const attemptRes = await api.post('/attempts', {
-          examId: examId,
         });
 
         console.log('✅ Attempt started successfully:', attemptRes.data);
