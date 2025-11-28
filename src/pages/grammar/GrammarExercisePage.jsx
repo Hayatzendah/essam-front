@@ -222,23 +222,32 @@ export default function GrammarExercisePage() {
       const answersArray = attemptItems.map((item, index) => {
         const userAnswer = answers[index];
 
+        console.log(`📝 Question ${index + 1}:`, {
+          qType: item.qType,
+          rawAnswer: userAnswer,
+          options: item.options
+        });
+
         // تحويل الإجابة حسب النوع
         let formattedAnswer;
         if (item.qType === 'mcq') {
-          // MCQ: إرسال index أو النص
-          formattedAnswer = userAnswer;
+          // MCQ: إرسال array من indexes
+          formattedAnswer = [userAnswer];
         } else if (item.qType === 'true_false') {
-          // True/False: تحويل boolean إلى نص
-          formattedAnswer = userAnswer === true ? 'صح' : 'خطأ';
+          // True/False: إرسال boolean مباشرة
+          formattedAnswer = userAnswer;
         } else if (item.qType === 'fill') {
           // Fill: إرسال النص مباشرة
           formattedAnswer = userAnswer;
         }
 
-        return {
+        const formatted = {
           itemIndex: index,
           userAnswer: formattedAnswer
         };
+
+        console.log(`✅ Formatted answer ${index + 1}:`, formatted);
+        return formatted;
       });
 
       console.log('📤 Sending submit request to:', `/attempts/${attemptId}/submit`);
