@@ -27,8 +27,11 @@ export default function GrammarExercisePage() {
         // 1. جلب معلومات الموضوع
         const topicData = await getGrammarTopic(topicSlug, level);
         setTopic(topicData);
-        console.log('📚 Topic data:', topicData);
-        console.log('🔍 Topic examId:', topicData.examId);
+        console.log('📚 Full Topic Response:', topicData);
+        console.log('📚 Topic keys:', Object.keys(topicData || {}));
+        console.log('🔍 Topic examId:', topicData?.examId);
+        console.log('🔍 Topic exam:', topicData?.exam);
+        console.log('🔍 All topic fields:', JSON.stringify(topicData, null, 2));
 
         // 2. التحقق من وجود examId في الموضوع
         if (!topicData.examId) {
