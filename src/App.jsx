@@ -20,6 +20,7 @@ import GrammarTopicPage from './pages/grammar/GrammarTopicPage';
 import GrammarExercisePage from './pages/grammar/GrammarExercisePage';
 import PruefungenPage from './pages/PruefungenPage';
 import ExamDetailsPage from './pages/ExamDetailsPage';
+import CreateQuestionWithExam from './pages/admin/CreateQuestionWithExam';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -76,6 +77,14 @@ function App() {
           element={
             <AdminRoute>
               <CreateQuestion />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/questions/new-with-exam"
+          element={
+            <AdminRoute>
+              <CreateQuestionWithExam />
             </AdminRoute>
           }
         />

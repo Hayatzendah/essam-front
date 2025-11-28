@@ -29,15 +29,10 @@ export default function GrammarExercisePage() {
         setTopic(topicData);
 
         // 2. جلب الأسئلة
-        let tagsParam = topicData.tags || topicSlug;
-        console.log('🔍 topicData.tags (original):', topicData.tags);
-
-        if (Array.isArray(tagsParam)) {
-          tagsParam = tagsParam.join(',');
-          console.log('✅ Converted array to string:', tagsParam);
-        }
-
-        console.log('📤 Final tagsParam being sent:', tagsParam);
+        // استخدام topicSlug مباشرة (مثل "akkusativ") بدلاً من topicData.tags
+        // لأن topicData.tags قد يحتوي على tags إضافية مثل "cases" غير موجودة في الأسئلة
+        let tagsParam = topicSlug;
+        console.log('🔍 Using topicSlug as tagsParam:', tagsParam);
 
         const questionsData = await getGrammarQuestions({
           level,

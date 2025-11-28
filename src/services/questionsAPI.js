@@ -58,5 +58,11 @@ export const questionsAPI = {
     const response = await api.get('/questions', { params });
     return response.data;
   },
+
+  // إنشاء سؤال مع exam مباشرة
+  createWithExam: async (questionData) => {
+    const response = await api.post('/questions/with-exam', questionData);
+    return response.data;
+  },
 };
 
