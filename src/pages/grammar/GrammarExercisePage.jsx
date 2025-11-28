@@ -236,7 +236,7 @@ export default function GrammarExercisePage() {
       console.log('📤 Sending submit request to:', `/attempts/${attemptId}/submit`);
       console.log('📤 Request body:', JSON.stringify({ answers: answersArray }, null, 2));
 
-      const resultRes = await api.post(`/attempts/${attemptId}/submit`, answersArray);
+      const resultRes = await api.post(`/attempts/${attemptId}/submit`, { answers: answersArray });
 
       console.log('✅ Attempt submitted:', resultRes.data);
       console.log('📊 Result Details:', {
