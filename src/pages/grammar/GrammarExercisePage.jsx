@@ -73,7 +73,10 @@ export default function GrammarExercisePage() {
           text: item.questionSnapshot?.text,
           prompt: item.questionSnapshot?.prompt,
           qType: item.questionSnapshot?.qType,
-          options: item.questionSnapshot?.options || [],
+          options: (item.questionSnapshot?.options || []).map((opt, idx) => ({
+            ...opt,
+            _id: opt._id || `opt-${idx}`, // التأكد من وجود _id
+          })),
         }));
 
         console.log('💾 Formatted items:', formattedItems);
@@ -151,41 +154,11 @@ export default function GrammarExercisePage() {
   const handleAnswer = async (itemIndex, answer) => {
     console.log('🎯 handleAnswer called with:', { itemIndex, answer });
 
-    if (!attemptId) {
-      console.error('❌ Cannot handle answer - missing attemptId');
-      return;
-    }
-
-    if (!attemptItems[itemIndex]) {
-      console.error('❌ Cannot handle answer - missing item at index:', itemIndex);
-      return;
-    }
-
-    const currentItem = attemptItems[itemIndex];
-    const body = { itemIndex };
-
-    // حسب نوع السؤال
-    if (currentItem.qType === 'true_false') {
-      body.studentAnswerBoolean = answer;
-    } else if (currentItem.qType === 'fill') {
-      body.studentAnswerText = answer;
-    } else if (currentItem.qType === 'mcq') {
-      body.studentAnswerIndexes = [answer];
-    }
-
-    try {
-      await api.patch(`/attempts/${attemptId}/answer`, body);
-      console.log('✅ Answer saved for item:', itemIndex);
-
-      // حفظ الإجابة محلياً
-      setAnswers((prev) => ({
-        ...prev,
-        [itemIndex]: answer,
-      }));
-    } catch (err) {
-      console.error('Error saving answer:', err);
-      alert('حدث خطأ أثناء حفظ الإجابة');
-    }
+    // حفظ الإجابة محلياً فقط (سنرسلها كلها عند Submit)
+    setAnswers((prev) => ({
+      ...prev,
+      [itemIndex]: answer,
+    }));
   };
 
   const handleSubmit = async () => {
@@ -223,31 +196,31 @@ export default function GrammarExercisePage() {
         const userAnswer = answers[index];
 
         console.log(`📝 Question ${index + 1}:`, {
+          itemId: item.id,
           qType: item.qType,
           rawAnswer: userAnswer,
           options: item.options
         });
 
-        // تحويل الإجابة حسب النوع
-        let formattedAnswer;
-        if (item.qType === 'mcq') {
-          // MCQ: إرسال array من indexes
-          formattedAnswer = [userAnswer];
-        } else if (item.qType === 'true_false') {
-          // True/False: إرسال boolean مباشرة
-          formattedAnswer = userAnswer;
-        } else if (item.qType === 'fill') {
-          // Fill: إرسال النص مباشرة
-          formattedAnswer = userAnswer;
-        }
-
-        const formatted = {
-          itemIndex: index,
-          userAnswer: formattedAnswer
+        const answerObj = {
+          itemId: item.id,  // استخدام itemId مش itemIndex
         };
 
-        console.log(`✅ Formatted answer ${index + 1}:`, formatted);
-        return formatted;
+        // تحويل الإجابة حسب النوع
+        if (item.qType === 'mcq') {
+          // MCQ: إرسال optionId في array
+          const selectedOption = item.options[userAnswer];
+          answerObj.selectedOptionIds = selectedOption?._id ? [selectedOption._id] : [];
+        } else if (item.qType === 'true_false') {
+          // True/False: إرسال boolean
+          answerObj.studentAnswerBoolean = userAnswer;
+        } else if (item.qType === 'fill') {
+          // Fill: إرسال النص
+          answerObj.studentAnswerText = userAnswer;
+        }
+
+        console.log(`✅ Formatted answer ${index + 1}:`, answerObj);
+        return answerObj;
       });
 
       console.log('📤 Sending submit request to:', `/attempts/${attemptId}/submit`);
