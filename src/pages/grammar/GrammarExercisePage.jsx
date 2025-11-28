@@ -27,35 +27,22 @@ export default function GrammarExercisePage() {
         // 1. جلب معلومات الموضوع
         const topicData = await getGrammarTopic(topicSlug, level);
         setTopic(topicData);
+        console.log('📚 Topic data:', topicData);
+        console.log('🔍 Topic examId:', topicData.examId);
 
-        // 2. جلب الأسئلة
-        // استخدام topicSlug مباشرة (مثل "akkusativ") بدلاً من topicData.tags
-        // لأن topicData.tags قد يحتوي على tags إضافية مثل "cases" غير موجودة في الأسئلة
-        let tagsParam = topicSlug;
-        console.log('🔍 Using topicSlug as tagsParam:', tagsParam);
-
-        const questionsData = await getGrammarQuestions({
-          level,
-          tags: tagsParam,
-        });
-
-        const fetchedQuestions = questionsData.items || questionsData || [];
-        setQuestions(fetchedQuestions);
-
-        if (fetchedQuestions.length === 0) {
-          setError('لا توجد أسئلة متاحة لهذا الموضوع.');
+        // 2. التحقق من وجود examId في الموضوع
+        if (!topicData.examId) {
+          setError('عذراً، التمرين لهذا الموضوع قيد الإعداد من قبل المدرس. يرجى المحاولة لاحقاً.');
           setLoading(false);
           return;
         }
 
-        // 3. بدء محاولة ديناميكية باستخدام الـ grammar topics endpoint
-        console.log('📤 Starting dynamic attempt for topic:', topicSlug);
+        // 3. بدء محاولة على الامتحان الموجود
+        console.log('📤 Starting attempt for exam:', topicData.examId);
 
-        const attemptRes = await api.post(`/grammar/topics/${topicSlug}/attempts`, null, {
-          params: {
-            level: level,
-            questionsCount: 20, // عدد الأسئلة المطلوبة
-          }
+        const attemptRes = await api.post('/attempts', {
+          examId: topicData.examId,
+          mode: 'exam', // أو 'training' حسب احتياجك
         });
 
         console.log('✅ Attempt started successfully:', attemptRes.data);
