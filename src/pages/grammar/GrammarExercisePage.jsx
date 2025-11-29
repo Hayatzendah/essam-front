@@ -1,7 +1,7 @@
 // src/pages/grammar/GrammarExercisePage.jsx
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getGrammarTopic, getGrammarQuestions } from '../../services/api';
+import { getGrammarTopic } from '../../services/api';
 import api from '../../services/api';
 
 export default function GrammarExercisePage() {
@@ -9,7 +9,6 @@ export default function GrammarExercisePage() {
   const navigate = useNavigate();
 
   const [topic, setTopic] = useState(null);
-  const [questions, setQuestions] = useState([]);
   const [attemptId, setAttemptId] = useState(null);
   const [attemptItems, setAttemptItems] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -392,37 +391,43 @@ export default function GrammarExercisePage() {
 
             <div className="mb-6">
               <div className="text-lg font-semibold text-slate-900">
-                النتيجة: {results.finalScore || results.totalAutoScore || 0} / {results.totalMaxScore || attemptItems.length}
+                النتيجة: {results.totalAutoScore ?? results.finalScore ?? 0} / {results.totalMaxScore ?? attemptItems.length}
               </div>
               <div className="text-sm text-slate-600">
-                النسبة: {results.percentage || 0}%
+                النسبة: {
+                  results.totalMaxScore > 0
+                    ? Math.round((results.totalAutoScore / results.totalMaxScore) * 100)
+                    : 0
+                }%
               </div>
             </div>
 
             <div className="space-y-4 mb-6">
-              {results.items?.map((item, idx) => (
-                <div
-                  key={idx}
-                  className={`p-4 rounded-xl border ${
-                    item.isCorrect
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : 'bg-rose-50 border-rose-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold">
-                      سؤال {idx + 1}
-                    </span>
-                    <span className="text-xs">
-                      {item.isCorrect ? '✅ صحيح' : '❌ خطأ'}
-                    </span>
+              {attemptItems.map((attemptItem, idx) => {
+                const resultItem = results.items?.find(r => r.questionId === attemptItem.questionId);
+                return (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-xl border ${
+                      resultItem?.isCorrect
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-rose-50 border-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold">
+                        سؤال {idx + 1}
+                      </span>
+                      <span className="text-xs">
+                        {resultItem?.isCorrect ? '✅ صحيح' : '❌ خطأ'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      {attemptItem.text || attemptItem.prompt || 'سؤال'}
+                    </div>
                   </div>
-                  <div className="text-sm text-slate-700">
-                    {questions.find((q) => q._id === item.questionId)?.prompt ||
-                      'سؤال'}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex gap-3">
