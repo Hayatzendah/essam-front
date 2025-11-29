@@ -200,6 +200,9 @@ export default function GrammarExercisePage() {
     try {
       setSubmitting(true);
 
+      console.log('📦 Full answers state before submit:', answers);
+      console.log('📋 Attempt items count:', attemptItems.length);
+
       // تحضير الإجابات بصيغة Backend المطلوبة
       const answersArray = attemptItems.map((item, index) => {
         const userAnswer = answers[index];
