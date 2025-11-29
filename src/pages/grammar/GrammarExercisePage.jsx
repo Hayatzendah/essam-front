@@ -217,11 +217,9 @@ export default function GrammarExercisePage() {
 
         // تحويل الإجابة حسب النوع
         if (item.qType === 'mcq') {
-          // MCQ: إرسال optionId في array
-          // الباك بيعمل generate للـ IDs بصيغة: questionId-opt-{index}
+          // MCQ: إرسال indexes كـ strings (0-based)
           if (userAnswer !== undefined && userAnswer !== null) {
-            const optionId = `${item.questionId}-opt-${userAnswer}`;
-            answerObj.selectedOptionIds = [optionId];
+            answerObj.selectedOptionIds = [String(userAnswer)];
           } else {
             answerObj.selectedOptionIds = [];
           }
