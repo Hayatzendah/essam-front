@@ -220,6 +220,31 @@ export const getGrammarQuestions = async ({ level, tags, page = '1', limit = '20
 };
 
 // 4. جلب قائمة الامتحانات المنشورة (Public)
+// جلب قائمة مزودي الامتحانات (Prüfungen Providers)
+export const getProviders = async () => {
+  console.log('📋 Fetching exam providers');
+  const response = await api.get('/exams/providers');
+  console.log('📋 Providers response:', response.data);
+  return response.data;
+};
+
+// جلب الامتحانات حسب فلاتر (provider, level, skill, category)
+export const getExams = async ({ examCategory, provider, level, mainSkill, page = 1, limit = 20 }) => {
+  console.log('📝 Fetching exams with params:', { examCategory, provider, level, mainSkill, page, limit });
+  const params = {};
+  if (examCategory) params.examCategory = examCategory;
+  if (provider) params.provider = provider;
+  if (level) params.level = level;
+  if (mainSkill) params.mainSkill = mainSkill;
+  if (page) params.page = page;
+  if (limit) params.limit = limit;
+
+  const response = await api.get('/exams', { params });
+  console.log('📝 Exams response:', response.data);
+  return response.data;
+};
+
+// Legacy function - keep for backward compatibility
 export const getPublicExams = async ({ level, provider, page = 1, limit = 20 }) => {
   console.log('📝 Fetching public exams with params:', { level, provider, page, limit });
   const response = await api.get('/exams/public', {
