@@ -294,17 +294,15 @@ function ExamPage() {
         {/* عرض كل الأسئلة */}
         <div className="space-y-6 mb-6">
           {attempt.items.map((item, itemIndex) => {
-            // معالجة structure مختلف - قد يكون prompt في item.prompt أو item.question.prompt أو item.text
-            const question = item.question || item;
-            const prompt = question.prompt || question.text || item.prompt || item.text || 'السؤال';
-            const qType = question.qType || question.type || item.qType || item.type || 'mcq';
-            const options = question.options || item.options || [];
-            
+            // البيانات الآن موجودة مباشرة في item بعد استخراجها من questionSnapshot
+            const prompt = item.prompt || item.text || 'لا يوجد نص للسؤال';
+            const qType = item.qType || item.type || 'mcq';
+            const options = item.options || [];
+
             // Debug: طباعة structure البيانات
             if (itemIndex === 0) {
               console.log('🔍 Question structure:', {
                 item,
-                question,
                 prompt,
                 qType,
                 optionsLength: options.length,
@@ -319,9 +317,9 @@ function ExamPage() {
                 <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
                   سؤال {itemIndex + 1}
                 </span>
-                {(item.points || question.points) && (
+                {item.points && (
                   <span className="text-[10px] text-slate-400">
-                    {item.points || question.points} نقطة
+                    {item.points} نقطة
                   </span>
                 )}
               </div>
