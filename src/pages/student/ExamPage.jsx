@@ -47,20 +47,49 @@ function ExamPage() {
       }
 
       // استخراج بيانات الأسئلة من questionSnapshot
-      const formattedItems = items.map((item) => {
+      console.log('🔍 Raw items from API:', items);
+      console.log('🔍 First item structure:', JSON.stringify(items[0], null, 2));
+
+      const formattedItems = items.map((item, idx) => {
+        console.log(`📝 Item ${idx}:`, {
+          hasQuestionSnapshot: !!item.questionSnapshot,
+          hasQuestion: !!item.question,
+          questionSnapshot: item.questionSnapshot,
+          question: item.question,
+          rawItem: item
+        });
+
         // إذا كان في questionSnapshot، استخرج البيانات منه
         if (item.questionSnapshot) {
-          return {
+          const formatted = {
             ...item,
             prompt: item.questionSnapshot.text || item.questionSnapshot.prompt,
             text: item.questionSnapshot.text || item.questionSnapshot.prompt,
             qType: item.questionSnapshot.qType,
             type: item.questionSnapshot.qType,
             options: item.questionSnapshot.options || [],
-            question: item.questionSnapshot, // keep original for backward compatibility
+            question: item.questionSnapshot,
           };
+          console.log(`✅ Formatted item ${idx} (from questionSnapshot):`, formatted);
+          return formatted;
         }
-        // إذا مافيش questionSnapshot، استخدم البيانات الموجودة
+
+        // إذا كان في question، استخدمه
+        if (item.question) {
+          const formatted = {
+            ...item,
+            prompt: item.question.text || item.question.prompt,
+            text: item.question.text || item.question.prompt,
+            qType: item.question.qType,
+            type: item.question.qType,
+            options: item.question.options || [],
+          };
+          console.log(`✅ Formatted item ${idx} (from question):`, formatted);
+          return formatted;
+        }
+
+        // إذا مافيش questionSnapshot ولا question، استخدم البيانات الموجودة
+        console.log(`⚠️ Item ${idx} has no questionSnapshot or question, using raw item`);
         return item;
       });
 
