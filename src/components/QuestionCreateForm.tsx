@@ -1,141 +1,140 @@
 import { useState, useEffect } from 'react';
 import { examsAPI } from '../services/examsAPI';
-import { questionsAPI } from '../services/questionsAPI';
+import { getGrammarTopics } from '../services/api';
 
 // Types
-interface ExamOption {
-  _id?: string;
-  id?: string;
+interface GrammarTopic {
+  _id: string;
   title: string;
-  level?: string;
+  slug: string;
+  level: string;
+  tags: string[];
 }
 
-interface QuestionOption {
-  text: string;
-  isCorrect: boolean;
+interface Section {
+  section: string;
+  skill?: string;
+  teil?: number;
+  quota: number;
+  tags?: string[];
+  difficultyDistribution?: {
+    easy: number;
+    med: number;
+    hard: number;
+  };
 }
 
-interface QuestionFormState {
-  text: string;
-  options: QuestionOption[];
-  explanation: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+interface ExamFormState {
+  // Common fields
+  examType: 'grammar_exam' | 'provider_exam' | '';
+  title: string;
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+  duration: number; // in minutes
   status: 'draft' | 'published';
+  description: string;
   tags: string;
-  examId: string;
-  sectionTitle: string;
-  points: number;
+  
+  // Grammar Exam specific
+  grammarTopic: string;
+  grammarLevel: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+  totalQuestions: number;
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  questionTags: string;
+  
+  // Provider Exam specific
+  provider: string;
+  mainSkill: 'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen';
+  sections: Section[];
 }
 
-type QuestionCreateFormProps = {
-  apiBaseUrl: string;
-  token: string;
-};
-
-const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
+const QuestionCreateForm = () => {
   // State
-  const [exams, setExams] = useState<ExamOption[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingExams, setLoadingExams] = useState(false);
+  const [loadingTopics, setLoadingTopics] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [grammarTopics, setGrammarTopics] = useState<GrammarTopic[]>([]);
 
-  const [formData, setFormData] = useState<QuestionFormState>({
-    text: '',
-    options: [
-      { text: '', isCorrect: false },
-      { text: '', isCorrect: false },
-      { text: '', isCorrect: false },
-      { text: '', isCorrect: false },
-    ],
-    explanation: '',
-    difficulty: 'easy',
+  const [formData, setFormData] = useState<ExamFormState>({
+    examType: '',
+    title: '',
     level: 'A1',
+    duration: 60,
     status: 'draft',
+    description: '',
     tags: '',
-    examId: '',
-    sectionTitle: 'Grammar Section',
-    points: 1,
+    
+    // Grammar Exam
+    grammarTopic: '',
+    grammarLevel: 'A1',
+    totalQuestions: 10,
+    difficultyDistribution: {
+      easy: 0,
+      medium: 0,
+      hard: 0,
+    },
+    questionTags: '',
+    
+    // Provider Exam
+    provider: 'Goethe',
+    mainSkill: 'mixed',
+    sections: [],
   });
 
-  // Fetch exams on mount
+  // Fetch grammar topics when grammar level changes
   useEffect(() => {
-    const fetchExams = async () => {
-      setLoadingExams(true);
-      setError('');
-      try {
-        // Try /exams?simple=true first, fallback to /exams if needed
-        let response;
+    if (formData.examType === 'grammar_exam' && formData.grammarLevel) {
+      const fetchTopics = async () => {
+        setLoadingTopics(true);
         try {
-          response = await examsAPI.getAll({ simple: true });
-        } catch (simpleError) {
-          // If simple=true fails, try without it
-          console.log('simple=true failed, trying without it...');
-          response = await examsAPI.getAll();
+          const data = await getGrammarTopics(formData.grammarLevel);
+          setGrammarTopics(data.items || data || []);
+        } catch (err) {
+          console.error('Error fetching grammar topics:', err);
+          setGrammarTopics([]);
+        } finally {
+          setLoadingTopics(false);
         }
-        
-        // Handle response - could be array or object with items
-        let examsArray: ExamOption[] = [];
-        
-        if (Array.isArray(response)) {
-          // Direct array response (when simple=true works)
-          examsArray = response;
-        } else if (response && typeof response === 'object') {
-          // Object response - check for items array
-          if (Array.isArray(response.items)) {
-            examsArray = response.items;
-          } else if (Array.isArray(response.data)) {
-            examsArray = response.data;
-          }
-        }
-        
-        console.log('Fetched exams:', examsArray.length, 'exams');
-        setExams(examsArray);
-      } catch (err: any) {
-        const errorMessage = err?.response?.data?.message || 
-                           err?.response?.data?.error || 
-                           (err instanceof Error ? err.message : 'حدث خطأ أثناء جلب الامتحانات');
-        setError(errorMessage);
-        console.error('Error fetching exams:', err);
-        // Ensure exams is always an array even on error
-        setExams([]);
-      } finally {
-        setLoadingExams(false);
-      }
-    };
-
-    fetchExams();
-  }, []);
+      };
+      fetchTopics();
+    }
+  }, [formData.examType, formData.grammarLevel]);
 
   // Handle input change
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  // Handle option text change
-  const handleOptionTextChange = (index: number, text: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      options: prev.options.map((opt, i) => (i === index ? { ...opt, text } : opt)),
-    }));
-  };
-
-  // Handle correct answer selection (radio button)
-  const handleCorrectAnswerChange = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      options: prev.options.map((opt, i) => ({
-        ...opt,
-        isCorrect: i === index,
-      })),
-    }));
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
+    setFormData((prev) => {
+      if (name.startsWith('difficulty.')) {
+        const difficultyField = name.split('.')[1] as 'easy' | 'medium' | 'hard';
+        return {
+          ...prev,
+          difficultyDistribution: {
+            ...prev.difficultyDistribution,
+            [difficultyField]: parseInt(value) || 0,
+          },
+        };
+      }
+      
+      if (type === 'number') {
+        return {
+          ...prev,
+          [name]: parseInt(value) || 0,
+        };
+      }
+      
+      return {
+        ...prev,
+        [name]: value,
+      };
+    });
   };
 
   // Parse tags string to array
@@ -147,6 +146,41 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
       .filter((tag) => tag.length > 0);
   };
 
+  // Handle section changes for Provider Exam
+  const handleSectionChange = (index: number, field: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      sections: prev.sections.map((section, i) =>
+        i === index ? { ...section, [field]: value } : section
+      ),
+    }));
+  };
+
+  // Add new section for Provider Exam
+  const addSection = () => {
+    setFormData((prev) => ({
+      ...prev,
+      sections: [
+        ...prev.sections,
+        {
+          section: '',
+          skill: prev.mainSkill !== 'mixed' ? prev.mainSkill : 'hoeren',
+          teil: prev.sections.length + 1,
+          quota: 5,
+          tags: [],
+        },
+      ],
+    }));
+  };
+
+  // Remove section
+  const removeSection = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      sections: prev.sections.filter((_, i) => i !== index),
+    }));
+  };
+
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,361 +188,625 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
     setSuccess('');
 
     // Validation
-    if (!formData.text.trim()) {
-      setError('نص السؤال مطلوب');
+    if (!formData.examType) {
+      setError('يجب اختيار نوع الامتحان');
       return;
     }
 
-    if (!formData.examId) {
-      setError('يجب اختيار امتحان');
+    if (!formData.title.trim()) {
+      setError('عنوان الامتحان مطلوب');
       return;
     }
 
-    // Check if at least one option is correct
-    const hasCorrectAnswer = formData.options.some((opt) => opt.isCorrect);
-    if (!hasCorrectAnswer) {
-      setError('يجب تحديد إجابة صحيحة واحدة على الأقل');
-      return;
+    // Grammar Exam validation
+    if (formData.examType === 'grammar_exam') {
+      if (!formData.grammarTopic) {
+        setError('يجب اختيار موضوع القواعد');
+        return;
+      }
+      const totalDiff = 
+        formData.difficultyDistribution.easy +
+        formData.difficultyDistribution.medium +
+        formData.difficultyDistribution.hard;
+      if (totalDiff !== formData.totalQuestions) {
+        setError(`توزيع الصعوبة يجب أن يساوي عدد الأسئلة الكلي (${formData.totalQuestions})`);
+        return;
+      }
     }
 
-    // Check if all options have text
-    const emptyOptions = formData.options.filter((opt) => !opt.text.trim());
-    if (emptyOptions.length > 0) {
-      setError('جميع الخيارات يجب أن تحتوي على نص');
-      return;
+    // Provider Exam validation
+    if (formData.examType === 'provider_exam') {
+      if (formData.sections.length === 0) {
+        setError('يجب إضافة قسم واحد على الأقل');
+        return;
+      }
+      for (let i = 0; i < formData.sections.length; i++) {
+        const section = formData.sections[i];
+        if (!section.section.trim()) {
+          setError(`عنوان القسم ${i + 1} مطلوب`);
+          return;
+        }
+        if (section.quota <= 0) {
+          setError(`عدد الأسئلة للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
+          return;
+        }
+      }
     }
 
     setLoading(true);
 
     try {
       const tagsArray = parseTags(formData.tags);
+      const questionTagsArray = parseTags(formData.questionTags);
 
-      const requestBody = {
-        text: formData.text,
-        options: formData.options.map((opt) => ({
-          text: opt.text,
-          isCorrect: opt.isCorrect,
-        })),
-        explanation: formData.explanation,
-        difficulty: formData.difficulty,
+      // Build request body
+      const requestBody: any = {
+        title: formData.title,
         level: formData.level,
+        timeLimitMin: formData.duration,
         status: formData.status,
+        description: formData.description,
         tags: tagsArray,
-        examId: formData.examId,
-        sectionTitle: formData.sectionTitle,
-        points: formData.points,
+        examCategory: formData.examType,
       };
 
-      // Use the /questions/with-exam endpoint
-      const response = await questionsAPI.createWithExam(requestBody);
+      // Add Grammar Exam specific fields
+      if (formData.examType === 'grammar_exam') {
+        const selectedTopic = grammarTopics.find(t => t.slug === formData.grammarTopic);
+        requestBody.provider = 'Grammatik';
+        requestBody.grammarTopic = formData.grammarTopic;
+        requestBody.grammarTopicTitle = selectedTopic?.title || '';
+        requestBody.grammarLevel = formData.grammarLevel;
+        requestBody.totalQuestions = formData.totalQuestions;
+        requestBody.difficultyDistribution = {
+          easy: formData.difficultyDistribution.easy,
+          medium: formData.difficultyDistribution.medium, // API uses 'medium' not 'med'
+          hard: formData.difficultyDistribution.hard,
+        };
+        requestBody.questionTags = questionTagsArray.length > 0 ? questionTagsArray : (selectedTopic?.tags || []);
+        requestBody.randomizeQuestions = true;
+      }
+
+      // Add Provider Exam specific fields
+      if (formData.examType === 'provider_exam') {
+        requestBody.provider = formData.provider;
+        requestBody.mainSkill = formData.mainSkill;
+        requestBody.sections = formData.sections.map(section => ({
+          name: section.section, // API uses 'name' not 'section'
+          section: section.section, // Keep both for compatibility
+          skill: (section.skill || formData.mainSkill).toUpperCase(), // Convert to uppercase
+          teilNumber: section.teil,
+          quota: section.quota,
+          tags: section.tags || [],
+          difficultyDistribution: section.difficultyDistribution || {
+            easy: 0,
+            medium: 0, // API uses 'medium' not 'med'
+            hard: 0,
+          },
+        }));
+        requestBody.randomizeQuestions = true;
+      }
+
+      // Create exam
+      const response = await examsAPI.create(requestBody);
       
-      // Response format: { question: {...}, examId: "...", sectionTitle: "...", questionsCountInSection: 5 }
-      console.log('Question created successfully:', response);
-      setSuccess(`تم إنشاء السؤال بنجاح! (عدد الأسئلة في القسم: ${response.questionsCountInSection || 'N/A'})`);
+      console.log('Exam created successfully:', response);
+      setSuccess(`تم إنشاء الامتحان بنجاح! (ID: ${response._id || response.id})`);
 
       // Reset form after success
       setTimeout(() => {
         setFormData({
-          text: '',
-          options: [
-            { text: '', isCorrect: false },
-            { text: '', isCorrect: false },
-            { text: '', isCorrect: false },
-            { text: '', isCorrect: false },
-          ],
-          explanation: '',
-          difficulty: 'easy',
+          examType: '',
+          title: '',
           level: 'A1',
+          duration: 60,
           status: 'draft',
+          description: '',
           tags: '',
-          examId: '',
-          sectionTitle: 'Grammar Section',
-          points: 1,
+          grammarTopic: '',
+          grammarLevel: 'A1',
+          totalQuestions: 10,
+          difficultyDistribution: {
+            easy: 0,
+            medium: 0,
+            hard: 0,
+          },
+          questionTags: '',
+          provider: 'Goethe',
+          mainSkill: 'mixed',
+          sections: [],
         });
         setSuccess('');
-      }, 2000);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء إنشاء السؤال';
+      }, 3000);
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || 
+                          err?.response?.data?.error || 
+                          (err instanceof Error ? err.message : 'حدث خطأ أثناء إنشاء الامتحان');
       setError(errorMessage);
-      console.error('Error creating question:', err);
+      console.error('Error creating exam:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const formStyle = {
+    maxWidth: '900px',
+    margin: '0 auto',
+    padding: '20px',
+  };
+
+  const sectionStyle = {
+    marginBottom: '32px',
+    padding: '20px',
+    backgroundColor: '#f9fafb',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '14px',
+  };
+
+  const labelStyle = {
+    display: 'block',
+    marginBottom: '8px',
+    fontWeight: '600',
+    fontSize: '14px',
+    color: '#374151',
+  };
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h1 style={{ marginBottom: '24px' }}>إنشاء سؤال جديد</h1>
+    <div style={formStyle}>
+      <h1 style={{ marginBottom: '24px', fontSize: '24px', fontWeight: 'bold' }}>
+        إنشاء امتحان جديد
+      </h1>
 
-      {loadingExams && <p>جاري تحميل الامتحانات...</p>}
-      {!loadingExams && exams.length > 0 && (
-        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-          تم تحميل {exams.length} امتحان
-        </p>
-      )}
-      {!loadingExams && exams.length === 0 && error === '' && (
-        <p style={{ color: '#999', fontSize: '14px', marginBottom: '16px' }}>
-          لا توجد امتحانات متاحة
-        </p>
-      )}
-
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Question Text */}
-        <div>
-          <label htmlFor="text" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            نص السؤال *
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Exam Type - في الأعلى */}
+        <div style={sectionStyle}>
+          <label htmlFor="examType" style={labelStyle}>
+            نوع الامتحان / Exam Type *
           </label>
-          <textarea
-            id="text"
-            name="text"
-            value={formData.text}
+          <select
+            id="examType"
+            name="examType"
+            value={formData.examType}
             onChange={handleInputChange}
             required
-            rows={4}
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              fontFamily: 'inherit',
-            }}
-            placeholder="أدخل نص السؤال..."
-          />
+            style={inputStyle}
+          >
+            <option value="">-- اختر نوع الامتحان --</option>
+            <option value="grammar_exam">Grammar Exam (قواعد)</option>
+            <option value="provider_exam">Provider Exam (Prüfungen – Goethe/TELC…)</option>
+          </select>
         </div>
 
-        {/* Options */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الخيارات *
-          </label>
-          {formData.options.map((option, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '12px',
-              }}
-            >
+        {/* Common Fields */}
+        <div style={sectionStyle}>
+          <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
+            المعلومات الأساسية
+          </h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Title */}
+            <div>
+              <label htmlFor="title" style={labelStyle}>
+                عنوان الامتحان / Exam Title *
+              </label>
               <input
                 type="text"
-                value={option.text}
-                onChange={(e) => handleOptionTextChange(index, e.target.value)}
-                placeholder={`الخيار ${index + 1}`}
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
                 required
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                }}
+                style={inputStyle}
+                placeholder="مثال: امتحان القواعد - Akkusativ"
               />
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="correctAnswer"
-                  checked={option.isCorrect}
-                  onChange={() => handleCorrectAnswerChange(index)}
-                />
-                <span>صحيح</span>
-              </label>
             </div>
-          ))}
+
+            {/* Level */}
+            <div>
+              <label htmlFor="level" style={labelStyle}>
+                المستوى / Level *
+              </label>
+              <select
+                id="level"
+                name="level"
+                value={formData.level}
+                onChange={handleInputChange}
+                required
+                style={inputStyle}
+              >
+                <option value="A1">A1</option>
+                <option value="A2">A2</option>
+                <option value="B1">B1</option>
+                <option value="B2">B2</option>
+                <option value="C1">C1</option>
+                <option value="C2">C2</option>
+              </select>
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label htmlFor="duration" style={labelStyle}>
+                المدة بالدقائق / Duration (minutes) *
+              </label>
+              <input
+                type="number"
+                id="duration"
+                name="duration"
+                value={formData.duration}
+                onChange={handleInputChange}
+                required
+                min="1"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label htmlFor="status" style={labelStyle}>
+                الحالة / Status *
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                required
+                style={inputStyle}
+              >
+                <option value="draft">مسودة (Draft)</option>
+                <option value="published">منشور (Published)</option>
+              </select>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label htmlFor="description" style={labelStyle}>
+                الوصف / Description (اختياري)
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                rows={3}
+                style={inputStyle}
+                placeholder="وصف مختصر للامتحان..."
+              />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label htmlFor="tags" style={labelStyle}>
+                الوسوم / Tags
+              </label>
+              <input
+                type="text"
+                id="tags"
+                name="tags"
+                value={formData.tags}
+                onChange={handleInputChange}
+                style={inputStyle}
+                placeholder="مثال: grammar, test, exam"
+              />
+              <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
+                أدخل الوسوم مفصولة بفواصل
+              </small>
+            </div>
+          </div>
         </div>
 
-        {/* Explanation */}
-        <div>
-          <label htmlFor="explanation" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الشرح
-          </label>
-          <textarea
-            id="explanation"
-            name="explanation"
-            value={formData.explanation}
-            onChange={handleInputChange}
-            rows={3}
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              fontFamily: 'inherit',
-            }}
-            placeholder="أدخل شرح الإجابة..."
-          />
-        </div>
+        {/* Grammar Exam Settings */}
+        {formData.examType === 'grammar_exam' && (
+          <div style={sectionStyle}>
+            <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
+              إعدادات امتحان القواعد
+            </h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Grammar Level */}
+              <div>
+                <label htmlFor="grammarLevel" style={labelStyle}>
+                  مستوى القواعد / Grammar Level *
+                </label>
+                <select
+                  id="grammarLevel"
+                  name="grammarLevel"
+                  value={formData.grammarLevel}
+                  onChange={handleInputChange}
+                  required
+                  style={inputStyle}
+                >
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C1">C1</option>
+                  <option value="C2">C2</option>
+                </select>
+              </div>
 
-        {/* Difficulty */}
-        <div>
-          <label htmlFor="difficulty" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الصعوبة *
-          </label>
-          <select
-            id="difficulty"
-            name="difficulty"
-            value={formData.difficulty}
-            onChange={handleInputChange}
-            required
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          >
-            <option value="easy">سهل (Easy)</option>
-            <option value="medium">متوسط (Medium)</option>
-            <option value="hard">صعب (Hard)</option>
-          </select>
-        </div>
+              {/* Grammar Topic */}
+              <div>
+                <label htmlFor="grammarTopic" style={labelStyle}>
+                  موضوع القواعد / Grammar Topic *
+                </label>
+                {loadingTopics ? (
+                  <p style={{ color: '#6b7280' }}>جاري تحميل المواضيع...</p>
+                ) : (
+                  <select
+                    id="grammarTopic"
+                    name="grammarTopic"
+                    value={formData.grammarTopic}
+                    onChange={handleInputChange}
+                    required
+                    style={inputStyle}
+                  >
+                    <option value="">-- اختر الموضوع --</option>
+                    {grammarTopics.map((topic) => (
+                      <option key={topic._id} value={topic.slug}>
+                        {topic.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
-        {/* Level */}
-        <div>
-          <label htmlFor="level" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            المستوى *
-          </label>
-          <select
-            id="level"
-            name="level"
-            value={formData.level}
-            onChange={handleInputChange}
-            required
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          >
-            <option value="A1">A1</option>
-            <option value="A2">A2</option>
-            <option value="B1">B1</option>
-            <option value="B2">B2</option>
-            <option value="C1">C1</option>
-            <option value="C2">C2</option>
-          </select>
-        </div>
+              {/* Total Questions */}
+              <div>
+                <label htmlFor="totalQuestions" style={labelStyle}>
+                  عدد الأسئلة الكلي / Total Questions *
+                </label>
+                <input
+                  type="number"
+                  id="totalQuestions"
+                  name="totalQuestions"
+                  value={formData.totalQuestions}
+                  onChange={handleInputChange}
+                  required
+                  min="1"
+                  style={inputStyle}
+                />
+              </div>
 
-        {/* Status */}
-        <div>
-          <label htmlFor="status" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الحالة *
-          </label>
-          <select
-            id="status"
-            name="status"
-            value={formData.status}
-            onChange={handleInputChange}
-            required
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          >
-            <option value="draft">مسودة (Draft)</option>
-            <option value="published">منشور (Published)</option>
-          </select>
-        </div>
+              {/* Difficulty Distribution */}
+              <div>
+                <label style={labelStyle}>
+                  توزيع الصعوبة / Difficulty Distribution *
+                </label>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '12px', color: '#6b7280' }}>سهل (Easy)</label>
+                    <input
+                      type="number"
+                      name="difficulty.easy"
+                      value={formData.difficultyDistribution.easy}
+                      onChange={handleInputChange}
+                      min="0"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '12px', color: '#6b7280' }}>متوسط (Medium)</label>
+                    <input
+                      type="number"
+                      name="difficulty.medium"
+                      value={formData.difficultyDistribution.medium}
+                      onChange={handleInputChange}
+                      min="0"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '12px', color: '#6b7280' }}>صعب (Hard)</label>
+                    <input
+                      type="number"
+                      name="difficulty.hard"
+                      value={formData.difficultyDistribution.hard}
+                      onChange={handleInputChange}
+                      min="0"
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+                <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
+                  المجموع يجب أن يساوي {formData.totalQuestions}
+                </small>
+              </div>
 
-        {/* Tags */}
-        <div>
-          <label htmlFor="tags" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الوسوم
-          </label>
-          <input
-            type="text"
-            id="tags"
-            name="tags"
-            value={formData.tags}
-            onChange={handleInputChange}
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-            placeholder="مثال: grammar, verbs"
-          />
-          <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
-            أدخل الوسوم مفصولة بفواصل (مثل: grammar, verbs)
-          </small>
-        </div>
+              {/* Question Tags */}
+              <div>
+                <label htmlFor="questionTags" style={labelStyle}>
+                  وسوم الأسئلة / Question Tags
+                </label>
+                <input
+                  type="text"
+                  id="questionTags"
+                  name="questionTags"
+                  value={formData.questionTags}
+                  onChange={handleInputChange}
+                  style={inputStyle}
+                  placeholder="مثال: akkusativ, cases (سيتم استخدام وسوم الموضوع تلقائياً إذا تركت فارغاً)"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
-        {/* Exam Selection */}
-        <div>
-          <label htmlFor="examId" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            الامتحان *
-          </label>
-          <select
-            id="examId"
-            name="examId"
-            value={formData.examId}
-            onChange={handleInputChange}
-            required
-            disabled={loadingExams}
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          >
-            <option value="">-- اختر الامتحان --</option>
-            {Array.isArray(exams) && exams.map((exam) => {
-              const examId = exam._id || exam.id || '';
-              return (
-                <option key={examId} value={examId}>
-                  {exam.title} {exam.level ? `(${exam.level})` : ''}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        {/* Provider Exam Settings */}
+        {formData.examType === 'provider_exam' && (
+          <div style={sectionStyle}>
+            <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
+              إعدادات امتحان المعهد الرسمي (Prüfungen)
+            </h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Provider */}
+              <div>
+                <label htmlFor="provider" style={labelStyle}>
+                  المعهد / Provider *
+                </label>
+                <select
+                  id="provider"
+                  name="provider"
+                  value={formData.provider}
+                  onChange={handleInputChange}
+                  required
+                  style={inputStyle}
+                >
+                  <option value="Goethe">Goethe</option>
+                  <option value="telc">TELC</option>
+                  <option value="ÖSD">ÖSD</option>
+                  <option value="ECL">ECL</option>
+                  <option value="DTB">DTB</option>
+                  <option value="DTZ">DTZ</option>
+                </select>
+              </div>
 
-        {/* Section Title */}
-        <div>
-          <label htmlFor="sectionTitle" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            عنوان القسم
-          </label>
-          <input
-            type="text"
-            id="sectionTitle"
-            name="sectionTitle"
-            value={formData.sectionTitle}
-            onChange={handleInputChange}
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-            placeholder="Grammar Section"
-          />
-        </div>
+              {/* Main Skill */}
+              <div>
+                <label htmlFor="mainSkill" style={labelStyle}>
+                  نوع التمرين / Main Skill *
+                </label>
+                <select
+                  id="mainSkill"
+                  name="mainSkill"
+                  value={formData.mainSkill}
+                  onChange={handleInputChange}
+                  required
+                  style={inputStyle}
+                >
+                  <option value="mixed">Mixed (امتحان كامل كل المهارات)</option>
+                  <option value="hoeren">Hören (الاستماع)</option>
+                  <option value="lesen">Lesen (القراءة)</option>
+                  <option value="schreiben">Schreiben (الكتابة)</option>
+                  <option value="sprechen">Sprechen (التحدث)</option>
+                </select>
+              </div>
 
-        {/* Points */}
-        <div>
-          <label htmlFor="points" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            النقاط
-          </label>
-          <input
-            type="number"
-            id="points"
-            name="points"
-            value={formData.points}
-            onChange={handleInputChange}
-            min="1"
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          />
-        </div>
+              {/* Sections */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <label style={labelStyle}>
+                    الأقسام / Sections *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addSection}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    + إضافة Section
+                  </button>
+                </div>
+
+                {formData.sections.map((section, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid #d1d5db',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Section {index + 1}</h3>
+                      <button
+                        type="button"
+                        onClick={() => removeSection(index)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        حذف
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>عنوان القسم / Section Title *</label>
+                        <input
+                          type="text"
+                          value={section.section}
+                          onChange={(e) => handleSectionChange(index, 'section', e.target.value)}
+                          placeholder="مثال: Hören – Teil 1"
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {formData.mainSkill === 'mixed' && (
+                        <div>
+                          <label style={{ fontSize: '12px', color: '#6b7280' }}>المهارة / Skill *</label>
+                          <select
+                            value={section.skill || formData.mainSkill}
+                            onChange={(e) => handleSectionChange(index, 'skill', e.target.value)}
+                            required
+                            style={inputStyle}
+                          >
+                            <option value="hoeren">Hören</option>
+                            <option value="lesen">Lesen</option>
+                            <option value="schreiben">Schreiben</option>
+                            <option value="sprechen">Sprechen</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>رقم Teil</label>
+                        <input
+                          type="number"
+                          value={section.teil || index + 1}
+                          onChange={(e) => handleSectionChange(index, 'teil', parseInt(e.target.value) || index + 1)}
+                          min="1"
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
+                        <input
+                          type="number"
+                          value={section.quota}
+                          onChange={(e) => handleSectionChange(index, 'quota', parseInt(e.target.value) || 0)}
+                          min="1"
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {formData.sections.length === 0 && (
+                  <p style={{ color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                    لا توجد أقسام. اضغط "إضافة Section" لإضافة قسم جديد.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -517,7 +815,7 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
               padding: '12px',
               backgroundColor: '#fee',
               color: '#c33',
-              borderRadius: '4px',
+              borderRadius: '6px',
               border: '1px solid #fcc',
             }}
           >
@@ -532,7 +830,7 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
               padding: '12px',
               backgroundColor: '#efe',
               color: '#3c3',
-              borderRadius: '4px',
+              borderRadius: '6px',
               border: '1px solid #cfc',
             }}
           >
@@ -543,19 +841,19 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={loading || loadingExams}
+          disabled={loading || !formData.examType}
           style={{
             padding: '12px 24px',
-            backgroundColor: loading || loadingExams ? '#ccc' : '#007bff',
+            backgroundColor: loading || !formData.examType ? '#ccc' : '#007bff',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
-            cursor: loading || loadingExams ? 'not-allowed' : 'pointer',
+            borderRadius: '6px',
+            cursor: loading || !formData.examType ? 'not-allowed' : 'pointer',
             fontSize: '16px',
             fontWeight: 'bold',
           }}
         >
-          {loading ? 'جاري الحفظ...' : 'إنشاء السؤال'}
+          {loading ? 'جاري الحفظ...' : 'إنشاء الامتحان'}
         </button>
       </form>
     </div>
@@ -563,4 +861,3 @@ const QuestionCreateForm = ({ apiBaseUrl, token }: QuestionCreateFormProps) => {
 };
 
 export default QuestionCreateForm;
-

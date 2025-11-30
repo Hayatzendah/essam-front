@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { questionsAPI } from '../../services/questionsAPI';
+import { examsAPI } from '../../services/examsAPI';
+import { getGrammarTopics } from '../../services/api';
 import './CreateQuestion.css';
 
 function CreateQuestion() {
@@ -11,32 +13,55 @@ function CreateQuestion() {
 
   // Form state
   const [formData, setFormData] = useState({
+    // Common fields
     prompt: '',
     qType: 'mcq',
-    // للحقول MCQ
     options: [{ text: '', isCorrect: false }],
-    // للحقول النصية (fill)
     fillExact: '',
     regexList: [],
-    // للحقول true/false
     answerKeyBoolean: true,
-    // للحقول matching
     answerKeyMatch: [{ left: '', right: '' }],
-    // للحقول reorder
     answerKeyReorder: [],
-    provider: 'Deutschland-in-Leben',
-    section: '',
-    level: 'B1',
+    points: 1,
+    explanation: '',
+    
+    // Usage Category
+    usageCategory: '', // 'grammar' | 'provider' | 'vocab'
+    
+    // Grammar metadata
+    grammarTopic: '',
+    grammarLevel: 'A1',
+    grammarTags: '',
+    
+    // Provider metadata
+    provider: 'Goethe',
+    providerLevel: 'A1',
+    skill: 'hoeren',
+    teilNumber: 1,
+    sourceName: '',
+    
+    // Common metadata
+    level: 'A1',
     tags: [],
     status: 'draft',
-    questionType: 'general', // 'general' or 'state'
-    selectedState: '', // للأسئلة الخاصة بالولاية
+    section: '',
+    
+    // Exam linking (optional)
+    examId: '',
+    
+    // Legacy fields (for backward compatibility)
+    questionType: 'general',
+    selectedState: '',
   });
 
   const [newTag, setNewTag] = useState('');
   const [audioFile, setAudioFile] = useState(null);
   const [audioPreview, setAudioPreview] = useState(null);
   const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [grammarTopics, setGrammarTopics] = useState([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [exams, setExams] = useState([]);
+  const [loadingExams, setLoadingExams] = useState(false);
 
   // قائمة الولايات الألمانية
   const germanStates = [
@@ -57,6 +82,45 @@ function CreateQuestion() {
     'Schleswig-Holstein',
     'Thüringen',
   ];
+
+  // Fetch grammar topics when grammar level changes
+  useEffect(() => {
+    if (formData.usageCategory === 'grammar' && formData.grammarLevel) {
+      const fetchTopics = async () => {
+        setLoadingTopics(true);
+        try {
+          const data = await getGrammarTopics(formData.grammarLevel);
+          setGrammarTopics(data.items || data || []);
+        } catch (err) {
+          console.error('Error fetching grammar topics:', err);
+          setGrammarTopics([]);
+        } finally {
+          setLoadingTopics(false);
+        }
+      };
+      fetchTopics();
+    }
+  }, [formData.usageCategory, formData.grammarLevel]);
+
+  // Fetch exams for linking
+  useEffect(() => {
+    const fetchExams = async () => {
+      setLoadingExams(true);
+      try {
+        const response = await examsAPI.getAll({ simple: true });
+        const examsArray = Array.isArray(response) 
+          ? response 
+          : (response?.items || response?.data || []);
+        setExams(examsArray);
+      } catch (err) {
+        console.error('Error fetching exams:', err);
+        setExams([]);
+      } finally {
+        setLoadingExams(false);
+      }
+    };
+    fetchExams();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -327,7 +391,27 @@ function CreateQuestion() {
       }
     }
 
-    // التحقق من تحديد الولاية إذا كان السؤال لولاية معينة
+    // التحقق من usageCategory
+    if (!formData.usageCategory) {
+      setError('يجب اختيار نوع الاستخدام (Grammar / Provider)');
+      return;
+    }
+
+    // Grammar validation
+    if (formData.usageCategory === 'grammar' && !formData.grammarTopic) {
+      setError('يجب اختيار موضوع القواعد');
+      return;
+    }
+
+    // Provider validation
+    if (formData.usageCategory === 'provider') {
+      if (!formData.provider || !formData.providerLevel || !formData.skill) {
+        setError('يجب ملء جميع حقول Provider metadata');
+        return;
+      }
+    }
+
+    // التحقق من تحديد الولاية إذا كان السؤال لولاية معينة (legacy)
     if (formData.questionType === 'state' && !formData.selectedState) {
       setError('يجب تحديد الولاية للسؤال الخاص بولاية معينة');
       return;
@@ -363,15 +447,67 @@ function CreateQuestion() {
         }
       }
 
+      // Parse tags
+      const parseTags = (tagsString) => {
+        if (!tagsString?.trim()) return [];
+        return tagsString.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      };
+
       // تحويل البيانات إلى التنسيق المطلوب من API
       const questionData = {
         prompt: formData.prompt,
         qType: formData.qType,
-        provider: formData.provider,
-        level: formData.level,
-        tags: formData.tags,
         status: formData.status,
       };
+
+      // Add points if provided
+      if (formData.points && formData.points > 0) {
+        questionData.points = formData.points;
+      }
+
+      // Add explanation if provided
+      if (formData.explanation?.trim()) {
+        questionData.explanation = formData.explanation;
+      }
+
+      // Add usageCategory
+      questionData.usageCategory = formData.usageCategory;
+
+      // Add metadata based on usageCategory
+      if (formData.usageCategory === 'grammar') {
+        const selectedTopic = grammarTopics.find(t => t.slug === formData.grammarTopic);
+        questionData.provider = 'Grammatik';
+        questionData.level = formData.grammarLevel;
+        questionData.grammarTopic = formData.grammarTopic;
+        const grammarTagsArray = parseTags(formData.grammarTags);
+        questionData.tags = grammarTagsArray.length > 0 
+          ? grammarTagsArray 
+          : (selectedTopic?.tags || [formData.grammarTopic]);
+        questionData.section = 'grammar';
+      } else if (formData.usageCategory === 'provider') {
+        questionData.provider = formData.provider;
+        questionData.level = formData.providerLevel;
+        questionData.skill = formData.skill;
+        questionData.teilNumber = formData.teilNumber;
+        questionData.section = formData.skill.charAt(0).toUpperCase() + formData.skill.slice(1);
+        
+        // Build tags for provider
+        const providerTags = [
+          formData.provider,
+          formData.providerLevel,
+          formData.skill,
+          `Teil-${formData.teilNumber}`,
+        ];
+        if (formData.sourceName?.trim()) {
+          providerTags.push(formData.sourceName);
+        }
+        questionData.tags = providerTags;
+      } else {
+        // Legacy or other categories
+        questionData.provider = formData.provider;
+        questionData.level = formData.level;
+        questionData.tags = formData.tags;
+      }
 
       // إضافة الحقول حسب نوع السؤال
       if (formData.qType === 'mcq') {
@@ -397,8 +533,8 @@ function CreateQuestion() {
         questionData.answerKeyReorder = formData.answerKeyReorder.filter((item) => item.trim());
       }
 
-      // إضافة section فقط إذا كان محدداً
-      if (formData.section && formData.section.trim()) {
+      // إضافة section فقط إذا كان محدداً (legacy)
+      if (formData.section && formData.section.trim() && !questionData.section) {
         questionData.section = formData.section;
       }
 
@@ -407,7 +543,23 @@ function CreateQuestion() {
         questionData.media = mediaData;
       }
 
-      await questionsAPI.create(questionData);
+      // Link to exam if provided (for all question types)
+      if (formData.examId) {
+        questionData.examId = formData.examId;
+        // Use createWithExam if examId is provided
+        const sectionTitle = formData.usageCategory === 'grammar' 
+          ? 'Grammar Section'
+          : formData.usageCategory === 'provider'
+          ? (questionData.section || 'Default Section')
+          : (questionData.section || 'Default Section');
+        
+        await questionsAPI.createWithExam({
+          ...questionData,
+          sectionTitle: sectionTitle,
+        });
+      } else {
+        await questionsAPI.create(questionData);
+      }
       setSuccess('تم إنشاء السؤال بنجاح!');
       
       // Reset form after 2 seconds
@@ -421,11 +573,22 @@ function CreateQuestion() {
           answerKeyBoolean: true,
           answerKeyMatch: [{ left: '', right: '' }],
           answerKeyReorder: [],
-          provider: 'Deutschland-in-Leben',
-          section: '',
-          level: 'B1',
+          points: 1,
+          explanation: '',
+          usageCategory: '',
+          grammarTopic: '',
+          grammarLevel: 'A1',
+          grammarTags: '',
+          provider: 'Goethe',
+          providerLevel: 'A1',
+          skill: 'hoeren',
+          teilNumber: 1,
+          sourceName: '',
+          level: 'A1',
           tags: [],
           status: 'draft',
+          section: '',
+          examId: '',
           questionType: 'general',
           selectedState: '',
         });
@@ -688,219 +851,499 @@ function CreateQuestion() {
             </div>
           )}
 
-          {/* Provider */}
+          {/* Points */}
           <div className="form-group">
-            <label htmlFor="provider">المزود *</label>
+            <label htmlFor="points">النقاط (اختياري)</label>
+            <input
+              type="number"
+              id="points"
+              name="points"
+              value={formData.points}
+              onChange={handleInputChange}
+              min="1"
+              placeholder="1"
+            />
+          </div>
+
+          {/* Explanation */}
+          <div className="form-group">
+            <label htmlFor="explanation">الشرح / Explanation (اختياري)</label>
+            <textarea
+              id="explanation"
+              name="explanation"
+              value={formData.explanation}
+              onChange={handleInputChange}
+              rows={3}
+              placeholder="شرح الإجابة الصحيحة..."
+            />
+          </div>
+
+          {/* Usage Category */}
+          <div className="form-group" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+            <label htmlFor="usageCategory">🔧 نوع الاستخدام / Question Usage *</label>
             <select
-              id="provider"
-              name="provider"
-              value={formData.provider}
+              id="usageCategory"
+              name="usageCategory"
+              value={formData.usageCategory}
               onChange={handleInputChange}
               required
             >
-              <option value="Deutschland-in-Leben">Deutschland-in-Leben</option>
-              <option value="telc">telc</option>
-              <option value="Goethe">Goethe</option>
-              <option value="ÖSD">ÖSD</option>
-              <option value="ECL">ECL</option>
-              <option value="DTB">DTB</option>
-              <option value="DTZ">DTZ</option>
-              <option value="Grammatik">Grammatik</option>
-              <option value="Wortschatz">Wortschatz</option>
+              <option value="">-- اختر نوع الاستخدام --</option>
+              <option value="grammar">Grammar question (قواعد)</option>
+              <option value="provider">Provider exam question (Prüfungen)</option>
+              <option value="vocab">Vocab (مستقبلاً)</option>
             </select>
           </div>
 
-          {/* Section */}
-          <div className="form-group">
-            <label htmlFor="section">القسم (اختياري)</label>
-            <select
-              id="section"
-              name="section"
-              value={formData.section}
-              onChange={handleInputChange}
-            >
-              <option value="">-- اختر القسم --</option>
-              <option value="Hören">Hören (الاستماع)</option>
-              <option value="Lesen">Lesen (القراءة)</option>
-              <option value="Schreiben">Schreiben (الكتابة)</option>
-              <option value="Sprechen">Sprechen (التحدث)</option>
-            </select>
-          </div>
-
-          {/* Audio File Upload */}
-          <div className="form-group">
-            <label htmlFor="audioFile">ملف صوتي (اختياري)</label>
-            {!audioFile ? (
-              <div className="file-upload-container">
-                <input
-                  type="file"
-                  id="audioFile"
-                  accept="audio/*"
-                  onChange={handleAudioFileChange}
-                  className="file-input"
-                />
-                <label htmlFor="audioFile" className="file-upload-label">
-                  <span className="file-upload-icon">🎵</span>
-                  <span>اختر ملف صوتي</span>
-                </label>
-                <p className="file-upload-hint">
-                  الحد الأقصى: 50MB | الأنواع المدعومة: MP3, WAV, OGG, etc.
-                </p>
+          {/* Grammar Metadata */}
+          {formData.usageCategory === 'grammar' && (
+            <div className="form-group" style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold' }}>
+                إعدادات سؤال القواعد
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="grammarLevel">مستوى القواعد / Grammar Level *</label>
+                <select
+                  id="grammarLevel"
+                  name="grammarLevel"
+                  value={formData.grammarLevel}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C1">C1</option>
+                  <option value="C2">C2</option>
+                </select>
               </div>
-            ) : (
-              <div className="audio-preview-container">
-                <div className="audio-preview-info">
-                  <span className="audio-icon">🎵</span>
-                  <div className="audio-info">
-                    <p className="audio-name">{audioFile.name}</p>
-                    <p className="audio-size">
-                      {(audioFile.size / (1024 * 1024)).toFixed(2)} MB
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveAudio}
-                    className="remove-audio-btn"
+
+              <div className="form-group">
+                <label htmlFor="grammarTopic">موضوع القواعد / Grammar Topic *</label>
+                {loadingTopics ? (
+                  <p>جاري تحميل المواضيع...</p>
+                ) : (
+                  <select
+                    id="grammarTopic"
+                    name="grammarTopic"
+                    value={formData.grammarTopic}
+                    onChange={handleInputChange}
+                    required
                   >
-                    ✕
-                  </button>
-                </div>
-                {audioPreview && (
-                  <audio controls className="audio-player">
-                    <source src={audioPreview} type={audioFile.type} />
-                    المتصفح لا يدعم تشغيل الملفات الصوتية
-                  </audio>
+                    <option value="">-- اختر الموضوع --</option>
+                    {grammarTopics.map((topic) => (
+                      <option key={topic._id} value={topic.slug}>
+                        {topic.title}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Level */}
-          <div className="form-group">
-            <label htmlFor="level">المستوى *</label>
-            <select
-              id="level"
-              name="level"
-              value={formData.level}
-              onChange={handleInputChange}
-              required
-            >
-              <option value="A1">A1 - المبتدئ</option>
-              <option value="A2">A2 - المبتدئ المتقدم</option>
-              <option value="B1">B1 - المتوسط</option>
-              <option value="B2">B2 - المتوسط المتقدم</option>
-              <option value="C1">C1 - المتقدم</option>
-            </select>
-          </div>
-
-          {/* Question Type (General or State-specific) */}
-          <div className="form-group">
-            <label>نوع السؤال *</label>
-            <div className="radio-group">
-              <label className="radio-label">
+              <div className="form-group">
+                <label htmlFor="grammarTags">وسوم الأسئلة / Question Tags</label>
                 <input
-                  type="radio"
-                  name="questionType"
-                  value="general"
-                  checked={formData.questionType === 'general'}
+                  type="text"
+                  id="grammarTags"
+                  name="grammarTags"
+                  value={formData.grammarTags}
                   onChange={handleInputChange}
+                  placeholder="مثال: akkusativ, cases (سيتم استخدام وسوم الموضوع تلقائياً إذا تركت فارغاً)"
                 />
-                <span>سؤال عام</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="questionType"
-                  value="state"
-                  checked={formData.questionType === 'state'}
-                  onChange={handleInputChange}
-                />
-                <span>سؤال خاص بولاية معينة</span>
-              </label>
-            </div>
-          </div>
-
-          {/* State Selection (only if state-specific) */}
-          {formData.questionType === 'state' && (
-            <div className="form-group">
-              <label htmlFor="selectedState">الولاية *</label>
-              <select
-                id="selectedState"
-                name="selectedState"
-                value={formData.selectedState}
-                onChange={handleInputChange}
-                required
-              >
-                <option value="">-- اختر الولاية --</option>
-                {germanStates.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
+                <small>أدخل الوسوم مفصولة بفواصل</small>
+              </div>
             </div>
           )}
 
-          {/* Tags */}
-          <div className="form-group">
-            <label>الوسوم</label>
-            <div className="tags-container">
-              {formData.tags.map((tag, index) => (
-                <span key={index} className="tag">
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    className="tag-remove"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              <div className="tag-input-container">
+          {/* Provider Metadata */}
+          {formData.usageCategory === 'provider' && (
+            <div className="form-group" style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold' }}>
+                🔹 Provider metadata
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="provider">المعهد / Provider *</label>
+                <select
+                  id="provider"
+                  name="provider"
+                  value={formData.provider}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="Goethe">Goethe</option>
+                  <option value="telc">TELC</option>
+                  <option value="ÖSD">ÖSD</option>
+                  <option value="ECL">ECL</option>
+                  <option value="DTB">DTB</option>
+                  <option value="DTZ">DTZ</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="providerLevel">المستوى / Level *</label>
+                <select
+                  id="providerLevel"
+                  name="providerLevel"
+                  value={formData.providerLevel}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C1">C1</option>
+                  <option value="C2">C2</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="skill">المهارة / Skill *</label>
+                <select
+                  id="skill"
+                  name="skill"
+                  value={formData.skill}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="hoeren">Hören (الاستماع)</option>
+                  <option value="lesen">Lesen (القراءة)</option>
+                  <option value="schreiben">Schreiben (الكتابة)</option>
+                  <option value="sprechen">Sprechen (التحدث)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="teilNumber">رقم Teil *</label>
+                <input
+                  type="number"
+                  id="teilNumber"
+                  name="teilNumber"
+                  value={formData.teilNumber}
+                  onChange={handleInputChange}
+                  min="1"
+                  required
+                  placeholder="1"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="sourceName">Source model (اختياري)</label>
                 <input
                   type="text"
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  placeholder="أضف وسم..."
-                  className="tag-input"
+                  id="sourceName"
+                  name="sourceName"
+                  value={formData.sourceName}
+                  onChange={handleInputChange}
+                  placeholder="مثال: Goethe B1 – Modelltest 1 – Lesen"
                 />
-                <button
-                  type="button"
-                  onClick={handleAddTag}
-                  className="add-tag-btn"
-                >
-                  إضافة
-                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Status */}
-          <div className="form-group">
-            <label htmlFor="status">الحالة *</label>
-            <select
-              id="status"
-              name="status"
-              value={formData.status}
-              onChange={handleInputChange}
-              required
-            >
-              <option value="draft">مسودة (Draft)</option>
-              <option value="published">منشور (Published)</option>
-              <option value="archived">مؤرشف (Archived)</option>
-            </select>
-            <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
-              ⚠️ ملاحظة: فقط الأسئلة بحالة "منشور (Published)" ستظهر للطلاب. 
-              الأسئلة بحالة "مسودة (Draft)" لن تظهر في صفحة الطلاب.
-            </small>
-          </div>
+          {/* Exam Linking - Show for all question types when usageCategory is selected */}
+          {formData.usageCategory && (
+            <div className="form-group" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+              <label htmlFor="examId">ربط السؤال بامتحان (اختياري)</label>
+              {loadingExams ? (
+                <p>جاري تحميل الامتحانات...</p>
+              ) : (
+                <select
+                  id="examId"
+                  name="examId"
+                  value={formData.examId}
+                  onChange={handleInputChange}
+                >
+                  <option value="">-- اختر الامتحان (اختياري) --</option>
+                  {exams.map((exam) => {
+                    const examId = exam._id || exam.id || '';
+                    return (
+                      <option key={examId} value={examId}>
+                        {exam.title} {exam.level ? `(${exam.level})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              <small>يمكنك ربط السؤال بامتحان معين عند الإنشاء</small>
+            </div>
+          )}
+
+          {/* Legacy Section (for general and state questions) - only show if usageCategory is empty */}
+          {!formData.usageCategory && (
+            <>
+              <div className="form-group">
+                <label htmlFor="provider">المزود *</label>
+                <select
+                  id="provider"
+                  name="provider"
+                  value={formData.provider}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="Deutschland-in-Leben">Deutschland-in-Leben</option>
+                  <option value="telc">telc</option>
+                  <option value="Goethe">Goethe</option>
+                  <option value="ÖSD">ÖSD</option>
+                  <option value="ECL">ECL</option>
+                  <option value="DTB">DTB</option>
+                  <option value="DTZ">DTZ</option>
+                  <option value="Grammatik">Grammatik</option>
+                  <option value="Wortschatz">Wortschatz</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Legacy Section - Hidden temporarily */}
+          {false && (
+            <>
+              {/* Section */}
+              <div className="form-group">
+                <label htmlFor="section">القسم (اختياري)</label>
+                <select
+                  id="section"
+                  name="section"
+                  value={formData.section}
+                  onChange={handleInputChange}
+                >
+                  <option value="">-- اختر القسم --</option>
+                  <option value="Hören">Hören (الاستماع)</option>
+                  <option value="Lesen">Lesen (القراءة)</option>
+                  <option value="Schreiben">Schreiben (الكتابة)</option>
+                  <option value="Sprechen">Sprechen (التحدث)</option>
+                </select>
+              </div>
+
+              {/* Audio File Upload */}
+              <div className="form-group">
+                <label htmlFor="audioFile">ملف صوتي (اختياري)</label>
+                {!audioFile ? (
+                  <div className="file-upload-container">
+                    <input
+                      type="file"
+                      id="audioFile"
+                      accept="audio/*"
+                      onChange={handleAudioFileChange}
+                      className="file-input"
+                    />
+                    <label htmlFor="audioFile" className="file-upload-label">
+                      <span className="file-upload-icon">🎵</span>
+                      <span>اختر ملف صوتي</span>
+                    </label>
+                    <p className="file-upload-hint">
+                      الحد الأقصى: 50MB | الأنواع المدعومة: MP3, WAV, OGG, etc.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="audio-preview-container">
+                    <div className="audio-preview-info">
+                      <span className="audio-icon">🎵</span>
+                      <div className="audio-info">
+                        <p className="audio-name">{audioFile.name}</p>
+                        <p className="audio-size">
+                          {(audioFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveAudio}
+                        className="remove-audio-btn"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {audioPreview && (
+                      <audio controls className="audio-player">
+                        <source src={audioPreview} type={audioFile.type} />
+                        المتصفح لا يدعم تشغيل الملفات الصوتية
+                      </audio>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Level */}
+              <div className="form-group">
+                <label htmlFor="level">المستوى *</label>
+                <select
+                  id="level"
+                  name="level"
+                  value={formData.level}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="A1">A1 - المبتدئ</option>
+                  <option value="A2">A2 - المبتدئ المتقدم</option>
+                  <option value="B1">B1 - المتوسط</option>
+                  <option value="B2">B2 - المتوسط المتقدم</option>
+                  <option value="C1">C1 - المتقدم</option>
+                </select>
+              </div>
+
+              {/* Question Type (General or State-specific) */}
+              <div className="form-group">
+                <label>نوع السؤال *</label>
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="questionType"
+                      value="general"
+                      checked={formData.questionType === 'general'}
+                      onChange={handleInputChange}
+                    />
+                    <span>سؤال عام</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="questionType"
+                      value="state"
+                      checked={formData.questionType === 'state'}
+                      onChange={handleInputChange}
+                    />
+                    <span>سؤال خاص بولاية معينة</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* State Selection (only if state-specific) */}
+              {formData.questionType === 'state' && (
+                <div className="form-group">
+                  <label htmlFor="selectedState">الولاية *</label>
+                  <select
+                    id="selectedState"
+                    name="selectedState"
+                    value={formData.selectedState}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="">-- اختر الولاية --</option>
+                    {germanStates.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Tags */}
+              <div className="form-group">
+                <label>الوسوم</label>
+                <div className="tags-container">
+                  {formData.tags.map((tag, index) => (
+                    <span key={index} className="tag">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="tag-remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <div className="tag-input-container">
+                    <input
+                      type="text"
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddTag();
+                        }
+                      }}
+                      placeholder="أضف وسم..."
+                      className="tag-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddTag}
+                      className="add-tag-btn"
+                    >
+                      إضافة
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exam Linking (Only for Legacy questions) */}
+              <div className="form-group" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+                <label htmlFor="examId">ربط السؤال بامتحان (اختياري)</label>
+                {loadingExams ? (
+                  <p>جاري تحميل الامتحانات...</p>
+                ) : (
+                  <select
+                    id="examId"
+                    name="examId"
+                    value={formData.examId}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">-- اختر الامتحان (اختياري) --</option>
+                    {exams.map((exam) => {
+                      const examId = exam._id || exam.id || '';
+                      return (
+                        <option key={examId} value={examId}>
+                          {exam.title} {exam.level ? `(${exam.level})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+                <small>يمكنك ربط السؤال بامتحان معين عند الإنشاء</small>
+              </div>
+            </>
+          )}
+
+          {/* Status - Show only when usageCategory is selected */}
+          {formData.usageCategory && (
+            <div className="form-group" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+              <label htmlFor="status">الحالة / Status *</label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="draft">مسودة (Draft)</option>
+                <option value="published">منشور (Published)</option>
+                <option value="archived">مؤرشف (Archived)</option>
+              </select>
+              <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
+                ⚠️ ملاحظة: فقط الأسئلة بحالة "منشور (Published)" ستظهر للطلاب. 
+                الأسئلة بحالة "مسودة (Draft)" لن تظهر في صفحة الطلاب.
+              </small>
+            </div>
+          )}
+
+          {/* Legacy Status - Hidden temporarily */}
+          {false && (
+            <div className="form-group">
+              <label htmlFor="status">الحالة *</label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="draft">مسودة (Draft)</option>
+                <option value="published">منشور (Published)</option>
+                <option value="archived">مؤرشف (Archived)</option>
+              </select>
+              <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
+                ⚠️ ملاحظة: فقط الأسئلة بحالة "منشور (Published)" ستظهر للطلاب. 
+                الأسئلة بحالة "مسودة (Draft)" لن تظهر في صفحة الطلاب.
+              </small>
+            </div>
+          )}
 
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}

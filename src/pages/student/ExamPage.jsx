@@ -36,7 +36,7 @@ function ExamPage() {
       
       // معالجة items - قد تكون في attemptData.items أو attemptData.data.items
       let items = attemptData.items || attemptData.data?.items || [];
-      
+
       // إذا كان items مصفوفة فارغة أو غير موجودة
       if (!Array.isArray(items) || items.length === 0) {
         console.warn('⚠️ لا توجد items في الـ response');
@@ -45,11 +45,29 @@ function ExamPage() {
         setAttempt({ ...attemptData, items: [] });
         return;
       }
-      
+
+      // استخراج بيانات الأسئلة من questionSnapshot
+      const formattedItems = items.map((item) => {
+        // إذا كان في questionSnapshot، استخرج البيانات منه
+        if (item.questionSnapshot) {
+          return {
+            ...item,
+            prompt: item.questionSnapshot.text || item.questionSnapshot.prompt,
+            text: item.questionSnapshot.text || item.questionSnapshot.prompt,
+            qType: item.questionSnapshot.qType,
+            type: item.questionSnapshot.qType,
+            options: item.questionSnapshot.options || [],
+            question: item.questionSnapshot, // keep original for backward compatibility
+          };
+        }
+        // إذا مافيش questionSnapshot، استخدم البيانات الموجودة
+        return item;
+      });
+
       // تحديث attemptData مع items الصحيحة
       const attemptWithItems = {
         ...attemptData,
-        items: items,
+        items: formattedItems,
       };
       
       setAttempt(attemptWithItems);
@@ -117,17 +135,20 @@ function ExamPage() {
         questionId,
       };
 
-      // حسب نوع السؤال
-      const question = attempt.items[itemIndex];
-      if (question.qType === 'mcq') {
+      // حسب نوع السؤال - معالجة structure مختلف
+      const item = attempt.items[itemIndex];
+      const question = item.question || item;
+      const qType = question.qType || question.type || item.qType || item.type || 'mcq';
+      
+      if (qType === 'mcq') {
         answerData.studentAnswerIndexes = Array.isArray(answer) ? answer : [answer];
-      } else if (question.qType === 'true_false') {
+      } else if (qType === 'true_false') {
         answerData.studentAnswerBoolean = answer;
-      } else if (question.qType === 'fill') {
+      } else if (qType === 'fill') {
         answerData.studentAnswerText = answer;
-      } else if (question.qType === 'match') {
+      } else if (qType === 'match') {
         answerData.studentAnswerMatch = answer;
-      } else if (question.qType === 'reorder') {
+      } else if (qType === 'reorder') {
         answerData.studentAnswerReorder = answer;
       }
 
@@ -272,23 +293,42 @@ function ExamPage() {
 
         {/* عرض كل الأسئلة */}
         <div className="space-y-6 mb-6">
-          {attempt.items.map((item, itemIndex) => (
+          {attempt.items.map((item, itemIndex) => {
+            // معالجة structure مختلف - قد يكون prompt في item.prompt أو item.question.prompt أو item.text
+            const question = item.question || item;
+            const prompt = question.prompt || question.text || item.prompt || item.text || 'السؤال';
+            const qType = question.qType || question.type || item.qType || item.type || 'mcq';
+            const options = question.options || item.options || [];
+            
+            // Debug: طباعة structure البيانات
+            if (itemIndex === 0) {
+              console.log('🔍 Question structure:', {
+                item,
+                question,
+                prompt,
+                qType,
+                optionsLength: options.length,
+                hasPrompt: !!prompt,
+              });
+            }
+            
+            return (
             <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
               {/* رقم السؤال */}
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
                   سؤال {itemIndex + 1}
                 </span>
-                {item.points && (
+                {(item.points || question.points) && (
                   <span className="text-[10px] text-slate-400">
-                    {item.points} نقطة
+                    {item.points || question.points} نقطة
                   </span>
                 )}
               </div>
 
               {/* نص السؤال */}
               <h3 className="text-base font-semibold text-slate-900 mb-3">
-                {item.prompt}
+                {prompt}
               </h3>
 
               {/* Media (Audio/Image/Video) */}
@@ -311,9 +351,11 @@ function ExamPage() {
               )}
 
               {/* MCQ */}
-              {item.qType === 'mcq' && item.options && (
+              {qType === 'mcq' && options && options.length > 0 && (
                 <div className="space-y-2">
-                  {item.options.map((option, optIdx) => {
+                  {options.map((option, optIdx) => {
+                    // معالجة option - قد يكون string أو object مع text
+                    const optionText = typeof option === 'string' ? option : (option.text || option);
                     const currentAnswer = answers[itemIndex];
                     const selectedIndexes = currentAnswer?.studentAnswerIndexes || [];
                     const isSelected = selectedIndexes.includes(optIdx);
@@ -346,7 +388,7 @@ function ExamPage() {
                             <div className="w-3 h-3 rounded-full bg-rose-500"></div>
                           )}
                         </div>
-                        <span>{option}</span>
+                        <span>{optionText}</span>
                       </button>
                     );
                   })}
@@ -354,7 +396,7 @@ function ExamPage() {
               )}
 
               {/* True/False */}
-              {item.qType === 'true_false' && (
+              {qType === 'true_false' && (
                 <div className="space-y-2">
                   <button
                     onClick={() => {
@@ -406,7 +448,7 @@ function ExamPage() {
               )}
 
               {/* Fill */}
-              {item.qType === 'fill' && (
+              {qType === 'fill' && (
                 <div>
                   <textarea
                     value={answers[itemIndex]?.studentAnswerText || ''}
@@ -425,7 +467,8 @@ function ExamPage() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* زر تسليم الامتحان */}
