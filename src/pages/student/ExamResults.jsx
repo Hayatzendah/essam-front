@@ -29,25 +29,18 @@ function ExamResults() {
       // استخراج بيانات الأسئلة من questionSnapshot
       if (attemptData.items && attemptData.items.length > 0) {
         const formattedItems = attemptData.items.map((item) => {
-          if (item.questionSnapshot) {
-            return {
-              ...item,
-              prompt: item.questionSnapshot.text || item.questionSnapshot.prompt,
-              text: item.questionSnapshot.text || item.questionSnapshot.prompt,
-              qType: item.questionSnapshot.qType,
-              options: item.questionSnapshot.options || [],
-            };
-          }
-          if (item.question) {
-            return {
-              ...item,
-              prompt: item.question.text || item.question.prompt,
-              text: item.question.text || item.question.prompt,
-              qType: item.question.qType,
-              options: item.question.options || [],
-            };
-          }
-          return item;
+          // استخدام promptSnapshot و optionsText (الحقول الصحيحة من الباك)
+          const prompt = item.promptSnapshot || item.questionSnapshot?.text || item.questionSnapshot?.prompt || item.prompt || item.text;
+          const options = item.optionsText || item.questionSnapshot?.options || item.options || [];
+          const qType = item.qType || item.questionSnapshot?.qType || 'mcq';
+
+          return {
+            ...item,
+            prompt,
+            text: prompt,
+            qType,
+            options,
+          };
         });
         attemptData.items = formattedItems;
       }
@@ -67,10 +60,10 @@ function ExamResults() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-12 text-center max-w-md w-full">
-          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6"></div>
-          <p className="text-slate-700 text-lg font-semibold">جاري تحميل النتائج...</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mb-4"></div>
+          <p className="text-sm text-slate-600">جاري تحميل النتائج...</p>
         </div>
       </div>
     );
@@ -78,16 +71,18 @@ function ExamResults() {
 
   if (error || !attempt) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-12 text-center max-w-md w-full">
-          <div className="text-6xl mb-6">❌</div>
-          <p className="text-rose-600 text-lg mb-6">{error || 'لا توجد بيانات للنتائج'}</p>
-          <button
-            onClick={() => navigate('/student/liden')}
-            className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
-          >
-            العودة
-          </button>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
+            <div className="text-5xl mb-4">❌</div>
+            <p className="text-rose-600 text-sm mb-6">{error || 'لا توجد بيانات للنتائج'}</p>
+            <button
+              onClick={() => navigate('/student/liden')}
+              className="px-6 py-2.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm font-semibold"
+            >
+              العودة
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -117,69 +112,83 @@ function ExamResults() {
   const isPassed = percentage >= 50;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="text-center text-white mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3 drop-shadow-lg">نتيجة الامتحان</h1>
-          {attempt.exam?.title && (
-            <p className="text-xl opacity-90">{attempt.exam.title}</p>
-          )}
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* الشريط العلوي */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            ← رجوع
+          </button>
+          <span className="text-xs font-semibold text-rose-500">
+            نتيجة الامتحان
+          </span>
         </div>
 
-        {/* Summary Card */}
-        <div className={`bg-white rounded-3xl shadow-2xl p-8 md:p-12 mb-8 border-4 ${
-          isPassed ? 'border-emerald-500' : 'border-rose-500'
+        {/* عنوان */}
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-slate-900 mb-1">
+            {attempt.exam?.title || 'امتحان'}
+          </h1>
+          <p className="text-sm text-slate-600">
+            مراجعة النتيجة والإجابات
+          </p>
+        </div>
+
+        {/* بطاقة النتيجة */}
+        <div className={`bg-white rounded-2xl shadow-sm border-2 p-8 mb-6 ${
+          isPassed ? 'border-emerald-200' : 'border-rose-200'
         }`}>
-          <div className="text-center mb-8">
-            <div className="text-7xl mb-4 animate-bounce">
-              {isPassed ? '🎉' : '😔'}
+          <div className="text-center mb-6">
+            <div className="text-5xl mb-3">
+              {isPassed ? '🎉' : '📝'}
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-              {isPassed ? 'نجحت في الامتحان!' : 'لم تنجح في الامتحان'}
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">
+              {isPassed ? 'أحسنت! نجحت في الامتحان' : 'انتهى الامتحان'}
             </h2>
-            <p className="text-slate-600">
-              {isPassed ? 'أحسنت! استمري في التقدم' : 'لا تقلقي، يمكنك المحاولة مرة أخرى'}
+            <p className="text-sm text-slate-600">
+              {isPassed ? 'استمري في التقدم الرائع' : 'يمكنك مراجعة الأسئلة والمحاولة مرة أخرى'}
             </p>
           </div>
 
-          {/* Score Display */}
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-8">
-            {/* Score Circle */}
-            <div className="relative">
-              <div className="w-48 h-48 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center shadow-2xl">
-                <div className="text-6xl font-bold text-white">{percentage}%</div>
-                <div className="text-sm text-white opacity-90">النسبة المئوية</div>
-              </div>
-              <div className="absolute -top-2 -right-2 w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-2xl shadow-lg">
-                {isPassed ? '✨' : '💪'}
+          {/* الإحصائيات */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* النسبة المئوية */}
+            <div className="md:col-span-1 flex items-center justify-center">
+              <div className={`w-28 h-28 rounded-full flex flex-col items-center justify-center ${
+                isPassed ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-rose-50 border-2 border-rose-200'
+              }`}>
+                <div className={`text-3xl font-bold ${isPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {percentage}%
+                </div>
+                <div className="text-xs text-slate-500 mt-1">النسبة</div>
               </div>
             </div>
 
-            {/* Score Details */}
-            <div className="grid grid-cols-1 gap-4 w-full md:w-auto">
-              <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-5 border border-slate-200">
-                <div className="text-sm text-slate-600 mb-1">الدرجة الكلية</div>
-                <div className="text-3xl font-bold text-slate-900">{finalScore} / {totalMaxScore}</div>
+            {/* التفاصيل */}
+            <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <div className="text-xs text-slate-500 mb-1">الدرجة الكلية</div>
+                <div className="text-2xl font-bold text-slate-900">{finalScore} / {totalMaxScore}</div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-emerald-50 rounded-2xl p-5 border-2 border-emerald-200">
-                  <div className="text-xs text-emerald-700 mb-1">✓ صحيحة</div>
-                  <div className="text-2xl font-bold text-emerald-600">{correctCount}</div>
-                </div>
+              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                <div className="text-xs text-emerald-700 mb-1">إجابات صحيحة</div>
+                <div className="text-2xl font-bold text-emerald-600">{correctCount}</div>
+              </div>
 
-                <div className="bg-rose-50 rounded-2xl p-5 border-2 border-rose-200">
-                  <div className="text-xs text-rose-700 mb-1">✗ خاطئة</div>
-                  <div className="text-2xl font-bold text-rose-600">{wrongCount}</div>
-                </div>
+              <div className="bg-rose-50 rounded-xl p-4 border border-rose-100">
+                <div className="text-xs text-rose-700 mb-1">إجابات خاطئة</div>
+                <div className="text-2xl font-bold text-rose-600">{wrongCount}</div>
               </div>
             </div>
           </div>
 
-          {/* Submitted At */}
+          {/* تاريخ التسليم */}
           {attempt.submittedAt && (
-            <div className="text-center text-sm text-slate-500 pt-6 border-t border-slate-200">
+            <div className="text-center text-xs text-slate-400 mt-6 pt-6 border-t border-slate-100">
               تم التسليم في: {new Date(attempt.submittedAt).toLocaleString('ar-SA', {
                 year: 'numeric',
                 month: 'long',
@@ -191,64 +200,56 @@ function ExamResults() {
           )}
         </div>
 
-        {/* Questions Review */}
+        {/* مراجعة الأسئلة */}
         {attempt.items && attempt.items.length > 0 && (
-          <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-10 mb-8">
-            <h3 className="text-2xl md:text-3xl font-bold text-slate-900 mb-8 text-center flex items-center justify-center gap-3">
-              <span>📝</span>
-              <span>مراجعة الأسئلة</span>
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">
+              مراجعة الأسئلة
             </h3>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {attempt.items.map((item, index) => {
                 const isCorrect = item.isCorrect === true || item.correct === true || item.isCorrect === 'true';
                 const prompt = item.prompt || item.text || 'السؤال';
                 const qType = item.qType || item.type;
                 const options = item.options || [];
-                const points = item.points || 0;
-                const maxPoints = item.maxPoints || 1;
+                const points = item.autoScore || item.points || 0;
+                const maxPoints = item.points || 1;
 
                 return (
                   <div
                     key={index}
-                    className={`rounded-2xl p-6 border-2 transition-all ${
-                      isCorrect
-                        ? 'bg-emerald-50 border-emerald-300'
-                        : 'bg-rose-50 border-rose-300'
-                    }`}
+                    className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6"
                   >
-                    {/* Question Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{isCorrect ? '✅' : '❌'}</span>
-                        <span className="font-bold text-lg text-slate-900">
-                          السؤال {index + 1}
+                    {/* رأس السؤال */}
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
+                          سؤال {index + 1}
                         </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${
+                        <span className={`text-xs font-semibold px-2 py-1 rounded ${
                           isCorrect
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-rose-500 text-white'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-rose-100 text-rose-700'
                         }`}>
-                          {isCorrect ? 'إجابة صحيحة' : 'إجابة خاطئة'}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-600">
-                          {points} / {maxPoints} نقطة
+                          {isCorrect ? '✓ صحيح' : '✗ خطأ'}
                         </span>
                       </div>
+                      <span className="text-xs text-slate-400">
+                        {points} / {maxPoints} نقطة
+                      </span>
                     </div>
 
-                    {/* Question Text */}
-                    <div className="mb-4 p-4 bg-white rounded-xl border border-slate-200">
-                      <p className="text-lg leading-relaxed text-slate-900 whitespace-pre-wrap">
+                    {/* نص السؤال */}
+                    <div className="mb-4">
+                      <h4 className="text-base font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap">
                         {prompt}
-                      </p>
+                      </h4>
                     </div>
 
-                    {/* Options for MCQ */}
+                    {/* الخيارات للـ MCQ */}
                     {qType === 'mcq' && options && options.length > 0 && (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {options.map((option, optIndex) => {
                           const studentAnswerIndexes = item.studentAnswerIndexes || [];
                           const correctAnswerIndexes = item.correctAnswerIndexes || [];
@@ -260,52 +261,49 @@ function ExamResults() {
                           return (
                             <div
                               key={optIndex}
-                              className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                              className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                                 isSelected && isCorrectAnswer
-                                  ? 'bg-emerald-100 border-emerald-400'
+                                  ? 'bg-emerald-50 border-emerald-200'
                                   : isSelected && !isCorrectAnswer
-                                  ? 'bg-rose-100 border-rose-400'
+                                  ? 'bg-rose-50 border-rose-200'
                                   : isCorrectAnswer && !isSelected
-                                  ? 'bg-emerald-50 border-emerald-300 border-dashed'
-                                  : 'bg-white border-slate-200'
+                                  ? 'bg-emerald-50 border-emerald-200 border-dashed'
+                                  : 'bg-slate-50 border-slate-100'
                               }`}
                             >
-                              <div className="flex items-center gap-3 flex-1">
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                  isSelected
-                                    ? isCorrectAnswer
-                                      ? 'border-emerald-500 bg-emerald-500'
-                                      : 'border-rose-500 bg-rose-500'
-                                    : isCorrectAnswer
-                                    ? 'border-emerald-400'
-                                    : 'border-slate-300'
-                                }`}>
-                                  {isSelected && (
-                                    <div className="w-3 h-3 rounded-full bg-white"></div>
-                                  )}
-                                  {!isSelected && isCorrectAnswer && (
-                                    <span className="text-xs text-emerald-600">✓</span>
-                                  )}
-                                </div>
-                                <span className="text-base text-slate-900">{optionText}</span>
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                isSelected
+                                  ? isCorrectAnswer
+                                    ? 'border-emerald-500 bg-emerald-500'
+                                    : 'border-rose-500 bg-rose-500'
+                                  : isCorrectAnswer
+                                  ? 'border-emerald-400'
+                                  : 'border-slate-300'
+                              }`}>
+                                {isSelected && (
+                                  <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                                )}
+                                {!isSelected && isCorrectAnswer && (
+                                  <span className="text-[10px] text-emerald-600">✓</span>
+                                )}
                               </div>
 
-                              <div className="flex gap-2">
-                                {isSelected && (
-                                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                    isCorrectAnswer
-                                      ? 'bg-emerald-500 text-white'
-                                      : 'bg-rose-500 text-white'
-                                  }`}>
-                                    إجابتك
-                                  </span>
-                                )}
-                                {isCorrectAnswer && !isSelected && (
-                                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-white">
-                                    الإجابة الصحيحة
-                                  </span>
-                                )}
-                              </div>
+                              <span className="flex-1 text-sm text-slate-900">{optionText}</span>
+
+                              {isSelected && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                                  isCorrectAnswer
+                                    ? 'bg-emerald-200 text-emerald-700'
+                                    : 'bg-rose-200 text-rose-700'
+                                }`}>
+                                  إجابتك
+                                </span>
+                              )}
+                              {isCorrectAnswer && !isSelected && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-200 text-emerald-700">
+                                  الإجابة الصحيحة
+                                </span>
+                              )}
                             </div>
                           );
                         })}
@@ -314,17 +312,17 @@ function ExamResults() {
 
                     {/* True/False */}
                     {(qType === 'true_false' || qType === 'true/false') && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200">
-                          <span className="text-slate-600 font-semibold">إجابتك:</span>
-                          <span className="font-bold text-slate-900">
-                            {item.studentAnswerBoolean === true ? 'صحيح ✓' : 'خطأ ✗'}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-sm text-slate-600">إجابتك:</span>
+                          <span className="text-sm font-semibold text-slate-900">
+                            {item.studentAnswerBoolean === true ? 'صحيح' : 'خطأ'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                          <span className="text-emerald-700 font-semibold">الإجابة الصحيحة:</span>
-                          <span className="font-bold text-emerald-700">
-                            {item.answerKeyBoolean === true ? 'صحيح ✓' : 'خطأ ✗'}
+                        <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                          <span className="text-sm text-emerald-700">الإجابة الصحيحة:</span>
+                          <span className="text-sm font-semibold text-emerald-700">
+                            {item.answerKeyBoolean === true ? 'صحيح' : 'خطأ'}
                           </span>
                         </div>
                       </div>
@@ -332,16 +330,16 @@ function ExamResults() {
 
                     {/* Fill */}
                     {(qType === 'fill' || qType === 'fill-in') && (
-                      <div className="space-y-3">
-                        <div className="p-4 bg-white rounded-xl border border-slate-200">
-                          <div className="text-sm text-slate-600 mb-1">إجابتك:</div>
-                          <div className="text-base font-semibold text-slate-900">
+                      <div className="space-y-2">
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <div className="text-xs text-slate-500 mb-1">إجابتك:</div>
+                          <div className="text-sm font-semibold text-slate-900">
                             {item.studentAnswerText || '(لم يتم الإجابة)'}
                           </div>
                         </div>
-                        <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                          <div className="text-sm text-emerald-700 mb-1">الإجابة الصحيحة:</div>
-                          <div className="text-base font-semibold text-emerald-700">
+                        <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                          <div className="text-xs text-emerald-700 mb-1">الإجابة الصحيحة:</div>
+                          <div className="text-sm font-semibold text-emerald-700">
                             {item.fillExact || item.answerKeyText || '-'}
                           </div>
                         </div>
@@ -354,18 +352,18 @@ function ExamResults() {
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        {/* الأزرار */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={() => navigate('/student/liden')}
-            className="px-8 py-4 bg-white text-indigo-600 border-2 border-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-600 hover:text-white transition-all shadow-lg hover:shadow-xl"
+            className="px-6 py-2.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm font-semibold"
           >
             ← العودة إلى الامتحانات
           </button>
           {!isPassed && (
             <button
-              onClick={() => window.location.reload()}
-              className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg hover:shadow-xl"
+              onClick={() => navigate(-1)}
+              className="px-6 py-2.5 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-colors text-sm font-semibold"
             >
               حاول مرة أخرى
             </button>
