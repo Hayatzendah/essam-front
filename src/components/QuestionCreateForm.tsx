@@ -1,6 +1,37 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { examsAPI } from '../services/examsAPI';
-import { getGrammarTopics } from '../services/api';
+import { getGrammarTopics, createGrammarTopic, getSchreibenTasks } from '../services/api';
+import axios from 'axios';
+
+// Enum Mappings
+const PROVIDER_OPTIONS = [
+  { label: 'Goethe', value: 'goethe' },
+  { label: 'TELC', value: 'telc' },
+  { label: 'ÖSD', value: 'osd' },
+  { label: 'ECL', value: 'ecl' },
+  { label: 'DTB', value: 'dtb' },
+  { label: 'DTZ', value: 'dtz' },
+  { label: 'Deutschland in Leben Test', value: 'leben_in_deutschland' },
+];
+
+const MAIN_SKILL_OPTIONS = [
+  { label: 'Mixed (امتحان كامل كل المهارات)', value: 'mixed' },
+  { label: 'Hören (الاستماع)', value: 'hoeren' },
+  { label: 'Lesen (القراءة)', value: 'lesen' },
+  { label: 'Schreiben (الكتابة)', value: 'schreiben' },
+  { label: 'Sprechen (التحدث)', value: 'sprechen' },
+  { label: 'Life Test / Leben in Deutschland', value: 'leben_test' },
+];
+
+// Skills for sections (without mixed and leben_test)
+const SKILLS = [
+  { value: 'hoeren', label: 'Hören' },
+  { value: 'lesen', label: 'Lesen' },
+  { value: 'schreiben', label: 'Schreiben' },
+  { value: 'sprechen', label: 'Sprechen' },
+  { value: 'misc', label: 'Sonstiges' },
+];
 
 // Types
 interface GrammarTopic {
@@ -8,34 +39,51 @@ interface GrammarTopic {
   title: string;
   slug: string;
   level: string;
+  shortDescription?: string;
   tags: string[];
+}
+
+interface SchreibenTask {
+  _id: string;
+  title: string;
+  level: string;
+  provider?: string;
+  status: string;
+  position?: number;
 }
 
 interface Section {
   section: string;
+  name?: string; // للـ Leben exam
+  title?: string; // للـ Leben exam
   skill?: string;
   teil?: number;
+  teilNumber?: number; // ✅ إضافة teilNumber للتوافق مع DTO
   quota: number;
   tags?: string[];
+  description?: string; // نص القراءة - يظهر فقط لـ Lesen
+  listeningAudioId?: string; // للصوت - يظهر فقط لـ Hören
+  listeningAudioUrl?: string; // للعرض والمعاينة
   difficultyDistribution?: {
     easy: number;
     med: number;
+    medium?: number; // ✅ إضافة medium للتوافق مع DTO
     hard: number;
   };
 }
 
 interface ExamFormState {
   // Common fields
-  examType: 'grammar_exam' | 'provider_exam' | '';
+  examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | '';
   title: string;
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-  duration: number; // in minutes
+  duration: number | ''; // in minutes (optional)
   status: 'draft' | 'published';
   description: string;
   tags: string;
   
   // Grammar Exam specific
-  grammarTopic: string;
+  grammarTopicId: string;
   grammarLevel: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
   totalQuestions: number;
   difficultyDistribution: {
@@ -44,32 +92,68 @@ interface ExamFormState {
     hard: number;
   };
   questionTags: string;
-  
+
+  // Schreiben Exam specific
+  schreibenTaskId: string;
+
   // Provider Exam specific
   provider: string;
-  mainSkill: 'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen';
+  mainSkill: 'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen' | 'leben_test';
   sections: Section[];
+  hasSections: boolean; // toggle لإلغاء sections لامتحان Leben
 }
 
-const QuestionCreateForm = () => {
+interface QuestionCreateFormProps {
+  examId?: string; // إذا كان موجوداً، يعمل في وضع التعديل
+}
+
+const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
+  const navigate = useNavigate();
+  const isEditMode = !!examId;
+  
   // State
   const [loading, setLoading] = useState(false);
+  const [loadingExam, setLoadingExam] = useState(isEditMode);
   const [loadingTopics, setLoadingTopics] = useState(false);
+  const [loadingSchreibenTasks, setLoadingSchreibenTasks] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [grammarTopics, setGrammarTopics] = useState<GrammarTopic[]>([]);
+  const [schreibenTasks, setSchreibenTasks] = useState<SchreibenTask[]>([]);
+  const [showNewTopicModal, setShowNewTopicModal] = useState(false);
+  const [creatingTopic, setCreatingTopic] = useState(false);
+  const [newTopicData, setNewTopicData] = useState({
+    title: '',
+    slug: '',
+    shortDescription: '',
+    tags: '',
+  });
+  
+  // ✅ حفظ البيانات الأصلية في وضع التعديل لتتبع التغييرات
+  const [originalExamData, setOriginalExamData] = useState<any>(null);
+  
+  // ✅ Safe integer function - sanitize teil وquota
+  const safeInt1 = (v: any): number => {
+    const n = Number.parseInt(String(v ?? ''), 10);
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  };
+  
+  // State للصوت في كل section
+  const [sectionAudioFiles, setSectionAudioFiles] = useState<{ [index: number]: File | null }>({});
+  const [sectionAudioPreviews, setSectionAudioPreviews] = useState<{ [index: number]: string | null }>({});
+  const [uploadingSectionAudio, setUploadingSectionAudio] = useState<{ [index: number]: boolean }>({});
 
   const [formData, setFormData] = useState<ExamFormState>({
     examType: '',
     title: '',
     level: 'A1',
-    duration: 60,
+    duration: '',
     status: 'draft',
     description: '',
     tags: '',
     
     // Grammar Exam
-    grammarTopic: '',
+    grammarTopicId: '',
     grammarLevel: 'A1',
     totalQuestions: 10,
     difficultyDistribution: {
@@ -78,31 +162,245 @@ const QuestionCreateForm = () => {
       hard: 0,
     },
     questionTags: '',
-    
+
+    // Schreiben Exam
+    schreibenTaskId: '',
+
     // Provider Exam
-    provider: 'Goethe',
+    provider: 'goethe', // enum value
     mainSkill: 'mixed',
     sections: [],
+    hasSections: true, // افتراضي: يحتوي على sections
   });
+
+  // Initialize Leben exam with default section if needed
+  useEffect(() => {
+    if (formData.examType === 'leben_exam' && formData.sections.length === 0) {
+      setFormData((prev) => ({
+        ...prev,
+        sections: [
+          {
+            section: 'Leben in Deutschland – Teil 1',
+            name: 'Leben in Deutschland – Teil 1',
+            title: 'Leben in Deutschland – Teil 1',
+            teil: 1,
+            quota: 33,
+          },
+        ],
+      }));
+    }
+    
+    // Reset grammar level manual change flag when exam type changes
+    if (formData.examType === 'grammar_exam') {
+      setGrammarLevelManuallyChanged(false);
+      // Initialize grammarLevel from main level when switching to grammar_exam
+      setFormData((prev) => ({
+        ...prev,
+        grammarLevel: prev.level,
+        grammarTopicId: '', // Reset topic selection
+      }));
+    }
+  }, [formData.examType]);
+
+  // Load exam data if in edit mode
+  useEffect(() => {
+    if (isEditMode && examId) {
+      const loadExam = async () => {
+        try {
+          setLoadingExam(true);
+          setError('');
+          const exam = await examsAPI.getById(examId);
+          
+          // Determine exam type from examCategory or provider
+          let examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | '' = '';
+          if (exam.examCategory === 'grammar_exam' || exam.provider === 'Grammatik') {
+            examType = 'grammar_exam';
+          } else if (exam.examCategory === 'leben_exam' || exam.provider === 'leben_in_deutschland' || exam.mainSkill === 'leben_test') {
+            examType = 'leben_exam';
+          } else if (exam.provider && exam.provider !== 'Grammatik' && exam.provider !== 'leben_in_deutschland') {
+            examType = 'provider_exam';
+          }
+          
+          // Map provider to enum value
+          let providerValue = exam.provider?.toLowerCase() || 'goethe';
+          if (providerValue === 'leben in deutschland' || providerValue === 'leben_in_deutschland') {
+            providerValue = 'leben_in_deutschland';
+          }
+          
+          // Map sections
+          const sections = (exam.sections || []).map((section: any) => {
+            if (examType === 'leben_exam') {
+              return {
+                section: section.name || section.section || section.title || '',
+                name: section.name || section.section || section.title || '',
+                title: section.title || section.name || section.section || '',
+                teil: section.teil || section.teilNumber || 1,
+                quota: section.quota || 0,
+              };
+            } else {
+              const skill = section.skill?.toLowerCase() || exam.mainSkill?.toLowerCase() || 'hoeren';
+              const validSkill = SKILLS.find(s => s.value === skill) ? skill : 'hoeren';
+              
+              return {
+                section: section.name || section.section || section.title || '',
+                title: section.title || section.name || section.section || '',
+                skill: validSkill,
+                teil: section.teilNumber || section.teil || 1,
+                teilNumber: section.teilNumber || section.teil || 1,
+                quota: section.quota || 0,
+                tags: section.tags || [],
+                description: section.description || '',
+                difficultyDistribution: section.difficultyDistribution ? {
+                  easy: section.difficultyDistribution.easy || 0,
+                  med: section.difficultyDistribution.med || section.difficultyDistribution.medium || 0,
+                  medium: section.difficultyDistribution.medium || section.difficultyDistribution.med || 0,
+                  hard: section.difficultyDistribution.hard || 0,
+                } : {
+                  easy: 0,
+                  med: 0,
+                  medium: 0,
+                  hard: 0,
+                },
+              };
+            }
+          });
+          
+          const loadedFormData = {
+            examType: examType,
+            title: exam.title || '',
+            level: (exam.level || 'A1') as any,
+            duration: exam.timeLimitMin || '',
+            status: (exam.status || 'draft') as any,
+            description: exam.description || '',
+            tags: Array.isArray(exam.tags) ? exam.tags.join(', ') : (exam.tags || ''),
+            
+            // Grammar Exam
+            grammarTopicId: exam.grammarTopicId || exam.grammarTopic || '',
+            grammarLevel: (exam.grammarLevel || exam.level || 'A1') as any,
+            totalQuestions: exam.totalQuestions || 10,
+            difficultyDistribution: exam.difficultyDistribution ? {
+              easy: exam.difficultyDistribution.easy || 0,
+              medium: exam.difficultyDistribution.medium || exam.difficultyDistribution.med || 0,
+              hard: exam.difficultyDistribution.hard || 0,
+            } : {
+              easy: 0,
+              medium: 0,
+              hard: 0,
+            },
+            questionTags: Array.isArray(exam.questionTags) ? exam.questionTags.join(', ') : (exam.questionTags || ''),
+            
+            // Provider Exam
+            provider: providerValue,
+            mainSkill: (exam.mainSkill?.toLowerCase() || 'mixed') as any,
+            sections: sections,
+            hasSections: sections.length > 0,
+          };
+          
+          setFormData(loadedFormData);
+          
+          // ✅ حفظ البيانات الأصلية لتتبع التغييرات
+          setOriginalExamData({
+            ...loadedFormData,
+            sections: JSON.parse(JSON.stringify(sections)), // Deep copy
+          });
+          
+          // Load grammar topics if grammar exam
+          if (examType === 'grammar_exam' && exam.grammarLevel) {
+            const fetchTopics = async () => {
+              setLoadingTopics(true);
+              try {
+                const data = await getGrammarTopics(exam.grammarLevel);
+                setGrammarTopics(data.items || data || []);
+              } catch (err) {
+                console.error('Error fetching grammar topics:', err);
+                setGrammarTopics([]);
+              } finally {
+                setLoadingTopics(false);
+              }
+            };
+            fetchTopics();
+            // Mark grammarLevel as manually changed in edit mode to prevent auto-sync
+            setGrammarLevelManuallyChanged(true);
+          }
+        } catch (err: any) {
+          console.error('Error loading exam:', err);
+          setError(
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            'حدث خطأ أثناء تحميل الامتحان'
+          );
+        } finally {
+          setLoadingExam(false);
+        }
+      };
+      loadExam();
+    }
+  }, [isEditMode, examId]);
+
+  // Sync grammarLevel with main level field when level changes (only if grammarLevel wasn't manually changed)
+  const [grammarLevelManuallyChanged, setGrammarLevelManuallyChanged] = useState(false);
+  
+  useEffect(() => {
+    if (formData.examType === 'grammar_exam' && !grammarLevelManuallyChanged) {
+      setFormData((prev) => ({
+        ...prev,
+        grammarLevel: prev.level,
+        grammarTopicId: '', // Reset topic selection when level changes
+      }));
+    }
+  }, [formData.level, formData.examType, grammarLevelManuallyChanged]);
 
   // Fetch grammar topics when grammar level changes
   useEffect(() => {
     if (formData.examType === 'grammar_exam' && formData.grammarLevel) {
       const fetchTopics = async () => {
         setLoadingTopics(true);
+        setError(''); // Clear any previous errors
         try {
-          const data = await getGrammarTopics(formData.grammarLevel);
-          setGrammarTopics(data.items || data || []);
-        } catch (err) {
-          console.error('Error fetching grammar topics:', err);
+          const data = await getGrammarTopics(formData.grammarLevel as any);
+          const topics = Array.isArray(data) ? data : (data?.items || data?.topics || []);
+          setGrammarTopics(topics);
+          console.log('✅ Grammar topics loaded:', topics.length, 'topics');
+        } catch (err: any) {
+          console.error('❌ Error fetching grammar topics:', err);
           setGrammarTopics([]);
+          setError(err?.response?.data?.message || 'حدث خطأ أثناء تحميل مواضيع القواعد');
         } finally {
           setLoadingTopics(false);
         }
       };
       fetchTopics();
+    } else if (formData.examType !== 'grammar_exam') {
+      // Clear topics when switching away from grammar exam
+      setGrammarTopics([]);
     }
   }, [formData.examType, formData.grammarLevel]);
+
+  // Fetch Schreiben tasks when mainSkill is 'schreiben'
+  useEffect(() => {
+    if (formData.examType === 'provider_exam' && formData.mainSkill === 'schreiben') {
+      const fetchSchreibenTasks = async () => {
+        setLoadingSchreibenTasks(true);
+        setError('');
+        try {
+          const data = await getSchreibenTasks({ level: formData.level, status: 'published' });
+          const tasks = Array.isArray(data) ? data : (data?.items || data?.tasks || []);
+          setSchreibenTasks(tasks);
+          console.log('✅ Schreiben tasks loaded:', tasks.length, 'tasks');
+        } catch (err: any) {
+          console.error('❌ Error fetching Schreiben tasks:', err);
+          setSchreibenTasks([]);
+          setError(err?.response?.data?.message || 'حدث خطأ أثناء تحميل مهام الكتابة');
+        } finally {
+          setLoadingSchreibenTasks(false);
+        }
+      };
+      fetchSchreibenTasks();
+    } else if (formData.mainSkill !== 'schreiben') {
+      // Clear tasks when switching away from schreiben
+      setSchreibenTasks([]);
+    }
+  }, [formData.examType, formData.mainSkill, formData.level]);
 
   // Handle input change
   const handleInputChange = (
@@ -120,6 +418,46 @@ const QuestionCreateForm = () => {
             ...prev.difficultyDistribution,
             [difficultyField]: parseInt(value) || 0,
           },
+        };
+      }
+      
+      // Handle grammarTopicId selection - auto-fill title, description, and questionTags
+      if (name === 'grammarTopicId' && value) {
+        const selectedTopic = grammarTopics.find(t => t._id === value);
+        console.log('📝 Grammar topic selected:', selectedTopic);
+        const updated: ExamFormState = {
+          ...prev,
+          grammarTopicId: value,
+        };
+        
+        // Auto-fill title if empty
+        if (selectedTopic && !prev.title.trim()) {
+          updated.title = selectedTopic.title;
+          console.log('✅ Auto-filled title:', selectedTopic.title);
+        }
+        
+        // Auto-fill description if empty
+        if (selectedTopic && selectedTopic.shortDescription && !prev.description.trim()) {
+          updated.description = selectedTopic.shortDescription;
+          console.log('✅ Auto-filled description:', selectedTopic.shortDescription);
+        }
+        
+        // Auto-fill questionTags if empty
+        if (selectedTopic && selectedTopic.tags && selectedTopic.tags.length > 0 && !prev.questionTags.trim()) {
+          updated.questionTags = selectedTopic.tags.join(', ');
+          console.log('✅ Auto-filled questionTags:', updated.questionTags);
+        }
+        
+        return updated;
+      }
+      
+      // Track manual grammarLevel changes and reset topic selection
+      if (name === 'grammarLevel') {
+        setGrammarLevelManuallyChanged(true);
+        return {
+          ...prev,
+          grammarLevel: value as any,
+          grammarTopicId: '', // Reset topic when level changes manually
         };
       }
       
@@ -156,21 +494,42 @@ const QuestionCreateForm = () => {
     }));
   };
 
-  // Add new section for Provider Exam
+  // Add new section for Provider Exam or Leben Exam
   const addSection = () => {
-    setFormData((prev) => ({
-      ...prev,
-      sections: [
-        ...prev.sections,
-        {
-          section: '',
-          skill: prev.mainSkill !== 'mixed' ? prev.mainSkill : 'hoeren',
-          teil: prev.sections.length + 1,
-          quota: 5,
-          tags: [],
-        },
-      ],
-    }));
+    setFormData((prev) => {
+      if (prev.examType === 'leben_exam') {
+        // Leben exam section
+        return {
+          ...prev,
+          sections: [
+            ...prev.sections,
+            {
+              section: '',
+              name: '',
+              title: '',
+              teil: prev.sections.length + 1,
+              quota: 33,
+            },
+          ],
+        };
+      } else {
+        // Provider exam section
+        return {
+          ...prev,
+          sections: [
+            ...prev.sections,
+            {
+              section: '',
+              skill: prev.mainSkill !== 'mixed' ? prev.mainSkill : 'hoeren',
+              teil: prev.sections.length + 1,
+              quota: 5,
+              tags: [],
+              description: '', // نص القراءة - يستخدم مع Lesen
+            },
+          ],
+        };
+      }
+    });
   };
 
   // Remove section
@@ -179,11 +538,139 @@ const QuestionCreateForm = () => {
       ...prev,
       sections: prev.sections.filter((_, i) => i !== index),
     }));
+    // تنظيف state الصوت عند حذف section
+    setSectionAudioFiles((prev) => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
+    setSectionAudioPreviews((prev) => {
+      const updated = { ...prev };
+      if (updated[index]) {
+        URL.revokeObjectURL(updated[index]!);
+      }
+      delete updated[index];
+      return updated;
+    });
+  };
+
+  // Handle audio file change for section
+  const handleSectionAudioFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('audio/')) {
+        setError('الرجاء اختيار ملف صوتي فقط');
+        return;
+      }
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxSize) {
+        setError('حجم الملف كبير جداً. الحد الأقصى هو 50MB');
+        return;
+      }
+      setSectionAudioFiles((prev) => ({ ...prev, [index]: file }));
+      const audioUrl = URL.createObjectURL(file);
+      setSectionAudioPreviews((prev) => {
+        if (prev[index]) {
+          URL.revokeObjectURL(prev[index]!);
+        }
+        return { ...prev, [index]: audioUrl };
+      });
+      setError('');
+    }
+  };
+
+  // Remove audio from section
+  const handleRemoveSectionAudio = (index: number) => {
+    setSectionAudioFiles((prev) => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
+    setSectionAudioPreviews((prev) => {
+      if (prev[index]) {
+        URL.revokeObjectURL(prev[index]!);
+      }
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
+    setFormData((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s, i) => 
+        i === index ? { ...s, listeningAudioId: undefined, listeningAudioUrl: undefined } : s
+      ),
+    }));
+  };
+
+  // Upload audio for section
+  const handleUploadSectionAudio = async (index: number) => {
+    const audioFile = sectionAudioFiles[index];
+    if (!audioFile) return;
+
+    const section = formData.sections[index];
+    if (!section) return;
+
+    // التحقق من وجود provider, level, teil
+    if (!formData.provider || !formData.level || !section.teil) {
+      setError('يرجى ملء جميع حقول Provider, Level, و Teil قبل رفع الملف');
+      return;
+    }
+
+    try {
+      setUploadingSectionAudio((prev) => ({ ...prev, [index]: true }));
+      setError('');
+
+      const formDataToSend = new FormData();
+      formDataToSend.append('file', audioFile);
+      formDataToSend.append('provider', formData.provider);
+      formDataToSend.append('level', formData.level);
+      formDataToSend.append('teil', section.teil.toString());
+
+      const token = localStorage.getItem('accessToken');
+      // @ts-ignore - VITE_API_URL is defined in vite.config or .env
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.deutsch-tests.com';
+      const res = await axios.post(
+        `${API_BASE_URL}/listeningclips/upload-audio`,
+        formDataToSend,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+        }
+      );
+
+      const clipId = res.data.listeningClipId;
+      const audioUrlValue = res.data.audioUrl;
+
+      // حفظ listeningAudioId و listeningAudioUrl في section
+      setFormData((prev) => ({
+        ...prev,
+        sections: prev.sections.map((s, i) =>
+          i === index
+            ? { ...s, listeningAudioId: clipId, listeningAudioUrl: audioUrlValue }
+            : s
+        ),
+      }));
+
+      setSuccess('تم رفع ملف الاستماع بنجاح ✅');
+    } catch (err: any) {
+      console.error('Error uploading audio:', err);
+      setError(err.response?.data?.message || 'حدث خطأ أثناء رفع الملف الصوتي');
+    } finally {
+      setUploadingSectionAudio((prev) => ({ ...prev, [index]: false }));
+    }
   };
 
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🔵 handleSubmit called', {
+      examType: formData.examType,
+      loading,
+      title: formData.title,
+      isEditMode
+    });
     setError('');
     setSuccess('');
 
@@ -200,30 +687,68 @@ const QuestionCreateForm = () => {
 
     // Grammar Exam validation
     if (formData.examType === 'grammar_exam') {
-      if (!formData.grammarTopic) {
+      if (!formData.grammarTopicId) {
         setError('يجب اختيار موضوع القواعد');
-        return;
-      }
-      const totalDiff = 
-        formData.difficultyDistribution.easy +
-        formData.difficultyDistribution.medium +
-        formData.difficultyDistribution.hard;
-      if (totalDiff !== formData.totalQuestions) {
-        setError(`توزيع الصعوبة يجب أن يساوي عدد الأسئلة الكلي (${formData.totalQuestions})`);
         return;
       }
     }
 
     // Provider Exam validation
     if (formData.examType === 'provider_exam') {
+      // للكتابة: نحتاج schreibenTaskId بدل sections
+      if (formData.mainSkill === 'schreiben') {
+        if (!formData.schreibenTaskId) {
+          setError('يجب اختيار مهمة الكتابة');
+          return;
+        }
+      } else if (formData.mainSkill !== 'leben_test') {
+        // للمهارات الأخرى: نحتاج sections
+        if (formData.sections.length === 0) {
+          setError('يجب إضافة قسم واحد على الأقل');
+          return;
+        }
+        for (let i = 0; i < formData.sections.length; i++) {
+          const section = formData.sections[i];
+          if (!section.section.trim()) {
+            setError(`عنوان القسم ${i + 1} مطلوب`);
+            return;
+          }
+          if (section.quota <= 0) {
+            setError(`عدد الأسئلة للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
+            return;
+          }
+          // Validation: إذا كان skill = hoeren، يجب رفع الصوت
+          const sectionSkill = section.skill || formData.mainSkill;
+          if (sectionSkill === 'hoeren' && !section.listeningAudioId) {
+            setError(`يجب رفع ملف الصوت للقسم ${i + 1} (Hören)`);
+            return;
+          }
+        }
+      }
+    }
+
+    // Leben Exam validation
+    if (formData.examType === 'leben_exam') {
       if (formData.sections.length === 0) {
         setError('يجب إضافة قسم واحد على الأقل');
         return;
       }
       for (let i = 0; i < formData.sections.length; i++) {
         const section = formData.sections[i];
-        if (!section.section.trim()) {
-          setError(`عنوان القسم ${i + 1} مطلوب`);
+        const sectionName = section.name || section.section;
+        const sectionTitle = section.title || section.section;
+        if (!sectionName?.trim()) {
+          setError(`Section Name للقسم ${i + 1} مطلوب`);
+          return;
+        }
+        if (!sectionTitle?.trim()) {
+          setError(`Section Title للقسم ${i + 1} مطلوب`);
+          return;
+        }
+        // ✅ Fix: التحقق من teil أو teilNumber
+        const teilValue = section.teil ?? section.teilNumber ?? 1;
+        if (!teilValue || teilValue < 1) {
+          setError(`Teil للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
           return;
         }
         if (section.quota <= 0) {
@@ -239,71 +764,290 @@ const QuestionCreateForm = () => {
       const tagsArray = parseTags(formData.tags);
       const questionTagsArray = parseTags(formData.questionTags);
 
-      // Build request body
-      const requestBody: any = {
-        title: formData.title,
+      // Build request body according to contract
+      const payload: any = {
+        title: formData.title.trim(),
         level: formData.level,
-        timeLimitMin: formData.duration,
+        ...(formData.duration !== '' && formData.duration !== null && formData.duration !== undefined ? { 
+          timeLimitMin: Math.max(1, parseInt(String(formData.duration), 10) || 1) 
+        } : {}),
         status: formData.status,
-        description: formData.description,
-        tags: tagsArray,
+        description: formData.description?.trim() || undefined,
+        tags: tagsArray.length > 0 ? tagsArray : undefined,
         examCategory: formData.examType,
+        randomizeQuestions: true, // Default to true
       };
+      
+      // Remove undefined values
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === undefined) {
+          delete payload[key];
+        }
+      });
 
       // Add Grammar Exam specific fields
       if (formData.examType === 'grammar_exam') {
-        const selectedTopic = grammarTopics.find(t => t.slug === formData.grammarTopic);
-        requestBody.provider = 'Grammatik';
-        requestBody.grammarTopic = formData.grammarTopic;
-        requestBody.grammarTopicTitle = selectedTopic?.title || '';
-        requestBody.grammarLevel = formData.grammarLevel;
-        requestBody.totalQuestions = formData.totalQuestions;
-        requestBody.difficultyDistribution = {
-          easy: formData.difficultyDistribution.easy,
-          medium: formData.difficultyDistribution.medium, // API uses 'medium' not 'med'
-          hard: formData.difficultyDistribution.hard,
-        };
-        requestBody.questionTags = questionTagsArray.length > 0 ? questionTagsArray : (selectedTopic?.tags || []);
-        requestBody.randomizeQuestions = true;
+        const selectedTopic = grammarTopics.find(t => t._id === formData.grammarTopicId);
+        payload.provider = 'Grammatik';
+        payload.grammarTopicId = formData.grammarTopicId;
+        payload.grammarLevel = formData.grammarLevel;
+        payload.totalQuestions = formData.totalQuestions;
+        payload.questionTags = questionTagsArray.length > 0 ? questionTagsArray : (selectedTopic?.tags || []);
+        payload.randomizeQuestions = true;
       }
 
       // Add Provider Exam specific fields
       if (formData.examType === 'provider_exam') {
-        requestBody.provider = formData.provider;
-        requestBody.mainSkill = formData.mainSkill;
-        requestBody.sections = formData.sections.map(section => ({
-          name: section.section, // API uses 'name' not 'section'
-          section: section.section, // Keep both for compatibility
-          skill: (section.skill || formData.mainSkill).toUpperCase(), // Convert to uppercase
-          teilNumber: section.teil,
-          quota: section.quota,
-          tags: section.tags || [],
-          difficultyDistribution: section.difficultyDistribution || {
-            easy: 0,
-            medium: 0, // API uses 'medium' not 'med'
-            hard: 0,
-          },
-        }));
-        requestBody.randomizeQuestions = true;
+        // ✅ Fix: provider يجب أن يكون lowercase
+        payload.provider = (formData.provider || 'goethe').toLowerCase();
+        payload.mainSkill = formData.mainSkill; // بالفعل enum value
+        
+        // لامتحان Leben Test: لا نرسل sections
+        if (formData.provider === 'leben_in_deutschland' || formData.mainSkill === 'leben_test') {
+          // لا نرسل sections - الباك سيسحب الأسئلة تلقائياً
+          payload.examType = 'leben_test';
+        } else if (formData.mainSkill === 'schreiben' && formData.schreibenTaskId) {
+          // لامتحان الكتابة: نرسل schreibenTaskId بدل sections
+          payload.schreibenTaskId = formData.schreibenTaskId;
+          // لا نرسل sections للكتابة
+        } else if (formData.hasSections && formData.sections.length > 0) {
+          // Filter out empty sections and build payload according to contract
+          const validSections = formData.sections
+            .filter((s) => {
+              const title = (s.section || s.title || '').trim();
+              return title.length > 0;
+            })
+            .map((s, index) => {
+              const title = (s.section || s.title || '').trim();
+              const skill = (s.skill || formData.mainSkill || 'hoeren').toLowerCase();
+              
+              // Ensure skill is valid
+              const validSkill = SKILLS.find(sk => sk.value === skill) ? skill : 'hoeren';
+              
+              const sectionPayload: any = {
+                name: s.name || title, // ✅ name مطلوب إجباريًا (مش title)
+                skill: validSkill, // ✅ skill مطلوب
+                teil: safeInt1(s.teil ?? s.teilNumber ?? index + 1), // ✅ teil (مش teilNumber) - Number >= 1
+                quota: safeInt1(s.quota ?? 1), // ✅ quota مطلوب - Number >= 1
+              };
+              
+              // ✅ إرسال listeningAudioId إذا كان موجوداً (للأسئلة من نوع Hören)
+              if (s.listeningAudioId) {
+                sectionPayload.listeningAudioId = s.listeningAudioId;
+              }
+              
+              // ❌ لا نرسل: listeningAudioUrl (للعرض فقط), description, teilNumber
+              
+              // ✅ إضافة tags إذا كانت موجودة
+              if (s.tags && s.tags.length > 0) {
+                sectionPayload.tags = s.tags;
+              }
+              
+              // Add difficultyDistribution only if it exists and has values
+              if (s.difficultyDistribution) {
+                const { easy = 0, med = 0, medium = 0, hard = 0 } = s.difficultyDistribution;
+                const medValue = med || medium;
+                if (easy > 0 || medValue > 0 || hard > 0) {
+                  sectionPayload.difficultyDistribution = {
+                    easy: Number(easy) || 0,
+                    medium: Number(medValue) || 0,
+                    hard: Number(hard) || 0,
+                  };
+                }
+              }
+              
+              return sectionPayload;
+            });
+          
+          if (validSections.length > 0) {
+            payload.sections = validSections;
+            // ✅ Debug: التحقق من أن listeningAudioId موجود في sections
+            console.log('📤 Sections payload قبل الإرسال:', JSON.stringify(validSections, null, 2));
+            validSections.forEach((section, idx) => {
+              if (section.listeningAudioId) {
+                console.log(`✅ Section ${idx + 1} يحتوي على listeningAudioId:`, section.listeningAudioId);
+              } else if (section.skill === 'hoeren') {
+                console.warn(`⚠️ Section ${idx + 1} (hoeren) لا يحتوي على listeningAudioId!`);
+              }
+            });
+          }
+        }
+        payload.randomizeQuestions = true;
       }
 
-      // Create exam
-      const response = await examsAPI.create(requestBody);
-      
-      console.log('Exam created successfully:', response);
-      setSuccess(`تم إنشاء الامتحان بنجاح! (ID: ${response._id || response.id})`);
+      // Add Leben Exam specific fields
+      if (formData.examType === 'leben_exam') {
+        payload.provider = 'leben_in_deutschland'; // enum value (lowercase)
+        payload.mainSkill = 'leben_test'; // enum value
+        payload.examType = 'leben_test';
+        payload.examCategory = 'leben_exam';
+        // ✅ Fix: إرسال sections من formData - فقط الحقول المسموحة في DTO
+        payload.sections = formData.sections.map((section, index) => {
+          const sectionPayload: any = {
+            name: section.name || section.section || '',
+            teil: safeInt1(section.teil ?? section.teilNumber ?? index + 1), // ✅ teil (مش teilNumber) - Number >= 1
+            quota: safeInt1(section.quota ?? 1), // ✅ quota - Number >= 1
+          };
+          
+          // ✅ إضافة title فقط إذا كان موجوداً (لـ Leben exam)
+          if (section.title?.trim()) {
+            sectionPayload.title = section.title.trim();
+          }
+          
+          // ✅ إضافة tags إذا كانت موجودة
+          if (section.tags && section.tags.length > 0) {
+            sectionPayload.tags = section.tags;
+          }
+          
+          // ✅ إضافة difficultyDistribution إذا كانت موجودة
+          if (section.difficultyDistribution) {
+            const { easy = 0, med = 0, medium = 0, hard = 0 } = section.difficultyDistribution;
+            const medValue = med || medium;
+            if (easy > 0 || medValue > 0 || hard > 0) {
+              sectionPayload.difficultyDistribution = {
+                easy: Number(easy) || 0,
+                medium: Number(medValue) || 0,
+                hard: Number(hard) || 0,
+              };
+            }
+          }
+          
+          // ❌ لا نرسل: teilNumber, listeningAudioId, listeningAudioUrl, description
+          
+          return sectionPayload;
+        });
+        payload.randomizeQuestions = true;
+      }
 
-      // Reset form after success
+      // Create or update exam
+      let response;
+      if (isEditMode && examId) {
+        // ✅ الحل الفوري: في وضع التعديل، لا نرسل sections نهائياً إلا إذا تم تعديلها فعلياً
+        let finalPayload = { ...payload };
+        
+        if (originalExamData) {
+          // مقارنة sections لتحديد إذا تم تعديلها
+          const sectionsChanged = JSON.stringify(formData.sections) !== JSON.stringify(originalExamData.sections);
+          
+          if (!sectionsChanged) {
+            // ✅ لم يتم تعديل sections - لا نرسلها في PATCH نهائياً
+            delete finalPayload.sections;
+            console.log('✅ Sections لم تتغير - تم إزالتها من payload (PATCH يرسل فقط الحقول المتغيرة)');
+          } else {
+            // ✅ تم تعديل sections فعلياً - sanitize وmapping
+            if (finalPayload.sections) {
+              finalPayload.sections = finalPayload.sections.map((s: any) => {
+                const sanitized: any = { ...s };
+                
+                // ✅ Mapping: تحويل teilNumber إلى teil (إذا كان موجود)
+                if ('teilNumber' in sanitized) {
+                  sanitized.teil = safeInt1(sanitized.teilNumber);
+                  delete sanitized.teilNumber; // ✅ حذف teilNumber
+                } else if ('teil' in sanitized) {
+                  // ✅ إذا كان teil موجود، نضمن أنه Number >= 1
+                  sanitized.teil = safeInt1(sanitized.teil);
+                } else {
+                  // ✅ إذا لم يكن موجود، نضيفه بقيمة 1
+                  sanitized.teil = 1;
+                }
+                
+                // ✅ Sanitize quota
+                if ('quota' in sanitized && sanitized.quota != null) {
+                  sanitized.quota = safeInt1(sanitized.quota);
+                }
+                
+                // ✅ إرسال listeningAudioId إذا كان موجوداً (للأسئلة من نوع Hören)
+                // لا نحذفه - يجب إرساله للباك ليتم حفظه
+                
+                // ❌ حذف الحقول غير المسموحة فقط
+                delete sanitized.listeningAudioUrl; // للعرض فقط
+                delete sanitized.description;
+                
+                return sanitized;
+              });
+            }
+          }
+        } else {
+          // ✅ إذا لم تكن هناك بيانات أصلية، لا نرسل sections كإجراء احترازي
+          delete finalPayload.sections;
+          console.log('⚠️ لا توجد بيانات أصلية - تم إزالة sections من payload كإجراء احترازي');
+        }
+        
+        response = await examsAPI.update(examId, finalPayload);
+        console.log('✅ Exam updated successfully:', response);
+        console.log('📤 Payload sent:', JSON.stringify(finalPayload, null, 2));
+        setSuccess('تم تحديث الامتحان بنجاح!');
+        
+        // ✅ تحديث البيانات الأصلية بعد التحديث الناجح
+        if (originalExamData) {
+          setOriginalExamData({
+            ...formData,
+            sections: JSON.parse(JSON.stringify(formData.sections)),
+          });
+        }
+      } else {
+        // ✅ في وضع الإنشاء: sanitize sections دائماً + mapping teilNumber → teil
+        if (payload.sections) {
+          payload.sections = payload.sections.map((s: any) => {
+            const sanitized: any = { ...s };
+            
+            // ✅ Mapping: تحويل teilNumber إلى teil (إذا كان موجود)
+            if ('teilNumber' in sanitized) {
+              sanitized.teil = safeInt1(sanitized.teilNumber);
+              delete sanitized.teilNumber; // ✅ حذف teilNumber
+            } else if ('teil' in sanitized) {
+              // ✅ إذا كان teil موجود، نضمن أنه Number >= 1
+              sanitized.teil = safeInt1(sanitized.teil);
+            } else {
+              // ✅ إذا لم يكن موجود، نضيفه بقيمة 1
+              sanitized.teil = 1;
+            }
+            
+            // ✅ Sanitize quota
+            if ('quota' in sanitized && sanitized.quota != null) {
+              sanitized.quota = safeInt1(sanitized.quota);
+            }
+            
+            // ✅ حذف الحقول غير المسموحة
+            // ❌ لا نحذف listeningAudioId - يجب إرساله للباك ليتم حفظه!
+            // delete sanitized.listeningAudioId; // ❌ خطأ - يجب إرساله
+            delete sanitized.listeningAudioUrl; // للعرض فقط - لا نرسله
+            delete sanitized.description;
+            
+            // ✅ التأكد من إرسال listeningAudioId إذا كان موجوداً في section الأصلي
+            if (s.listeningAudioId && !sanitized.listeningAudioId) {
+              sanitized.listeningAudioId = s.listeningAudioId;
+              console.log('✅ إضافة listeningAudioId للقسم عند الإنشاء:', s.listeningAudioId);
+            } else if (s.listeningAudioId) {
+              console.log('✅ listeningAudioId موجود بالفعل في sanitized:', sanitized.listeningAudioId);
+            } else if (s.skill === 'hoeren' || sanitized.skill === 'hoeren') {
+              console.warn('⚠️ Section (hoeren) لا يحتوي على listeningAudioId عند الإنشاء!', {
+                section: s,
+                sanitized
+              });
+            }
+            
+            return sanitized;
+          });
+        }
+        
+        response = await examsAPI.create(payload);
+        console.log('✅ Exam created successfully:', response);
+        setSuccess(`تم إنشاء الامتحان بنجاح! (ID: ${response._id || response.id})`);
+      }
+
+      // Reset form after success (only in create mode)
+      if (!isEditMode) {
       setTimeout(() => {
         setFormData({
           examType: '',
           title: '',
           level: 'A1',
-          duration: 60,
+          duration: '',
           status: 'draft',
           description: '',
           tags: '',
-          grammarTopic: '',
+          grammarTopicId: '',
           grammarLevel: 'A1',
           totalQuestions: 10,
           difficultyDistribution: {
@@ -312,12 +1056,14 @@ const QuestionCreateForm = () => {
             hard: 0,
           },
           questionTags: '',
-          provider: 'Goethe',
+            provider: 'goethe',
           mainSkill: 'mixed',
           sections: [],
+          hasSections: true,
         });
         setSuccess('');
       }, 3000);
+      }
     } catch (err: any) {
       const errorMessage = err?.response?.data?.message || 
                           err?.response?.data?.error || 
@@ -359,11 +1105,115 @@ const QuestionCreateForm = () => {
     color: '#374151',
   };
 
+  if (loadingExam) {
   return (
     <div style={formStyle}>
-      <h1 style={{ marginBottom: '24px', fontSize: '24px', fontWeight: 'bold' }}>
-        إنشاء امتحان جديد
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '16px', 
+          marginBottom: '24px',
+          padding: '20px 28px',
+          background: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+          border: '1px solid #E9ECEF'
+        }}>
+          <button 
+            onClick={() => navigate('/admin/exams')} 
+            title="العودة لقائمة الامتحانات"
+            style={{ 
+              background: 'white', 
+              border: '1px solid #DEE2E6', 
+              padding: '10px', 
+              borderRadius: '8px', 
+              width: '40px', 
+              height: '40px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+            }}
+          >
+            <svg fill="none" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={3} 
+                d="M10 19l-7-7m0 0l7-7m-7 7h18" 
+                stroke="#000000" 
+                fill="none"
+              />
+            </svg>
+          </button>
+          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
+            تعديل الامتحان
       </h1>
+        </div>
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <p>جاري تحميل بيانات الامتحان...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={formStyle}>
+      {/* Header with back button */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '16px', 
+        marginBottom: '24px',
+        padding: '20px 28px',
+        background: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        border: '1px solid #E9ECEF'
+      }}>
+        <button 
+          onClick={() => navigate(isEditMode ? '/admin/exams' : '/welcome')} 
+          title={isEditMode ? 'العودة لقائمة الامتحانات' : 'العودة للوحة التحكم'}
+          style={{ 
+            background: 'white', 
+            border: '1px solid #DEE2E6', 
+            padding: '10px', 
+            borderRadius: '8px', 
+            width: '40px', 
+            height: '40px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#f8f9fa';
+            e.currentTarget.style.borderColor = '#212529';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'white';
+            e.currentTarget.style.borderColor = '#DEE2E6';
+          }}
+        >
+          <svg fill="none" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={3} 
+              d="M10 19l-7-7m0 0l7-7m-7 7h18" 
+              stroke="#000000" 
+              fill="none"
+            />
+          </svg>
+        </button>
+        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
+          {isEditMode ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
+        </h1>
+      </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Exam Type - في الأعلى */}
@@ -377,12 +1227,19 @@ const QuestionCreateForm = () => {
             value={formData.examType}
             onChange={handleInputChange}
             required
-            style={inputStyle}
+            disabled={isEditMode}
+            style={{ ...inputStyle, ...(isEditMode ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}) }}
           >
             <option value="">-- اختر نوع الامتحان --</option>
             <option value="grammar_exam">Grammar Exam (قواعد)</option>
             <option value="provider_exam">Provider Exam (Prüfungen – Goethe/TELC…)</option>
+            <option value="leben_exam">Deutschland in Leben Test</option>
           </select>
+          {isEditMode && (
+            <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
+              ⚠️ نوع الامتحان غير قابل للتعديل
+            </small>
+          )}
         </div>
 
         {/* Common Fields */}
@@ -434,7 +1291,7 @@ const QuestionCreateForm = () => {
             {/* Duration */}
             <div>
               <label htmlFor="duration" style={labelStyle}>
-                المدة بالدقائق / Duration (minutes) *
+                المدة بالدقائق / Duration (minutes) (اختياري)
               </label>
               <input
                 type="number"
@@ -442,8 +1299,9 @@ const QuestionCreateForm = () => {
                 name="duration"
                 value={formData.duration}
                 onChange={handleInputChange}
-                required
                 min="1"
+                step="1"
+                placeholder="اتركه فارغاً إذا لم تكن هناك مدة محددة"
                 style={inputStyle}
               />
             </div>
@@ -535,23 +1393,62 @@ const QuestionCreateForm = () => {
 
               {/* Grammar Topic */}
               <div>
-                <label htmlFor="grammarTopic" style={labelStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label htmlFor="grammarTopicId" style={labelStyle}>
                   موضوع القواعد / Grammar Topic *
                 </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewTopicModal(true)}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                    }}
+                  >
+                    + إضافة موضوع جديد
+                  </button>
+                </div>
                 {loadingTopics ? (
                   <p style={{ color: '#6b7280' }}>جاري تحميل المواضيع...</p>
+                ) : grammarTopics.length === 0 ? (
+                  <div>
+                    <p style={{ color: '#ef4444', fontSize: '14px', marginBottom: '8px' }}>
+                      {formData.grammarLevel ? 'لا توجد مواضيع متاحة لهذا المستوى' : 'اختر مستوى القواعد أولاً'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewTopicModal(true)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      إضافة موضوع جديد
+                    </button>
+                  </div>
                 ) : (
                   <select
-                    id="grammarTopic"
-                    name="grammarTopic"
-                    value={formData.grammarTopic}
+                    id="grammarTopicId"
+                    name="grammarTopicId"
+                    value={formData.grammarTopicId}
                     onChange={handleInputChange}
                     required
                     style={inputStyle}
                   >
                     <option value="">-- اختر الموضوع --</option>
                     {grammarTopics.map((topic) => (
-                      <option key={topic._id} value={topic.slug}>
+                      <option key={topic._id} value={topic._id}>
                         {topic.title}
                       </option>
                     ))}
@@ -576,65 +1473,222 @@ const QuestionCreateForm = () => {
                 />
               </div>
 
-              {/* Difficulty Distribution */}
-              <div>
-                <label style={labelStyle}>
-                  توزيع الصعوبة / Difficulty Distribution *
-                </label>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '12px', color: '#6b7280' }}>سهل (Easy)</label>
-                    <input
-                      type="number"
-                      name="difficulty.easy"
-                      value={formData.difficultyDistribution.easy}
-                      onChange={handleInputChange}
-                      min="0"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '12px', color: '#6b7280' }}>متوسط (Medium)</label>
-                    <input
-                      type="number"
-                      name="difficulty.medium"
-                      value={formData.difficultyDistribution.medium}
-                      onChange={handleInputChange}
-                      min="0"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '12px', color: '#6b7280' }}>صعب (Hard)</label>
-                    <input
-                      type="number"
-                      name="difficulty.hard"
-                      value={formData.difficultyDistribution.hard}
-                      onChange={handleInputChange}
-                      min="0"
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-                <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
-                  المجموع يجب أن يساوي {formData.totalQuestions}
-                </small>
-              </div>
-
               {/* Question Tags */}
               <div>
                 <label htmlFor="questionTags" style={labelStyle}>
                   وسوم الأسئلة / Question Tags
                 </label>
-                <input
+                    <input
                   type="text"
                   id="questionTags"
                   name="questionTags"
                   value={formData.questionTags}
-                  onChange={handleInputChange}
-                  style={inputStyle}
+                      onChange={handleInputChange}
+                      style={inputStyle}
                   placeholder="مثال: akkusativ, cases (سيتم استخدام وسوم الموضوع تلقائياً إذا تركت فارغاً)"
-                />
+                    />
+                  </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for creating new grammar topic */}
+        {showNewTopicModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => !creatingTopic && setShowNewTopicModal(false)}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                maxWidth: '500px',
+                width: '90%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                border: '2px solid #FFC107',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: '20px', fontSize: '20px', fontWeight: 'bold' }}>
+                إضافة موضوع قواعد جديد
+              </h2>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>
+                    العنوان / Title (اختياري)
+                  </label>
+                    <input
+                    type="text"
+                    value={newTopicData.title}
+                    onChange={(e) => setNewTopicData({ ...newTopicData, title: e.target.value })}
+                    placeholder="مثال: الحالة المنصوبة - Akkusativ"
+                      style={inputStyle}
+                    />
+                  </div>
+
+                <div>
+                  <label style={labelStyle}>
+                    Slug (اختياري - سيتم توليده تلقائياً إذا تركت فارغاً)
+                  </label>
+                    <input
+                    type="text"
+                    value={newTopicData.slug}
+                    onChange={(e) => setNewTopicData({ ...newTopicData, slug: e.target.value })}
+                    placeholder="مثال: akkusativ"
+                      style={inputStyle}
+                    />
+                  </div>
+
+                <div>
+                  <label style={labelStyle}>
+                    الوصف المختصر / Short Description
+                  </label>
+                  <textarea
+                    value={newTopicData.shortDescription}
+                    onChange={(e) => setNewTopicData({ ...newTopicData, shortDescription: e.target.value })}
+                    placeholder="مثال: تعلم استخدام الحالة المنصوبة في الألمانية"
+                    rows={3}
+                    style={inputStyle}
+                  />
+              </div>
+
+              <div>
+                  <label style={labelStyle}>
+                    الوسوم / Tags (مفصولة بفواصل)
+                </label>
+                <input
+                  type="text"
+                    value={newTopicData.tags}
+                    onChange={(e) => setNewTopicData({ ...newTopicData, tags: e.target.value })}
+                    placeholder="مثال: akkusativ, cases"
+                  style={inputStyle}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewTopicModal(false);
+                      setNewTopicData({ title: '', slug: '', shortDescription: '', tags: '' });
+                    }}
+                    disabled={creatingTopic}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#e0e0e0',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: creatingTopic ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCreatingTopic(true);
+                      setError('');
+
+                      try {
+                        const topicPayload: any = {
+                          level: formData.grammarLevel,
+                        };
+
+                        if (newTopicData.title.trim()) {
+                          topicPayload.title = newTopicData.title.trim();
+                        }
+
+                        if (newTopicData.slug.trim()) {
+                          topicPayload.slug = newTopicData.slug.trim();
+                        }
+
+                        if (newTopicData.shortDescription.trim()) {
+                          topicPayload.shortDescription = newTopicData.shortDescription.trim();
+                        }
+
+                        if (newTopicData.tags.trim()) {
+                          const tagsArray = newTopicData.tags
+                            .split(',')
+                            .map(t => t.trim())
+                            .filter(t => t.length > 0);
+                          if (tagsArray.length > 0) {
+                            topicPayload.tags = tagsArray;
+                          }
+                        }
+
+                        const newTopic = await createGrammarTopic(topicPayload);
+                        console.log('✅ New grammar topic created:', newTopic);
+
+                        // Add to topics list
+                        setGrammarTopics([...grammarTopics, newTopic]);
+
+                        // Auto-select the new topic
+                        setFormData((prev) => ({
+                          ...prev,
+                          grammarTopicId: newTopic._id,
+                        }));
+
+                        // Auto-fill exam fields if empty
+                        if (!formData.title.trim()) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            title: newTopic.title,
+                          }));
+                        }
+                        if (!formData.description.trim() && newTopic.shortDescription) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            description: newTopic.shortDescription,
+                          }));
+                        }
+                        if (!formData.questionTags.trim() && newTopic.tags && newTopic.tags.length > 0) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            questionTags: newTopic.tags.join(', '),
+                          }));
+                        }
+
+                        setShowNewTopicModal(false);
+                        setNewTopicData({ title: '', slug: '', shortDescription: '', tags: '' });
+                        setSuccess('تم إنشاء الموضوع بنجاح وتم اختياره تلقائياً');
+                      } catch (err: any) {
+                        console.error('❌ Error creating grammar topic:', err);
+                        setError(err?.response?.data?.message || 'حدث خطأ أثناء إنشاء الموضوع');
+                      } finally {
+                        setCreatingTopic(false);
+                      }
+                    }}
+                    disabled={creatingTopic}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: creatingTopic || !newTopicData.title.trim() ? '#ccc' : '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: creatingTopic || !newTopicData.title.trim() ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {creatingTopic ? 'جاري الإنشاء...' : 'إنشاء الموضوع'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -661,12 +1715,11 @@ const QuestionCreateForm = () => {
                   required
                   style={inputStyle}
                 >
-                  <option value="Goethe">Goethe</option>
-                  <option value="telc">TELC</option>
-                  <option value="ÖSD">ÖSD</option>
-                  <option value="ECL">ECL</option>
-                  <option value="DTB">DTB</option>
-                  <option value="DTZ">DTZ</option>
+                  {PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -679,19 +1732,31 @@ const QuestionCreateForm = () => {
                   id="mainSkill"
                   name="mainSkill"
                   value={formData.mainSkill}
-                  onChange={handleInputChange}
+                  onChange={(e) => {
+                    const newSkill = e.target.value as any;
+                    setFormData((prev) => ({
+                      ...prev,
+                      mainSkill: newSkill,
+                      // إذا كان Leben Test أو Schreiben، إلغاء sections تلقائياً
+                      hasSections: newSkill !== 'leben_test' && newSkill !== 'schreiben',
+                      // Reset schreibenTaskId عند تغيير المهارة
+                      schreibenTaskId: newSkill === 'schreiben' ? prev.schreibenTaskId : '',
+                    }));
+                  }}
                   required
                   style={inputStyle}
                 >
-                  <option value="mixed">Mixed (امتحان كامل كل المهارات)</option>
-                  <option value="hoeren">Hören (الاستماع)</option>
-                  <option value="lesen">Lesen (القراءة)</option>
-                  <option value="schreiben">Schreiben (الكتابة)</option>
-                  <option value="sprechen">Sprechen (التحدث)</option>
+                  {MAIN_SKILL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Sections */}
+
+              {/* Sections - يظهر فقط إذا hasSections = true */}
+              {formData.hasSections && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <label style={labelStyle}>
@@ -749,9 +1814,14 @@ const QuestionCreateForm = () => {
                         <label style={{ fontSize: '12px', color: '#6b7280' }}>عنوان القسم / Section Title *</label>
                         <input
                           type="text"
-                          value={section.section}
-                          onChange={(e) => handleSectionChange(index, 'section', e.target.value)}
+                          value={section.section || section.title || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            handleSectionChange(index, 'section', value);
+                            handleSectionChange(index, 'title', value); // Keep both for compatibility
+                          }}
                           placeholder="مثال: Hören – Teil 1"
+                          required
                           style={inputStyle}
                         />
                       </div>
@@ -760,26 +1830,402 @@ const QuestionCreateForm = () => {
                         <div>
                           <label style={{ fontSize: '12px', color: '#6b7280' }}>المهارة / Skill *</label>
                           <select
-                            value={section.skill || formData.mainSkill}
+                            value={section.skill || formData.mainSkill || 'hoeren'}
                             onChange={(e) => handleSectionChange(index, 'skill', e.target.value)}
                             required
                             style={inputStyle}
                           >
-                            <option value="hoeren">Hören</option>
-                            <option value="lesen">Lesen</option>
-                            <option value="schreiben">Schreiben</option>
-                            <option value="sprechen">Sprechen</option>
+                            {SKILLS.map((skill) => (
+                              <option key={skill.value} value={skill.value}>
+                                {skill.label}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       )}
 
+                      {/* Always show skill field if not mixed (use mainSkill as default) */}
+                      {formData.mainSkill !== 'mixed' && (
                       <div>
-                        <label style={{ fontSize: '12px', color: '#6b7280' }}>رقم Teil</label>
+                          <label style={{ fontSize: '12px', color: '#6b7280' }}>المهارة / Skill *</label>
+                          <input
+                            type="text"
+                            value={SKILLS.find(s => s.value === formData.mainSkill)?.label || formData.mainSkill}
+                            disabled
+                            style={{ ...inputStyle, backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                          />
+                          <input
+                            type="hidden"
+                            value={formData.mainSkill}
+                            onChange={() => {}}
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>رقم Teil *</label>
                         <input
                           type="number"
+                          min={1}
+                          step={1}
+                          value={section.teil || section.teilNumber || index + 1}
+                          onChange={(e) => {
+                            // ✅ حفظ رقم مش string
+                            const value = Number(e.target.value) || index + 1;
+                            const safeValue = Math.max(1, value); // Ensure >= 1
+                            handleSectionChange(index, 'teil', safeValue);
+                            handleSectionChange(index, 'teilNumber', safeValue); // Keep both for compatibility
+                          }}
+                          required
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Section Description - يظهر فقط لـ Lesen */}
+                      {(section.skill === 'lesen' || (formData.mainSkill === 'lesen' && !section.skill)) && (
+                        <div>
+                          <label style={{ fontSize: '12px', color: '#6b7280' }}>نص القراءة / Section Description</label>
+                          <textarea
+                            value={section.description || ''}
+                            onChange={(e) => handleSectionChange(index, 'description', e.target.value)}
+                            placeholder="انسخ نص القراءة هنا..."
+                            rows={5}
+                            style={{
+                              ...inputStyle,
+                              resize: 'vertical',
+                              minHeight: '100px',
+                            }}
+                          />
+                          <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '11px' }}>
+                            نص القراءة الذي سيظهر للطالب قبل الأسئلة
+                          </small>
+                        </div>
+                      )}
+
+                      {/* Audio Upload - يظهر فقط لـ Hören */}
+                      {(section.skill === 'hoeren' || (formData.mainSkill === 'hoeren' && !section.skill)) && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '8px' }}>
+                            ملف الاستماع / Listening Audio *
+                          </label>
+                          
+                          {/* عرض الصوت المرفوع */}
+                          {section.listeningAudioUrl && (
+                            <div style={{ 
+                              marginBottom: '12px', 
+                              padding: '12px', 
+                              backgroundColor: '#f0f9ff', 
+                              border: '1px solid #bae6fd', 
+                              borderRadius: '8px' 
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ flex: 1 }}>
+                                  <p style={{ fontSize: '12px', color: '#0369a1', margin: 0, marginBottom: '8px' }}>
+                                    ✅ تم رفع الملف بنجاح
+                                  </p>
+                                  <audio controls style={{ width: '100%', maxWidth: '400px' }}>
+                                    <source src={section.listeningAudioUrl} type="audio/mpeg" />
+                                    <source src={section.listeningAudioUrl} type="audio/wav" />
+                                    <source src={section.listeningAudioUrl} type="audio/mp3" />
+                                    المتصفح لا يدعم تشغيل الصوت
+                                  </audio>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSectionAudio(index)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    backgroundColor: '#dc2626',
+                                    color: '#ffffff',
+                                    border: '1px solid #dc2626',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                  }}
+                                >
+                                  حذف
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* معاينة الصوت قبل الرفع */}
+                          {sectionAudioPreviews[index] && !section.listeningAudioUrl && (
+                            <div style={{ 
+                              marginBottom: '12px', 
+                              padding: '12px', 
+                              backgroundColor: '#fef3c7', 
+                              border: '1px solid #fde68a', 
+                              borderRadius: '8px' 
+                            }}>
+                              <p style={{ fontSize: '12px', color: '#92400e', margin: 0, marginBottom: '8px' }}>
+                                معاينة الصوت (قبل الرفع)
+                              </p>
+                              <audio controls style={{ width: '100%', maxWidth: '400px' }}>
+                                <source src={sectionAudioPreviews[index]!} type="audio/mpeg" />
+                                <source src={sectionAudioPreviews[index]!} type="audio/wav" />
+                                <source src={sectionAudioPreviews[index]!} type="audio/mp3" />
+                                المتصفح لا يدعم تشغيل الصوت
+                              </audio>
+                            </div>
+                          )}
+
+                          {/* حقل اختيار الملف */}
+                          {!section.listeningAudioUrl && (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                onChange={(e) => handleSectionAudioFileChange(index, e)}
+                                style={{ flex: 1, fontSize: '12px' }}
+                              />
+                              {sectionAudioFiles[index] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUploadSectionAudio(index)}
+                                  disabled={uploadingSectionAudio[index]}
+                                  style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: uploadingSectionAudio[index] ? '#9ca3af' : '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: uploadingSectionAudio[index] ? 'not-allowed' : 'pointer',
+                                    fontSize: '12px',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {uploadingSectionAudio[index] ? 'جاري الرفع...' : 'رفع الملف'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '11px' }}>
+                            ملف الصوت الذي سيستخدمه جميع الأسئلة في هذا القسم (يُرفع مرة واحدة)
+                          </small>
+                        </div>
+                      )}
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={section.quota}
+                          onChange={(e) => {
+                            // ✅ حفظ رقم مش string
+                            const value = Number(e.target.value) || 1;
+                            const safeValue = Math.max(1, value); // Ensure >= 1
+                            handleSectionChange(index, 'quota', safeValue);
+                          }}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {formData.sections.length === 0 && (
+                  <p style={{ color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                    لا توجد أقسام. اضغط "إضافة Section" لإضافة قسم جديد.
+                  </p>
+                )}
+              </div>
+              )}
+
+              {/* Schreiben Task Selector - يظهر فقط عندما mainSkill === 'schreiben' */}
+              {formData.mainSkill === 'schreiben' && (
+                <div>
+                  <label style={labelStyle}>
+                    مهمة الكتابة / Schreiben Task *
+                  </label>
+                  {loadingSchreibenTasks ? (
+                    <p style={{ color: '#6b7280' }}>جاري تحميل المهام...</p>
+                  ) : schreibenTasks.length === 0 ? (
+                    <div>
+                      <p style={{ color: '#ef4444', fontSize: '14px', marginBottom: '8px' }}>
+                        لا توجد مهام كتابة متاحة لهذا المستوى
+                      </p>
+                      <small style={{ display: 'block', color: '#6b7280', fontSize: '12px' }}>
+                        يجب إنشاء مهام كتابة من صفحة إدارة مهام الكتابة أولاً
+                      </small>
+                    </div>
+                  ) : (
+                    <select
+                      id="schreibenTaskId"
+                      name="schreibenTaskId"
+                      value={formData.schreibenTaskId}
+                      onChange={(e) => {
+                        const taskId = e.target.value;
+                        const selectedTask = schreibenTasks.find(t => t._id === taskId);
+                        setFormData((prev) => ({
+                          ...prev,
+                          schreibenTaskId: taskId,
+                          // Auto-fill title if empty
+                          title: selectedTask && !prev.title.trim() ? selectedTask.title : prev.title,
+                        }));
+                      }}
+                      required
+                      style={inputStyle}
+                    >
+                      <option value="">-- اختر مهمة الكتابة --</option>
+                      {schreibenTasks.map((task) => (
+                        <option key={task._id} value={task._id}>
+                          {task.title} ({task.level})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Leben Exam Settings */}
+        {formData.examType === 'leben_exam' && (
+          <div style={sectionStyle}>
+            <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
+              إعدادات امتحان Leben in Deutschland
+            </h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label htmlFor="provider" style={labelStyle}>
+                  المعهد / Provider *
+                </label>
+                <input
+                  type="text"
+                  id="provider"
+                  name="provider"
+                  value={PROVIDER_OPTIONS.find(opt => opt.value === 'leben_in_deutschland')?.label || 'Leben in Deutschland'}
+                  disabled
+                  style={{ ...inputStyle, backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                />
+                <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
+                  Enum value: leben_in_deutschland
+                </small>
+              </div>
+
+              <div>
+                <label htmlFor="mainSkill" style={labelStyle}>
+                  نوع التمرين / Main Skill *
+                </label>
+                <input
+                  type="text"
+                  id="mainSkill"
+                  name="mainSkill"
+                  value={MAIN_SKILL_OPTIONS.find(opt => opt.value === 'leben_test')?.label || 'Life Test / Leben in Deutschland'}
+                  disabled
+                  style={{ ...inputStyle, backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                />
+                <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
+                  Enum value: leben_test
+                </small>
+              </div>
+
+              {/* Sections for Leben Exam */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '16px' }}>
+                  <label style={labelStyle}>
+                    الأقسام / Sections *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addSection}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    + إضافة Section
+                  </button>
+                </div>
+
+                {formData.sections.map((section, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid #d1d5db',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Section {index + 1}</h3>
+                      <button
+                        type="button"
+                        onClick={() => removeSection(index)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        حذف
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>Section Name *</label>
+                        <input
+                          type="text"
+                          value={section.name || section.section || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            handleSectionChange(index, 'name', value);
+                            handleSectionChange(index, 'section', value); // للتوافق مع الكود القديم
+                          }}
+                          placeholder="مثال: Leben in Deutschland – Teil 1"
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>Section Title *</label>
+                        <input
+                          type="text"
+                          value={section.title || section.section || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            handleSectionChange(index, 'title', value);
+                            if (!section.name) {
+                              handleSectionChange(index, 'name', value); // إذا name فارغ، نسخه من title
+                            }
+                            handleSectionChange(index, 'section', value); // للتوافق مع الكود القديم
+                          }}
+                          placeholder="مثال: Leben in Deutschland – Teil 1"
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280' }}>رقم Teil *</label>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
                           value={section.teil || index + 1}
-                          onChange={(e) => handleSectionChange(index, 'teil', parseInt(e.target.value) || index + 1)}
-                          min="1"
+                          onChange={(e) => {
+                            // ✅ حفظ رقم مش string
+                            const value = Number(e.target.value) || index + 1;
+                            const safeValue = Math.max(1, value); // Ensure >= 1
+                            handleSectionChange(index, 'teil', safeValue);
+                          }}
                           style={inputStyle}
                         />
                       </div>
@@ -788,9 +2234,15 @@ const QuestionCreateForm = () => {
                         <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
                         <input
                           type="number"
+                          min={1}
+                          step={1}
                           value={section.quota}
-                          onChange={(e) => handleSectionChange(index, 'quota', parseInt(e.target.value) || 0)}
-                          min="1"
+                          onChange={(e) => {
+                            // ✅ حفظ رقم مش string
+                            const value = Number(e.target.value) || 1;
+                            const safeValue = Math.max(1, value); // Ensure >= 1
+                            handleSectionChange(index, 'quota', safeValue);
+                          }}
                           style={inputStyle}
                         />
                       </div>
@@ -842,18 +2294,39 @@ const QuestionCreateForm = () => {
         <button
           type="submit"
           disabled={loading || !formData.examType}
+          onClick={(e) => {
+            // Debug: التحقق من حالة الزر
+            console.log('🔵 Button clicked', {
+              loading,
+              examType: formData.examType,
+              disabled: loading || !formData.examType,
+              formDataKeys: Object.keys(formData)
+            });
+            // لا نمنع الإرسال هنا - نترك handleSubmit يتعامل مع validation
+          }}
           style={{
             padding: '12px 24px',
-            backgroundColor: loading || !formData.examType ? '#ccc' : '#007bff',
+            backgroundColor: loading || !formData.examType ? '#ccc' : '#000000',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
             cursor: loading || !formData.examType ? 'not-allowed' : 'pointer',
             fontSize: '16px',
             fontWeight: 'bold',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            if (!loading && formData.examType) {
+              e.currentTarget.style.backgroundColor = '#333333';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!loading && formData.examType) {
+              e.currentTarget.style.backgroundColor = '#000000';
+            }
           }}
         >
-          {loading ? 'جاري الحفظ...' : 'إنشاء الامتحان'}
+          {loading ? 'جاري الحفظ...' : (isEditMode ? 'حفظ التعديلات' : 'إنشاء الامتحان')}
         </button>
       </form>
     </div>
