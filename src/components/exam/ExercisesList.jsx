@@ -1,0 +1,97 @@
+import React from 'react';
+
+/**
+ * ExercisesList - قائمة التمارين لقسم معين
+ * يعرض بطاقات التمارين مع التقدم ومعلومات الصوت
+ */
+function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemIndex }) {
+  if (!exercises || exercises.length === 0) {
+    return (
+      <div className="text-center text-slate-500 text-sm bg-slate-50 border border-slate-200 rounded-xl py-8 mb-6">
+        لا توجد تمارين في هذا القسم
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 mb-6">
+      {exercises.map((exercise) => {
+        // حساب التقدم من answers المحلية
+        const total = exercise.questionCount || exercise.questions?.length || 0;
+        let answeredCount = 0;
+        if (exercise.questions && questionIdToItemIndex) {
+          exercise.questions.forEach((q) => {
+            const idx = questionIdToItemIndex.get(q.questionId);
+            if (idx !== undefined && answers[idx] !== undefined) {
+              answeredCount++;
+            }
+          });
+        }
+        const percent = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
+        const isComplete = percent === 100;
+
+        return (
+          <button
+            key={exercise.exerciseIndex ?? exercise.exerciseNumber ?? exercise.listeningClipId}
+            onClick={() => onSelectExercise(exercise)}
+            className="w-full text-right bg-white rounded-2xl shadow-sm border border-slate-100 p-5 hover:border-red-200 hover:shadow-md transition-all"
+          >
+            <div className="flex items-center gap-4">
+              {/* دائرة التقدم */}
+              <div className="relative flex-shrink-0 w-14 h-14">
+                <svg className="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
+                  <circle
+                    cx="18" cy="18" r="15.5"
+                    fill="none" stroke="#e2e8f0" strokeWidth="2.5"
+                  />
+                  <circle
+                    cx="18" cy="18" r="15.5"
+                    fill="none"
+                    stroke={isComplete ? '#22c55e' : '#ef4444'}
+                    strokeWidth="2.5"
+                    strokeDasharray={`${percent} ${100 - percent}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-700">
+                  {exercise.exerciseIndex ?? exercise.exerciseNumber ?? '?'}
+                </span>
+              </div>
+
+              {/* معلومات التمرين */}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-slate-900 text-base truncate">
+                  Übung {exercise.exerciseIndex ?? exercise.exerciseNumber}{exercise.title ? `: ${exercise.title}` : ''}
+                </h3>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-xs text-slate-500">
+                    {answeredCount}/{total} سؤال
+                  </span>
+                  {exercise.audioUrl && (
+                    <span className="text-xs text-blue-500 flex items-center gap-1">
+                      🎧 صوت
+                    </span>
+                  )}
+                  {exercise.readingPassage && (
+                    <span className="text-xs text-amber-600 flex items-center gap-1">
+                      📖 فقرة
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* علامة الاكتمال */}
+              {isComplete ? (
+                <span className="text-green-500 text-xl flex-shrink-0">✓</span>
+              ) : (
+                <span className="text-slate-300 text-lg flex-shrink-0">›</span>
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default ExercisesList;

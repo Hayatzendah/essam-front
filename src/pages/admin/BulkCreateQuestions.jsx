@@ -58,6 +58,9 @@ function BulkCreateQuestions() {
   const [audioPreview, setAudioPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  // Reading passage (optional - for Lesen)
+  const [readingPassage, setReadingPassage] = useState('');
+
   // Questions
   const [questions, setQuestions] = useState([emptyQuestion()]);
 
@@ -247,7 +250,10 @@ function BulkCreateQuestions() {
     setLoading(true);
     try {
       const payload = questions.map(buildQuestionPayload);
-      const result = await examsAPI.bulkCreateQuestions(examId, sectionKey, useAudio ? listeningClipId : null, payload);
+      const result = await examsAPI.bulkCreateQuestions(
+        examId, sectionKey, useAudio ? listeningClipId : null, payload,
+        !useAudio ? readingPassage.trim() || null : null
+      );
       setResults(result);
       setSuccess(`تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`);
     } catch (err) {
@@ -332,7 +338,7 @@ function BulkCreateQuestions() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
-                onClick={() => { setUseAudio(true); }}
+                onClick={() => { setUseAudio(true); setReadingPassage(''); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: useAudio ? '2px solid #0ea5e9' : '1px solid #cbd5e1',
@@ -358,8 +364,22 @@ function BulkCreateQuestions() {
           </div>
 
           {!useAudio ? (
-            <div style={{ padding: 12, backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#64748b', fontSize: 13, textAlign: 'center' }}>
-              سيتم إنشاء الأسئلة بدون ملف صوتي (مناسب للكتابة والقراءة)
+            <div style={{ padding: 16, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#92400e' }}>
+                فقرة القراءة (اختياري)
+              </label>
+              <textarea
+                value={readingPassage}
+                onChange={(e) => setReadingPassage(e.target.value)}
+                placeholder="انسخ نص القراءة هنا... (اختياري - للأسئلة التي تحتاج فقرة مشتركة)"
+                rows={6}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 14, resize: 'vertical', minHeight: 80 }}
+              />
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: '#92400e' }}>
+                {readingPassage.trim()
+                  ? 'جميع الأسئلة أدناه ستظهر تحت هذه الفقرة كتمرين واحد'
+                  : 'بدون فقرة — كل سؤال سيظهر كتمرين منفصل'}
+              </p>
             </div>
           ) : listeningClipId ? (
             <div style={{ padding: 12, backgroundColor: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 8 }}>

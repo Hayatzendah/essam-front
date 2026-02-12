@@ -1565,6 +1565,18 @@ function ExamPage() {
                     </audio>
                   </div>
                 )}
+                {/* فقرة القراءة المشتركة للتمرين */}
+                {selectedExercise.readingPassage && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4">
+                    <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                      📖 نص القراءة
+                    </h4>
+                    <div className="text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-4 border border-amber-100"
+                      style={{ whiteSpace: 'pre-line' }}>
+                      {selectedExercise.readingPassage}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3062,18 +3074,7 @@ function ExamPage() {
               </div>
             )}
 
-            {/* ✅ زر إنهاء القسم — يظهر فقط داخل قسم مختار ولم يتم عرض نتيجته بعد */}
-            {selectedSectionKey && !sectionSummaries[selectedSectionKey]?.data && !isSubmitted && (
-              <div className="flex justify-end mt-6">
-                <button
-                  onClick={() => handleFinishSection(selectedSectionKey)}
-                  disabled={sectionSummaries[selectedSectionKey]?.loading}
-                  className="px-5 py-2.5 bg-blue-500 text-white text-sm font-semibold rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  {sectionSummaries[selectedSectionKey]?.loading ? 'جاري التحميل...' : 'إنهاء القسم وعرض النتيجة'}
-                </button>
-              </div>
-            )}
+            {/* زر إنهاء القسم — تم إزالته حسب طلب المستخدم */}
 
             {/* ✅ زر تسليم الامتحان — يظهر فقط إذا ما في أقسام، أو كل الأقسام تم إنهاؤها */}
             {!isSubmitted && (() => {

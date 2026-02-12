@@ -1778,26 +1778,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                         />
                       </div>
 
-                      {/* Section Description - يظهر فقط لـ Lesen */}
-                      {(section.skill === 'lesen' || (formData.mainSkill === 'lesen' && !section.skill)) && (
-                        <div>
-                          <label style={{ fontSize: '12px', color: '#6b7280' }}>نص القراءة / Section Description</label>
-                          <textarea
-                            value={section.description || ''}
-                            onChange={(e) => handleSectionChange(index, 'description', e.target.value)}
-                            placeholder="انسخ نص القراءة هنا..."
-                            rows={5}
-                            style={{
-                              ...inputStyle,
-                              resize: 'vertical',
-                              minHeight: '100px',
-                            }}
-                          />
-                          <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '11px' }}>
-                            نص القراءة الذي سيظهر للطالب قبل الأسئلة
-                          </small>
-                        </div>
-                      )}
+                      {/* ملاحظة: فقرة القراءة تُضاف الآن من صفحة Bulk Create وليس من هنا */}
 
                       {/* ملاحظة: الصوت يُضاف من فورم السؤال وليس من فورم القسم */}
                     </div>
