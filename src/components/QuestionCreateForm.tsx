@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { examsAPI } from '../services/examsAPI';
 import { getGrammarTopics, createGrammarTopic, getSchreibenTasks } from '../services/api';
-import axios from 'axios';
-
 // Enum Mappings
 const PROVIDER_OPTIONS = [
   { label: 'Goethe', value: 'goethe' },
@@ -59,11 +57,9 @@ interface Section {
   skill?: string;
   teil?: number;
   teilNumber?: number; // ✅ إضافة teilNumber للتوافق مع DTO
-  quota: number;
+  quota?: number;
   tags?: string[];
   description?: string; // نص القراءة - يظهر فقط لـ Lesen
-  listeningAudioId?: string; // للصوت - يظهر فقط لـ Hören
-  listeningAudioUrl?: string; // للعرض والمعاينة
   difficultyDistribution?: {
     easy: number;
     med: number;
@@ -95,6 +91,7 @@ interface ExamFormState {
 
   // Schreiben Exam specific
   schreibenTaskId: string;
+  schreibenMode: 'task' | 'sections';
 
   // Provider Exam specific
   provider: string;
@@ -138,10 +135,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
     return Number.isFinite(n) && n >= 1 ? n : 1;
   };
   
-  // State للصوت في كل section
-  const [sectionAudioFiles, setSectionAudioFiles] = useState<{ [index: number]: File | null }>({});
-  const [sectionAudioPreviews, setSectionAudioPreviews] = useState<{ [index: number]: string | null }>({});
-  const [uploadingSectionAudio, setUploadingSectionAudio] = useState<{ [index: number]: boolean }>({});
+  // تم إزالة state الصوت من القسم - الصوت يُدار الآن من فورم السؤال
 
   const [formData, setFormData] = useState<ExamFormState>({
     examType: '',
@@ -165,6 +159,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
 
     // Schreiben Exam
     schreibenTaskId: '',
+    schreibenMode: 'task' as 'task' | 'sections',
 
     // Provider Exam
     provider: 'goethe', // enum value
@@ -289,11 +284,15 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             },
             questionTags: Array.isArray(exam.questionTags) ? exam.questionTags.join(', ') : (exam.questionTags || ''),
             
+            // Schreiben Exam
+            schreibenTaskId: exam.schreibenTaskId || '',
+            schreibenMode: (exam.schreibenTaskId ? 'task' : (sections.length > 0 ? 'sections' : 'task')) as 'task' | 'sections',
+
             // Provider Exam
             provider: providerValue,
             mainSkill: (exam.mainSkill?.toLowerCase() || 'mixed') as any,
             sections: sections,
-            hasSections: sections.length > 0,
+            hasSections: sections.length > 0 || (exam.mainSkill === 'schreiben' && !exam.schreibenTaskId && sections.length > 0),
           };
           
           setFormData(loadedFormData);
@@ -538,129 +537,9 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
       ...prev,
       sections: prev.sections.filter((_, i) => i !== index),
     }));
-    // تنظيف state الصوت عند حذف section
-    setSectionAudioFiles((prev) => {
-      const updated = { ...prev };
-      delete updated[index];
-      return updated;
-    });
-    setSectionAudioPreviews((prev) => {
-      const updated = { ...prev };
-      if (updated[index]) {
-        URL.revokeObjectURL(updated[index]!);
-      }
-      delete updated[index];
-      return updated;
-    });
   };
 
-  // Handle audio file change for section
-  const handleSectionAudioFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('audio/')) {
-        setError('الرجاء اختيار ملف صوتي فقط');
-        return;
-      }
-      const maxSize = 50 * 1024 * 1024; // 50MB
-      if (file.size > maxSize) {
-        setError('حجم الملف كبير جداً. الحد الأقصى هو 50MB');
-        return;
-      }
-      setSectionAudioFiles((prev) => ({ ...prev, [index]: file }));
-      const audioUrl = URL.createObjectURL(file);
-      setSectionAudioPreviews((prev) => {
-        if (prev[index]) {
-          URL.revokeObjectURL(prev[index]!);
-        }
-        return { ...prev, [index]: audioUrl };
-      });
-      setError('');
-    }
-  };
-
-  // Remove audio from section
-  const handleRemoveSectionAudio = (index: number) => {
-    setSectionAudioFiles((prev) => {
-      const updated = { ...prev };
-      delete updated[index];
-      return updated;
-    });
-    setSectionAudioPreviews((prev) => {
-      if (prev[index]) {
-        URL.revokeObjectURL(prev[index]!);
-      }
-      const updated = { ...prev };
-      delete updated[index];
-      return updated;
-    });
-    setFormData((prev) => ({
-      ...prev,
-      sections: prev.sections.map((s, i) => 
-        i === index ? { ...s, listeningAudioId: undefined, listeningAudioUrl: undefined } : s
-      ),
-    }));
-  };
-
-  // Upload audio for section
-  const handleUploadSectionAudio = async (index: number) => {
-    const audioFile = sectionAudioFiles[index];
-    if (!audioFile) return;
-
-    const section = formData.sections[index];
-    if (!section) return;
-
-    // التحقق من وجود provider, level, teil
-    if (!formData.provider || !formData.level || !section.teil) {
-      setError('يرجى ملء جميع حقول Provider, Level, و Teil قبل رفع الملف');
-      return;
-    }
-
-    try {
-      setUploadingSectionAudio((prev) => ({ ...prev, [index]: true }));
-      setError('');
-
-      const formDataToSend = new FormData();
-      formDataToSend.append('file', audioFile);
-      formDataToSend.append('provider', formData.provider);
-      formDataToSend.append('level', formData.level);
-      formDataToSend.append('teil', section.teil.toString());
-
-      const token = localStorage.getItem('accessToken');
-      // @ts-ignore - VITE_API_URL is defined in vite.config or .env
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.deutsch-tests.com';
-      const res = await axios.post(
-        `${API_BASE_URL}/listeningclips/upload-audio`,
-        formDataToSend,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        }
-      );
-
-      const clipId = res.data.listeningClipId;
-      const audioUrlValue = res.data.audioUrl;
-
-      // حفظ listeningAudioId و listeningAudioUrl في section
-      setFormData((prev) => ({
-        ...prev,
-        sections: prev.sections.map((s, i) =>
-          i === index
-            ? { ...s, listeningAudioId: clipId, listeningAudioUrl: audioUrlValue }
-            : s
-        ),
-      }));
-
-      setSuccess('تم رفع ملف الاستماع بنجاح ✅');
-    } catch (err: any) {
-      console.error('Error uploading audio:', err);
-      setError(err.response?.data?.message || 'حدث خطأ أثناء رفع الملف الصوتي');
-    } finally {
-      setUploadingSectionAudio((prev) => ({ ...prev, [index]: false }));
-    }
-  };
+  // تم إزالة handlers الصوت من القسم - الصوت يُدار الآن من فورم السؤال
 
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -695,11 +574,26 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
 
     // Provider Exam validation
     if (formData.examType === 'provider_exam') {
-      // للكتابة: نحتاج schreibenTaskId بدل sections
       if (formData.mainSkill === 'schreiben') {
-        if (!formData.schreibenTaskId) {
-          setError('يجب اختيار مهمة الكتابة');
-          return;
+        if (formData.schreibenMode === 'task') {
+          // مهمة كتابة: نحتاج schreibenTaskId
+          if (!formData.schreibenTaskId) {
+            setError('يجب اختيار مهمة الكتابة');
+            return;
+          }
+        } else {
+          // سكاشن مع أسئلة: نحتاج sections
+          if (formData.sections.length === 0) {
+            setError('يجب إضافة قسم واحد على الأقل');
+            return;
+          }
+          for (let i = 0; i < formData.sections.length; i++) {
+            const section = formData.sections[i];
+            if (!section.section.trim()) {
+              setError(`عنوان القسم ${i + 1} مطلوب`);
+              return;
+            }
+          }
         }
       } else if (formData.mainSkill !== 'leben_test') {
         // للمهارات الأخرى: نحتاج sections
@@ -711,16 +605,6 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           const section = formData.sections[i];
           if (!section.section.trim()) {
             setError(`عنوان القسم ${i + 1} مطلوب`);
-            return;
-          }
-          if (section.quota <= 0) {
-            setError(`عدد الأسئلة للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
-            return;
-          }
-          // Validation: إذا كان skill = hoeren، يجب رفع الصوت
-          const sectionSkill = section.skill || formData.mainSkill;
-          if (sectionSkill === 'hoeren' && !section.listeningAudioId) {
-            setError(`يجب رفع ملف الصوت للقسم ${i + 1} (Hören)`);
             return;
           }
         }
@@ -751,7 +635,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           setError(`Teil للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
           return;
         }
-        if (section.quota <= 0) {
+        if ((section.quota ?? 0) <= 0) {
           setError(`عدد الأسئلة للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
           return;
         }
@@ -806,8 +690,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         if (formData.provider === 'leben_in_deutschland' || formData.mainSkill === 'leben_test') {
           // لا نرسل sections - الباك سيسحب الأسئلة تلقائياً
           payload.examType = 'leben_test';
-        } else if (formData.mainSkill === 'schreiben' && formData.schreibenTaskId) {
-          // لامتحان الكتابة: نرسل schreibenTaskId بدل sections
+        } else if (formData.mainSkill === 'schreiben' && formData.schreibenMode === 'task' && formData.schreibenTaskId) {
+          // لامتحان الكتابة (مهمة): نرسل schreibenTaskId بدل sections
           payload.schreibenTaskId = formData.schreibenTaskId;
           // لا نرسل sections للكتابة
         } else if (formData.hasSections && formData.sections.length > 0) {
@@ -831,12 +715,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                 quota: safeInt1(s.quota ?? 1), // ✅ quota مطلوب - Number >= 1
               };
               
-              // ✅ إرسال listeningAudioId إذا كان موجوداً (للأسئلة من نوع Hören)
-              if (s.listeningAudioId) {
-                sectionPayload.listeningAudioId = s.listeningAudioId;
-              }
-              
-              // ❌ لا نرسل: listeningAudioUrl (للعرض فقط), description, teilNumber
+              // الصوت يُدار من فورم السؤال - لا نرسل listeningAudioId هنا
               
               // ✅ إضافة tags إذا كانت موجودة
               if (s.tags && s.tags.length > 0) {
@@ -861,15 +740,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           
           if (validSections.length > 0) {
             payload.sections = validSections;
-            // ✅ Debug: التحقق من أن listeningAudioId موجود في sections
-            console.log('📤 Sections payload قبل الإرسال:', JSON.stringify(validSections, null, 2));
-            validSections.forEach((section, idx) => {
-              if (section.listeningAudioId) {
-                console.log(`✅ Section ${idx + 1} يحتوي على listeningAudioId:`, section.listeningAudioId);
-              } else if (section.skill === 'hoeren') {
-                console.warn(`⚠️ Section ${idx + 1} (hoeren) لا يحتوي على listeningAudioId!`);
-              }
-            });
+            console.log('📤 Sections payload:', JSON.stringify(validSections, null, 2));
           }
         }
         payload.randomizeQuestions = true;
@@ -956,11 +827,9 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                   sanitized.quota = safeInt1(sanitized.quota);
                 }
                 
-                // ✅ إرسال listeningAudioId إذا كان موجوداً (للأسئلة من نوع Hören)
-                // لا نحذفه - يجب إرساله للباك ليتم حفظه
-                
-                // ❌ حذف الحقول غير المسموحة فقط
-                delete sanitized.listeningAudioUrl; // للعرض فقط
+                // حذف الحقول غير المسموحة
+                delete sanitized.listeningAudioId;
+                delete sanitized.listeningAudioUrl;
                 delete sanitized.description;
                 
                 return sanitized;
@@ -1008,24 +877,10 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
               sanitized.quota = safeInt1(sanitized.quota);
             }
             
-            // ✅ حذف الحقول غير المسموحة
-            // ❌ لا نحذف listeningAudioId - يجب إرساله للباك ليتم حفظه!
-            // delete sanitized.listeningAudioId; // ❌ خطأ - يجب إرساله
-            delete sanitized.listeningAudioUrl; // للعرض فقط - لا نرسله
+            // حذف الحقول غير المسموحة
+            delete sanitized.listeningAudioId;
+            delete sanitized.listeningAudioUrl;
             delete sanitized.description;
-            
-            // ✅ التأكد من إرسال listeningAudioId إذا كان موجوداً في section الأصلي
-            if (s.listeningAudioId && !sanitized.listeningAudioId) {
-              sanitized.listeningAudioId = s.listeningAudioId;
-              console.log('✅ إضافة listeningAudioId للقسم عند الإنشاء:', s.listeningAudioId);
-            } else if (s.listeningAudioId) {
-              console.log('✅ listeningAudioId موجود بالفعل في sanitized:', sanitized.listeningAudioId);
-            } else if (s.skill === 'hoeren' || sanitized.skill === 'hoeren') {
-              console.warn('⚠️ Section (hoeren) لا يحتوي على listeningAudioId عند الإنشاء!', {
-                section: s,
-                sanitized
-              });
-            }
             
             return sanitized;
           });
@@ -1056,7 +911,9 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             hard: 0,
           },
           questionTags: '',
-            provider: 'goethe',
+          schreibenTaskId: '',
+          schreibenMode: 'task',
+          provider: 'goethe',
           mainSkill: 'mixed',
           sections: [],
           hasSections: true,
@@ -1737,9 +1594,10 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                     setFormData((prev) => ({
                       ...prev,
                       mainSkill: newSkill,
-                      // إذا كان Leben Test أو Schreiben، إلغاء sections تلقائياً
-                      hasSections: newSkill !== 'leben_test' && newSkill !== 'schreiben',
-                      // Reset schreibenTaskId عند تغيير المهارة
+                      // إذا كان Leben Test، إلغاء sections. Schreiben يعتمد على schreibenMode
+                      hasSections: newSkill === 'leben_test' ? false : (newSkill === 'schreiben' ? (prev.schreibenMode === 'sections') : true),
+                      // Reset schreibenTaskId و schreibenMode عند تغيير المهارة
+                      schreibenMode: newSkill === 'schreiben' ? prev.schreibenMode : 'task',
                       schreibenTaskId: newSkill === 'schreiben' ? prev.schreibenTaskId : '',
                     }));
                   }}
@@ -1754,6 +1612,45 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                 </select>
               </div>
 
+              {/* Schreiben Mode Toggle - يظهر فقط عندما mainSkill === 'schreiben' */}
+              {formData.mainSkill === 'schreiben' && (
+                <div>
+                  <label style={labelStyle}>
+                    نوع امتحان الكتابة *
+                  </label>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: formData.schreibenMode === 'task' ? '2px solid #3b82f6' : '2px solid #e5e7eb', backgroundColor: formData.schreibenMode === 'task' ? '#eff6ff' : '#fff' }}>
+                      <input
+                        type="radio"
+                        name="schreibenMode"
+                        value="task"
+                        checked={formData.schreibenMode === 'task'}
+                        onChange={() => setFormData(prev => ({
+                          ...prev,
+                          schreibenMode: 'task' as const,
+                          hasSections: false,
+                        }))}
+                      />
+                      مهمة كتابة (Schreiben Task)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: formData.schreibenMode === 'sections' ? '2px solid #3b82f6' : '2px solid #e5e7eb', backgroundColor: formData.schreibenMode === 'sections' ? '#eff6ff' : '#fff' }}>
+                      <input
+                        type="radio"
+                        name="schreibenMode"
+                        value="sections"
+                        checked={formData.schreibenMode === 'sections'}
+                        onChange={() => setFormData(prev => ({
+                          ...prev,
+                          schreibenMode: 'sections' as const,
+                          hasSections: true,
+                          schreibenTaskId: '',
+                        }))}
+                      />
+                      سكاشن مع أسئلة (مثل Hören)
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Sections - يظهر فقط إذا hasSections = true */}
               {formData.hasSections && (
@@ -1902,127 +1799,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                         </div>
                       )}
 
-                      {/* Audio Upload - يظهر فقط لـ Hören */}
-                      {(section.skill === 'hoeren' || (formData.mainSkill === 'hoeren' && !section.skill)) && (
-                        <div style={{ gridColumn: '1 / -1' }}>
-                          <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '8px' }}>
-                            ملف الاستماع / Listening Audio *
-                          </label>
-                          
-                          {/* عرض الصوت المرفوع */}
-                          {section.listeningAudioUrl && (
-                            <div style={{ 
-                              marginBottom: '12px', 
-                              padding: '12px', 
-                              backgroundColor: '#f0f9ff', 
-                              border: '1px solid #bae6fd', 
-                              borderRadius: '8px' 
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ flex: 1 }}>
-                                  <p style={{ fontSize: '12px', color: '#0369a1', margin: 0, marginBottom: '8px' }}>
-                                    ✅ تم رفع الملف بنجاح
-                                  </p>
-                                  <audio controls style={{ width: '100%', maxWidth: '400px' }}>
-                                    <source src={section.listeningAudioUrl} type="audio/mpeg" />
-                                    <source src={section.listeningAudioUrl} type="audio/wav" />
-                                    <source src={section.listeningAudioUrl} type="audio/mp3" />
-                                    المتصفح لا يدعم تشغيل الصوت
-                                  </audio>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveSectionAudio(index)}
-                                  style={{
-                                    padding: '6px 12px',
-                                    backgroundColor: '#dc2626',
-                                    color: '#ffffff',
-                                    border: '1px solid #dc2626',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                  }}
-                                >
-                                  حذف
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* معاينة الصوت قبل الرفع */}
-                          {sectionAudioPreviews[index] && !section.listeningAudioUrl && (
-                            <div style={{ 
-                              marginBottom: '12px', 
-                              padding: '12px', 
-                              backgroundColor: '#fef3c7', 
-                              border: '1px solid #fde68a', 
-                              borderRadius: '8px' 
-                            }}>
-                              <p style={{ fontSize: '12px', color: '#92400e', margin: 0, marginBottom: '8px' }}>
-                                معاينة الصوت (قبل الرفع)
-                              </p>
-                              <audio controls style={{ width: '100%', maxWidth: '400px' }}>
-                                <source src={sectionAudioPreviews[index]!} type="audio/mpeg" />
-                                <source src={sectionAudioPreviews[index]!} type="audio/wav" />
-                                <source src={sectionAudioPreviews[index]!} type="audio/mp3" />
-                                المتصفح لا يدعم تشغيل الصوت
-                              </audio>
-                            </div>
-                          )}
-
-                          {/* حقل اختيار الملف */}
-                          {!section.listeningAudioUrl && (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                              <input
-                                type="file"
-                                accept="audio/*"
-                                onChange={(e) => handleSectionAudioFileChange(index, e)}
-                                style={{ flex: 1, fontSize: '12px' }}
-                              />
-                              {sectionAudioFiles[index] && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUploadSectionAudio(index)}
-                                  disabled={uploadingSectionAudio[index]}
-                                  style={{
-                                    padding: '8px 16px',
-                                    backgroundColor: uploadingSectionAudio[index] ? '#9ca3af' : '#3b82f6',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: uploadingSectionAudio[index] ? 'not-allowed' : 'pointer',
-                                    fontSize: '12px',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {uploadingSectionAudio[index] ? 'جاري الرفع...' : 'رفع الملف'}
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '11px' }}>
-                            ملف الصوت الذي سيستخدمه جميع الأسئلة في هذا القسم (يُرفع مرة واحدة)
-                          </small>
-                        </div>
-                      )}
-
-                      <div>
-                        <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={section.quota}
-                          onChange={(e) => {
-                            // ✅ حفظ رقم مش string
-                            const value = Number(e.target.value) || 1;
-                            const safeValue = Math.max(1, value); // Ensure >= 1
-                            handleSectionChange(index, 'quota', safeValue);
-                          }}
-                          style={inputStyle}
-                        />
-                      </div>
+                      {/* ملاحظة: الصوت يُضاف من فورم السؤال وليس من فورم القسم */}
                     </div>
                   </div>
                 ))}
@@ -2035,8 +1812,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
               </div>
               )}
 
-              {/* Schreiben Task Selector - يظهر فقط عندما mainSkill === 'schreiben' */}
-              {formData.mainSkill === 'schreiben' && (
+              {/* Schreiben Task Selector - يظهر فقط عندما mainSkill === 'schreiben' و mode === 'task' */}
+              {formData.mainSkill === 'schreiben' && formData.schreibenMode === 'task' && (
                 <div>
                   <label style={labelStyle}>
                     مهمة الكتابة / Schreiben Task *
@@ -2230,22 +2007,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                         />
                       </div>
 
-                      <div>
-                        <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={section.quota}
-                          onChange={(e) => {
-                            // ✅ حفظ رقم مش string
-                            const value = Number(e.target.value) || 1;
-                            const safeValue = Math.max(1, value); // Ensure >= 1
-                            handleSectionChange(index, 'quota', safeValue);
-                          }}
-                          style={inputStyle}
-                        />
-                      </div>
+                      {/* Quota تم إزالته - يُدار تلقائياً */}
                     </div>
                   </div>
                 ))}
