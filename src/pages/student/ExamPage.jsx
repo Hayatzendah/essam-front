@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import { authAPI } from '../../services/api';
+import ExercisesList from '../../components/exam/ExercisesList';
 import './ExamPage.css';
 
 // ✅ دالة لـ shuffle array (ترتيب عشوائي)
@@ -12,6 +13,44 @@ const shuffleArray = (array) => {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
+};
+
+// ✅ استخراج نص آمن من promptSnapshot أو أي حقل (يتحمل قيم غريبة من الباكند)
+const safePromptString = (val) => {
+  if (val == null) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null && (typeof val.text === 'string' || typeof val.prompt === 'string'))
+    return val.text || val.prompt || '';
+  try {
+    return String(val);
+  } catch {
+    return '';
+  }
+};
+
+// ✅ تحويل الخيارات إلى مصفوفة نصوص بأمان
+const safeOptionsArray = (item) => {
+  if (!item) return [];
+  try {
+    if (item.optionsText && Array.isArray(item.optionOrder)) {
+      return item.optionOrder.map((idx) => {
+        const opt = item.optionsText[idx] ?? item.optionsText[String(idx)];
+        return typeof opt === 'string' ? opt : (opt?.text ?? opt ?? '');
+      });
+    }
+    if (item.optionsText && typeof item.optionsText === 'object' && !Array.isArray(item.optionsText)) {
+      return Object.values(item.optionsText).map((opt) =>
+        typeof opt === 'string' ? opt : (opt?.text ?? opt ?? '')
+      );
+    }
+    if (Array.isArray(item.optionsText)) {
+      return item.optionsText.map((opt) => typeof opt === 'string' ? opt : (opt?.text ?? opt ?? ''));
+    }
+    if (Array.isArray(item.options)) {
+      return item.options.map((opt) => typeof opt === 'string' ? opt : (opt?.text ?? opt ?? ''));
+    }
+  } catch (_) {}
+  return [];
 };
 
 // ✅ Component منفصل لـ Reorder Task
@@ -391,11 +430,48 @@ function ExamPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Sections sidebar state
+  const [sectionsOverview, setSectionsOverview] = useState(null);
+  const [selectedSectionKey, setSelectedSectionKey] = useState(null);
+
+  // Exercise mode state
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [sectionExercises, setSectionExercises] = useState({}); // cache: { [sectionKey]: { exercises: [...] } }
+
+  // Check answer state: { [itemIndex]: { isCorrect, score, maxPoints, correctAnswer, checking } }
+  const [checkedQuestions, setCheckedQuestions] = useState({});
+  const [loadingExercises, setLoadingExercises] = useState(false);
+
+  // Section summary state: { [sectionKey]: { loading, data, error } }
+  const [sectionSummaries, setSectionSummaries] = useState({});
+
   useEffect(() => {
     if (attemptId) {
       loadAttempt();
     }
   }, [attemptId]);
+
+  // Fetch sections overview when attempt loads
+  useEffect(() => {
+    if (attempt?.examId || attempt?.exam?.id || attempt?.exam?._id) {
+      const examId = attempt.examId || attempt.exam?.id || attempt.exam?._id;
+      examsAPI.getSectionsOverview(examId)
+        .then((data) => {
+          const sections = data.sections || data || [];
+          if (sections.length > 0) {
+            setSectionsOverview(sections);
+            // Select first section by default
+            if (!selectedSectionKey) {
+              setSelectedSectionKey(sections[0].key);
+            }
+          }
+        })
+        .catch((err) => {
+          console.log('No sections for this exam:', err.response?.status);
+          // Not an error - exam may not have sections
+        });
+    }
+  }, [attempt?.examId, attempt?.exam?.id]);
 
   // ✅ التأكد من أن attempt.items دائماً فريدة (حماية إضافية)
   useEffect(() => {
@@ -425,6 +501,60 @@ function ExamPage() {
       }
     }
   }, [attempt]);
+
+  // ✅ بناء خريطة questionId → globalItemIndex للتمارين
+  const questionIdToItemIndex = useMemo(() => {
+    const map = new Map();
+    if (attempt?.items) {
+      attempt.items.forEach((item, idx) => {
+        const qId = item.questionId || item.id || item._id ||
+          item.question?.id || item.question?._id ||
+          item.questionSnapshot?.id || item.questionSnapshot?._id;
+        if (qId) map.set(qId, idx);
+      });
+    }
+    return map;
+  }, [attempt?.items]);
+
+  // ✅ جلب التمارين عند اختيار قسم
+  useEffect(() => {
+    if (!selectedSectionKey || !attempt) return;
+    // لا نعيد الجلب إذا كانت مخزنة مسبقاً
+    if (sectionExercises[selectedSectionKey]) return;
+
+    const examId = attempt.examId || attempt.exam?.id || attempt.exam?._id;
+    if (!examId) return;
+
+    setLoadingExercises(true);
+    setSelectedExercise(null);
+
+    examsAPI.getSectionQuestions(examId, selectedSectionKey)
+      .then((data) => {
+        if (data?.exercises && data.exercises.length > 0) {
+          console.log('✅ تم جلب التمارين للقسم:', selectedSectionKey, data.exercises.length);
+          setSectionExercises(prev => ({ ...prev, [selectedSectionKey]: data }));
+        }
+      })
+      .catch((err) => {
+        console.log('لا توجد تمارين للقسم:', selectedSectionKey, err.response?.status);
+      })
+      .finally(() => {
+        setLoadingExercises(false);
+      });
+  }, [selectedSectionKey, attempt]);
+
+  // ✅ يجب استدعاء جميع الـ Hooks قبل أي early return (قواعد React)
+  const currentSectionData = selectedSectionKey ? sectionExercises[selectedSectionKey] : null;
+  const sectionQuestionIds = useMemo(() => {
+    if (!selectedSectionKey || !currentSectionData?.exercises) return null;
+    const ids = new Set();
+    currentSectionData.exercises.forEach((ex) => {
+      (ex.questions || []).forEach((q) => {
+        if (q.questionId) ids.add(q.questionId);
+      });
+    });
+    return ids;
+  }, [selectedSectionKey, currentSectionData]);
 
   const loadAttempt = async () => {
     try {
@@ -471,61 +601,22 @@ function ExamPage() {
       }
 
       // استخراج بيانات الأسئلة من questionSnapshot
-      console.log('🔍 Raw items from API:', items);
-      console.log('🔍 First item structure:', JSON.stringify(items[0], null, 2));
-      
-      // ✅ Debug شامل: التحقق من جميع الحقول في items (خاصة لأسئلة match)
-      items.forEach((item, idx) => {
-        const qType = item.qType || item.type || item.questionSnapshot?.qType || item.question?.qType;
-        
-        if (qType === 'match') {
-          console.log(`🔍 MATCH QUESTION ${idx} - FULL INSPECTION:`, {
-            'item keys': Object.keys(item),
-            'item.answerKeyMatch': item.answerKeyMatch,
-            'item.questionSnapshot': item.questionSnapshot,
-            'item.questionSnapshot keys': item.questionSnapshot ? Object.keys(item.questionSnapshot) : null,
-            'item.questionSnapshot.answerKeyMatch': item.questionSnapshot?.answerKeyMatch,
-            'item.question': item.question,
-            'item.question keys': item.question ? Object.keys(item.question) : null,
-            'item.question.answerKeyMatch': item.question?.answerKeyMatch,
-            'item.promptSnapshot': item.promptSnapshot,
-            'item.promptSnapshot keys': item.promptSnapshot ? Object.keys(item.promptSnapshot) : null,
-            'item.promptSnapshot.answerKeyMatch': item.promptSnapshot?.answerKeyMatch,
-            'FULL item JSON': JSON.stringify(item, null, 2)
-          });
-        }
-        
-        if (item.mediaSnapshot) {
-          console.log(`🎵 Item ${idx} has mediaSnapshot:`, item.mediaSnapshot);
-        }
-        if (item.listeningClip) {
-          console.log(`🎧 Item ${idx} has listeningClip:`, item.listeningClip);
-        }
-        if (item.listeningClipId) {
-          console.log(`🎧 Item ${idx} has listeningClipId:`, item.listeningClipId);
-        }
-      });
+      try {
+        console.log('🔍 Raw items from API:', items?.length, 'items');
+        if (items[0]) console.log('🔍 First item keys:', Object.keys(items[0]));
+      } catch (_) {}
 
       const formattedItems = items.map((item, idx) => {
-        console.log(`📝 Item ${idx}:`, {
-          hasQuestionSnapshot: !!item.questionSnapshot,
-          hasQuestion: !!item.question,
-          questionSnapshot: item.questionSnapshot,
-          question: item.question,
-          rawItem: item,
-          sectionId: item.sectionId,
-          section: item.section
-        });
-
-        // إذا كان في questionSnapshot، استخرج البيانات منه
-        if (item.questionSnapshot) {
+        try {
+        // إذا كان في questionSnapshot (كائن)، استخرج البيانات منه
+        if (item.questionSnapshot && typeof item.questionSnapshot === 'object') {
           const formatted = {
             ...item,
             prompt: item.questionSnapshot.text || item.questionSnapshot.prompt,
             text: item.questionSnapshot.text || item.questionSnapshot.prompt,
             qType: item.questionSnapshot.qType,
             type: item.questionSnapshot.qType,
-            options: item.questionSnapshot.options || [],
+            options: Array.isArray(item.questionSnapshot.options) ? item.questionSnapshot.options : [],
             question: item.questionSnapshot,
             // ✅ إضافة answerKeyMatch من questionSnapshot (مهم لأسئلة match)
             // فحص جميع الأماكن المحتملة
@@ -534,61 +625,53 @@ function ExamPage() {
                            item.promptSnapshot?.answerKeyMatch,
             // ✅ إضافة promptSnapshot أيضاً (قد يحتوي على answerKeyMatch)
             promptSnapshot: item.promptSnapshot || item.questionSnapshot,
-            // ✅ إضافة media من questionSnapshot (مهم للصور)
-            // الاحتفاظ بـ listeningClip و listeningClipId من item الأصلي أو من questionSnapshot
-            listeningClip: item.listeningClip || item.questionSnapshot.listeningClip,
-            listeningClipId: item.listeningClipId || item.questionSnapshot.listeningClipId,
             // الاحتفاظ بمعلومات Section
             sectionId: item.sectionId,
             section: item.section,
           };
-          console.log(`✅ Formatted item ${idx} (from questionSnapshot):`, {
-            ...formatted,
-            'answerKeyMatch found': !!formatted.answerKeyMatch,
-            'answerKeyMatch value': formatted.answerKeyMatch
-          });
           return formatted;
         }
 
-        // إذا كان في question، استخدمه
-        if (item.question) {
+        // إذا كان في question (كائن)، استخدمه
+        if (item.question && typeof item.question === 'object') {
           const formatted = {
             ...item,
             prompt: item.question.text || item.question.prompt,
             text: item.question.text || item.question.prompt,
             qType: item.question.qType,
             type: item.question.qType,
-            options: item.question.options || [],
-            // ✅ إضافة answerKeyMatch من question (مهم لأسئلة match)
+            options: Array.isArray(item.question.options) ? item.question.options : [],
             answerKeyMatch: item.question.answerKeyMatch || item.answerKeyMatch,
-            // الاحتفاظ بـ listeningClip و listeningClipId من item الأصلي أو من question
-            listeningClip: item.listeningClip || item.question.listeningClip,
-            listeningClipId: item.listeningClipId || item.question.listeningClipId,
-            // الاحتفاظ بمعلومات Section
             sectionId: item.sectionId,
             section: item.section,
           };
-          console.log(`✅ Formatted item ${idx} (from question):`, formatted);
           return formatted;
         }
 
         // إذا مافيش questionSnapshot ولا question، استخدم البيانات الموجودة
-        console.log(`⚠️ Item ${idx} has no questionSnapshot or question, using raw item`);
         return item;
+        } catch (err) {
+          console.warn(`⚠️ Error formatting item ${idx}, using minimal fallback:`, err);
+          return {
+            ...item,
+            prompt: safePromptString(item.promptSnapshot ?? item.prompt ?? item.text),
+            text: safePromptString(item.promptSnapshot ?? item.prompt ?? item.text),
+            qType: item.qType || 'mcq',
+            options: safeOptionsArray(item),
+          };
+        }
       });
 
       // تجميع الأسئلة حسب Section
       const sectionsMap = new Map();
       formattedItems.forEach((item, idx) => {
         const sectionId = item.sectionId || 'default';
-        const section = item.section || { title: 'أسئلة عامة', listeningAudioId: null, listeningAudioUrl: null };
-        
+        const section = item.section || { title: 'أسئلة عامة' };
+
         if (!sectionsMap.has(sectionId)) {
           sectionsMap.set(sectionId, {
             id: sectionId,
             title: section.title || section.name || 'أسئلة عامة',
-            listeningAudioId: section.listeningAudioId || null,
-            listeningAudioUrl: section.listeningAudioUrl || null,
             items: []
           });
         }
@@ -747,27 +830,22 @@ function ExamPage() {
     });
   };
 
-  const saveAnswer = async (itemIndex, questionId, answer) => {
+  // ✅ حفظ إجابة سؤال واحد فوراً → POST /attempts/:attemptId/answer
+  const saveAnswer = async (itemIndex, questionId, answer, itemOverride = null) => {
     try {
-      // بناء answerData حسب نوع السؤال
-      const answerData = {
-        itemIndex,
-        questionId,
-      };
-
-      // حسب نوع السؤال - معالجة structure مختلف
-      const item = attempt.items[itemIndex];
+      const item = itemOverride || (typeof itemIndex === 'number' && attempt.items[itemIndex]) || null;
+      if (!item || !questionId) return;
       const question = item.question || item;
       const qType = question.qType || question.type || item.qType || item.type || 'mcq';
-      
+
+      const answerData = { questionId };
+
       if (qType === 'mcq') {
-        // تحويل selectedIndex إلى array عند الحفظ
-        answerData.studentAnswerIndexes = typeof answer === 'number' ? [answer] : (Array.isArray(answer) ? answer : [answer]);
+        answerData.selectedOptionIndexes = typeof answer === 'number' ? [answer] : (Array.isArray(answer) ? answer : [answer]);
       } else if (qType === 'true_false') {
-        answerData.studentAnswerBoolean = answer;
+        const boolVal = typeof answer === 'boolean' ? answer : !!answer;
+        answerData.selectedOptionIndexes = boolVal ? [0] : [1];
       } else if (qType === 'fill') {
-        // ✅ Fill: إرسال answerText (الباك يتوقع هذا الاسم)
-        // إذا كان fillAnswers array، نأخذ أول قيمة أو نجمعها
         if (answer?.fillAnswers && Array.isArray(answer.fillAnswers)) {
           const fillExact = item.fillExact || item.questionSnapshot?.fillExact || item.question?.fillExact || [];
           if (fillExact.length === 1) {
@@ -785,20 +863,17 @@ function ExamPage() {
           answerData.answerText = answer.answerText;
         }
       } else if (qType === 'free_text') {
-        answerData.textAnswer = answer;
+        answerData.answerText = answer?.textAnswer || (typeof answer === 'string' ? answer : '');
       } else if (qType === 'speaking') {
-        answerData.audioAnswerUrl = answer; // URL من الباك بعد الرفع
+        answerData.audioAnswerUrl = answer?.audioAnswerUrl || (typeof answer === 'string' ? answer : '');
       } else if (qType === 'match') {
-        answerData.studentAnswerMatch = answer;
+        answerData.studentAnswerMatch = answer?.studentAnswerMatch || answer;
       } else if (qType === 'reorder') {
-        answerData.studentAnswerReorder = answer;
+        answerData.studentAnswerReorder = answer?.studentAnswerReorder || answer;
       } else if (qType === 'interactive_text') {
-        // Interactive Text: إرسال interactiveAnswers أو reorderAnswer حسب نوع المهمة
         if (answer?.reorderAnswer) {
-          // Reorder: إرسال reorderAnswer كـ array من IDs
           answerData.reorderAnswer = answer.reorderAnswer;
         } else if (answer?.interactiveAnswers) {
-          // Fill-in-the-blanks: إرسال interactiveAnswers
           answerData.interactiveAnswers = answer.interactiveAnswers;
         } else if (typeof answer === 'object') {
           answerData.interactiveAnswers = answer;
@@ -808,7 +883,89 @@ function ExamPage() {
       await examsAPI.saveAnswer(attemptId, answerData);
     } catch (err) {
       console.error('Error saving answer:', err);
-      // لا نعرض خطأ للمستخدم، فقط نعرض في console
+    }
+  };
+
+  // ✅ فحص إجابة سؤال واحد → POST /attempts/:attemptId/check-answer
+  const handleCheckAnswer = async (itemIndex, questionId, itemOverride = null) => {
+    try {
+      const userAnswer = answers[itemIndex];
+      if (!userAnswer) return;
+
+      const item = itemOverride || (typeof itemIndex === 'number' && attempt.items[itemIndex]) || null;
+      if (!item || !questionId) return;
+
+      const question = item.question || item;
+      const qType = question.qType || question.type || item.qType || item.type || 'mcq';
+
+      // علّم السؤال كـ "جاري الفحص"
+      setCheckedQuestions(prev => ({ ...prev, [itemIndex]: { checking: true } }));
+
+      const answerData = { questionId };
+
+      if (qType === 'mcq') {
+        const idx = userAnswer?.selectedIndex;
+        answerData.selectedOptionIndexes = idx !== null && idx !== undefined ? [idx] : [];
+      } else if (qType === 'true_false') {
+        answerData.studentAnswerBoolean = userAnswer?.studentAnswerBoolean;
+      } else if (qType === 'fill') {
+        if (userAnswer?.fillAnswers && Array.isArray(userAnswer.fillAnswers)) {
+          const fillExact = item.fillExact || item.questionSnapshot?.fillExact || item.question?.fillExact || [];
+          answerData.answerText = fillExact.length === 1
+            ? (userAnswer.fillAnswers[0] || '')
+            : (userAnswer.fillAnswers.filter(a => a && a.trim()).join(', ') || '');
+        } else if (userAnswer?.studentAnswerText) {
+          answerData.answerText = userAnswer.studentAnswerText;
+        } else if (typeof userAnswer === 'string') {
+          answerData.answerText = userAnswer;
+        }
+      } else if (qType === 'match') {
+        answerData.studentAnswerMatch = userAnswer?.studentAnswerMatch || userAnswer;
+      } else if (qType === 'reorder') {
+        answerData.studentAnswerReorder = userAnswer?.studentAnswerReorder || userAnswer;
+      } else if (qType === 'interactive_text') {
+        if (userAnswer?.reorderAnswer) {
+          answerData.reorderAnswer = userAnswer.reorderAnswer;
+        } else if (userAnswer?.interactiveAnswers) {
+          answerData.interactiveAnswers = userAnswer.interactiveAnswers;
+        } else if (typeof userAnswer === 'object') {
+          answerData.interactiveAnswers = userAnswer;
+        }
+      } else if (qType === 'free_text') {
+        answerData.answerText = userAnswer?.textAnswer || (typeof userAnswer === 'string' ? userAnswer : '');
+      }
+
+      const result = await examsAPI.checkAnswer(attemptId, answerData);
+      setCheckedQuestions(prev => ({
+        ...prev,
+        [itemIndex]: {
+          checking: false,
+          isCorrect: result.isCorrect,
+          score: result.score,
+          maxPoints: result.maxPoints,
+          correctAnswer: result.correctAnswer,
+          qType: result.qType || qType,
+        },
+      }));
+    } catch (err) {
+      console.error('Error checking answer:', err);
+      setCheckedQuestions(prev => ({
+        ...prev,
+        [itemIndex]: { checking: false, error: true },
+      }));
+    }
+  };
+
+  // ✅ إنهاء قسم → GET /attempts/:attemptId/sections/:sectionKey/summary
+  const handleFinishSection = async (sectionKey) => {
+    if (!sectionKey) return;
+    setSectionSummaries(prev => ({ ...prev, [sectionKey]: { loading: true } }));
+    try {
+      const data = await examsAPI.getSectionSummary(attemptId, sectionKey);
+      setSectionSummaries(prev => ({ ...prev, [sectionKey]: { loading: false, data } }));
+    } catch (err) {
+      console.error('Error fetching section summary:', err);
+      setSectionSummaries(prev => ({ ...prev, [sectionKey]: { loading: false, error: true } }));
     }
   };
 
@@ -854,56 +1011,35 @@ function ExamPage() {
       
       console.log('📤 Submitting attempt:', attemptId);
       console.log('📋 Answers to submit:', answers);
-      
-      // تحضير الإجابات بصيغة Backend المطلوبة (array)
-      const answersArray = attempt.items.map((item, index) => {
-        const userAnswer = answers[index];
-        const questionId = item.questionId || item.question?.id || item.question?._id;
-        
-        console.log(`📝 Question ${index + 1}:`, {
-          questionId,
-          qType: item.qType || item.type,
-          rawAnswer: userAnswer,
-        });
 
-        const answerObj = {
-          questionId: questionId,
-        };
+      // ✅ دالة مساعدة لتحويل إجابة من الـ state إلى صيغة الباك
+      const formatAnswer = (questionId, qType, userAnswer, item) => {
+        const answerObj = { questionId };
 
-        // تحويل الإجابة حسب النوع
-        const qType = item.qType || item.type || 'mcq';
-        
+        if (!userAnswer) {
+          // سؤال غير مجاب
+          answerObj.selectedOptionIndexes = [];
+          return answerObj;
+        }
+
         if (qType === 'mcq') {
-          // ✅ MCQ: إرسال selectedOptionIndexes (الباك يتوقع هذا الاسم)
           if (userAnswer?.selectedIndex !== null && userAnswer?.selectedIndex !== undefined) {
             answerObj.selectedOptionIndexes = [userAnswer.selectedIndex];
           } else {
             answerObj.selectedOptionIndexes = [];
           }
         } else if (qType === 'true_false') {
-          // ✅ True/False: إرسال selectedOptionIndexes كـ array (true → [0], false → [1])
           if (userAnswer?.studentAnswerBoolean !== undefined) {
-            // true → [0], false → [1]
             answerObj.selectedOptionIndexes = userAnswer.studentAnswerBoolean ? [0] : [1];
-          } else if (userAnswer !== undefined && userAnswer !== null) {
-            // fallback: إذا كان boolean مباشرة
-            const boolValue = typeof userAnswer === 'boolean' ? userAnswer : userAnswer.studentAnswerBoolean;
-            answerObj.selectedOptionIndexes = boolValue ? [0] : [1];
           } else {
             answerObj.selectedOptionIndexes = [];
           }
         } else if (qType === 'fill') {
-          // ✅ Fill: إرسال answerText (الباك يتوقع هذا الاسم)
-          // إذا كان fillAnswers array، نأخذ أول قيمة (أو نجمعها)
           if (userAnswer?.fillAnswers && Array.isArray(userAnswer.fillAnswers)) {
-            // ✅ إذا كان هناك عدة إجابات، نجمعها بفاصلة أو نأخذ الأولى
-            // بناءً على fillExact.length، إذا كان 1 نأخذ الأولى، وإلا نجمع
-            const fillExact = item.fillExact || item.questionSnapshot?.fillExact || item.question?.fillExact || [];
+            const fillExact = item?.fillExact || item?.questionSnapshot?.fillExact || item?.question?.fillExact || [];
             if (fillExact.length === 1) {
-              // فراغ واحد: نأخذ الإجابة الأولى
               answerObj.answerText = userAnswer.fillAnswers[0] || '';
             } else {
-              // عدة فراغات: نجمع الإجابات بفاصلة
               answerObj.answerText = userAnswer.fillAnswers.filter(a => a && a.trim()).join(', ') || '';
             }
           } else if (userAnswer?.fillAnswer) {
@@ -914,51 +1050,62 @@ function ExamPage() {
             answerObj.answerText = userAnswer;
           }
         } else if (qType === 'free_text') {
-          // Free Text: إرسال النص
-          if (userAnswer?.textAnswer) {
-            answerObj.textAnswer = userAnswer.textAnswer;
-          } else if (typeof userAnswer === 'string') {
-            answerObj.textAnswer = userAnswer;
-          }
+          answerObj.answerText = userAnswer?.textAnswer || (typeof userAnswer === 'string' ? userAnswer : '');
         } else if (qType === 'speaking') {
-          // Speaking: إرسال URL الصوت من الباك
-          if (userAnswer?.audioAnswerUrl) {
-            answerObj.audioAnswerUrl = userAnswer.audioAnswerUrl;
-          } else if (userAnswer?.audioAnswer) {
-            // fallback للشكل القديم
-            answerObj.audioAnswerUrl = userAnswer.audioAnswer;
-          } else if (typeof userAnswer === 'string') {
-            answerObj.audioAnswerUrl = userAnswer;
-          }
+          answerObj.audioAnswerUrl = userAnswer?.audioAnswerUrl || userAnswer?.audioAnswer || (typeof userAnswer === 'string' ? userAnswer : '');
         } else if (qType === 'match') {
-          // Match: إرسال object
-          if (userAnswer?.studentAnswerMatch) {
-            answerObj.studentAnswerMatch = userAnswer.studentAnswerMatch;
-          } else if (userAnswer) {
-            answerObj.studentAnswerMatch = userAnswer;
-          }
+          answerObj.studentAnswerMatch = userAnswer?.studentAnswerMatch || userAnswer;
         } else if (qType === 'reorder') {
-          // Reorder: إرسال array
-          if (userAnswer?.studentAnswerReorder) {
-            answerObj.studentAnswerReorder = userAnswer.studentAnswerReorder;
-          } else if (Array.isArray(userAnswer)) {
-            answerObj.studentAnswerReorder = userAnswer;
-          }
+          answerObj.studentAnswerReorder = userAnswer?.studentAnswerReorder || (Array.isArray(userAnswer) ? userAnswer : undefined);
         } else if (qType === 'interactive_text') {
-          // Interactive Text: إرسال interactiveAnswers أو reorderAnswer حسب نوع المهمة
           if (userAnswer?.reorderAnswer) {
-            // Reorder: إرسال reorderAnswer كـ array من IDs
             answerObj.reorderAnswer = userAnswer.reorderAnswer;
           } else if (userAnswer?.interactiveAnswers) {
-            // Fill-in-the-blanks: إرسال interactiveAnswers
             answerObj.interactiveAnswers = userAnswer.interactiveAnswers;
           } else if (typeof userAnswer === 'object') {
             answerObj.interactiveAnswers = userAnswer;
           }
         }
 
-        console.log(`✅ Formatted answer ${index + 1}:`, answerObj);
         return answerObj;
+      };
+
+      // ✅ تجميع كل الإجابات: من attempt.items (بفهرس رقمي) + من أسئلة الأقسام (بمفتاح q-questionId)
+      const answersArray = [];
+      const processedIds = new Set();
+
+      // 1) أسئلة من attempt.items
+      (attempt.items || []).forEach((item, index) => {
+        const questionId = item.questionId || item.question?.id || item.question?._id;
+        if (!questionId || processedIds.has(questionId)) return;
+        processedIds.add(questionId);
+
+        const qType = item.qType || item.type || 'mcq';
+        // الإجابة قد تكون بالفهرس الرقمي أو بالمفتاح q-questionId
+        const userAnswer = answers[index] ?? answers[`q-${questionId}`];
+        answersArray.push(formatAnswer(questionId, qType, userAnswer, item));
+      });
+
+      // 2) أسئلة من الأقسام (_fromSection) اللي مش موجودة بـ attempt.items
+      Object.keys(answers).forEach((key) => {
+        if (typeof key === 'string' && key.startsWith('q-')) {
+          const questionId = key.replace('q-', '');
+          if (processedIds.has(questionId)) return;
+          processedIds.add(questionId);
+
+          const userAnswer = answers[key];
+          // محاولة معرفة نوع السؤال من الإجابة المحفوظة
+          let qType = 'mcq';
+          if (userAnswer?.studentAnswerText || userAnswer?.fillAnswer || userAnswer?.fillAnswers) qType = 'fill';
+          else if (userAnswer?.studentAnswerBoolean !== undefined) qType = 'true_false';
+          else if (userAnswer?.studentAnswerMatch) qType = 'match';
+          else if (userAnswer?.studentAnswerReorder) qType = 'reorder';
+          else if (userAnswer?.textAnswer) qType = 'free_text';
+          else if (userAnswer?.audioAnswerUrl) qType = 'speaking';
+          else if (userAnswer?.interactiveAnswers || userAnswer?.reorderAnswer) qType = 'interactive_text';
+
+          answersArray.push(formatAnswer(questionId, qType, userAnswer, null));
+        }
       });
 
       console.log('📤 Sending submit request with answers array:', answersArray);
@@ -1063,46 +1210,142 @@ function ExamPage() {
     );
   }
 
-  // Handle Schreiben exams - redirect to Schreiben page
-  if (isSchreibenExam) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center p-6">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-4">
-            <p className="font-semibold mb-2 text-blue-800">✍️ امتحان كتابة (Schreiben)</p>
-            <p className="text-sm text-slate-600 mb-4">
-              {attempt.examTitle || 'مهمة كتابة'}
-            </p>
-            <button
-              onClick={() => navigate(`/student/schreiben/${attempt.schreibenTaskId}?attemptId=${attempt.attemptId}`)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              ابدأ مهمة الكتابة →
-            </button>
-          </div>
-          <button
-            onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm"
-          >
-            ← رجوع
-          </button>
-        </div>
-      </div>
-    );
+  // Handle Schreiben exams - redirect directly to Schreiben page (no start screen)
+  if (isSchreibenExam && !searchParams.get('showQuestions')) {
+    const hasRegularQuestions = attempt.items && attempt.items.length > 0;
+    const schreibenUrl = `/student/schreiben/${attempt.schreibenTaskId}?attemptId=${attempt.attemptId}${hasRegularQuestions ? '&hasQuestions=true&examAttemptId=' + attemptId : ''}`;
+    // Use replace to avoid back button returning here and looping
+    navigate(schreibenUrl, { replace: true });
+    return null;
   }
 
   const currentQuestion = attempt.items[currentQuestionIndex];
   const totalQuestions = attempt.items.length;
   const answeredCount = Object.keys(answers).length;
-  
+
   // التحقق من أن المحاولة لم يتم تسليمها
   const isSubmitted = attempt.status === 'submitted';
 
+  // Sections sidebar logic (currentSectionData و sectionQuestionIds معرّفان أعلاه قبل أي return)
+  const hasSections = sectionsOverview && sectionsOverview.length > 0;
+  const hasExercises = currentSectionData?.exercises?.length > 0;
+
+  // Filter items by selected section or exercise
+  const displayedItems = (() => {
+    // إذا كان تمرين مختار → عرض أسئلة التمرين فقط (من attempt أو من بيانات التمرين كـ fallback)
+    if (selectedExercise && selectedExercise.questions && questionIdToItemIndex) {
+      return selectedExercise.questions
+        .map((q) => {
+          const idx = questionIdToItemIndex.get(q.questionId);
+          if (idx !== undefined && attempt.items[idx]) {
+            // ✅ إذا العنصر موجود بـ attempt.items لكن بدون options، نضيف options من بيانات القسم
+            const attemptItem = attempt.items[idx];
+            const existingOptions = safeOptionsArray(attemptItem);
+            if (existingOptions.length === 0 && Array.isArray(q.options) && q.options.length > 0) {
+              return { ...attemptItem, options: q.options };
+            }
+            return attemptItem;
+          }
+          // عنصر غير موجود في attempt.items → استخدام بيانات السؤال من القسم للعرض
+          const sectionKey = selectedSectionKey || selectedExercise.sectionKey;
+          return {
+            questionId: q.questionId,
+            prompt: q.prompt,
+            promptSnapshot: q.prompt,
+            text: q.prompt,
+            qType: q.qType || q.type || 'mcq',
+            type: q.qType || q.type || 'mcq',
+            options: q.options || [],
+            images: q.images || [],
+            points: q.points,
+            sectionKey,
+            section: sectionKey ? { key: sectionKey } : undefined,
+            _fromSection: true,
+          };
+        })
+        .filter(Boolean);
+    }
+    // إذا كان قسم مختار → عرض أسئلة القسم (تصفية حسب sectionKey أو حسب معرفات الأسئلة من API القسم)
+    if (hasSections && selectedSectionKey && attempt?.items) {
+      if (sectionQuestionIds && sectionQuestionIds.size > 0) {
+        const byIds = attempt.items.filter((item) => {
+          const qid = item.questionId || item.id || item._id ||
+            item.question?.id || item.question?._id ||
+            item.questionSnapshot?.id || item.questionSnapshot?._id;
+          return qid && sectionQuestionIds.has(qid);
+        });
+        if (byIds.length > 0) return byIds;
+        // لم تُوجد الأسئلة في attempt.items → بناء قائمة عرض من بيانات القسم
+        const fromSection = [];
+        (currentSectionData?.exercises || []).forEach((ex) => {
+          (ex.questions || []).forEach((q) => {
+            fromSection.push({
+              questionId: q.questionId,
+              prompt: q.prompt,
+              promptSnapshot: q.prompt,
+              text: q.prompt,
+              qType: q.qType || q.type || 'mcq',
+              type: q.qType || q.type || 'mcq',
+              options: q.options || [],
+              images: q.images || [],
+              points: q.points,
+              sectionKey: selectedSectionKey,
+              section: { key: selectedSectionKey },
+              _fromSection: true,
+            });
+          });
+        });
+        return fromSection;
+      }
+      return attempt.items.filter((item) => {
+        const itemSectionKey = item.sectionKey || item.section?.key;
+        return itemSectionKey === selectedSectionKey;
+      });
+    }
+    // عرض كل الأسئلة
+    return attempt.items || [];
+  })();
+
+  // Calculate per-section progress from local answers (يدعم التصفية بـ sectionKey أو بمعرفات الأسئلة من API القسم)
+  const getSectionProgress = (sectionKey) => {
+    const sectionData = sectionExercises[sectionKey];
+    const idsFromSection = sectionData?.exercises
+      ? new Set(sectionData.exercises.flatMap((ex) => (ex.questions || []).map((q) => q.questionId)))
+      : null;
+    const sectionItems = (attempt?.items || []).filter((item) => {
+      const itemSectionKey = item.sectionKey || item.section?.key;
+      if (itemSectionKey === sectionKey) return true;
+      if (idsFromSection?.size) {
+        const qid = item.questionId || item.id || item._id ||
+          item.question?.id || item.question?._id ||
+          item.questionSnapshot?.id || item.questionSnapshot?._id;
+        return qid && idsFromSection.has(qid);
+      }
+      return false;
+    });
+    const total = sectionItems.length > 0
+      ? sectionItems.length
+      : (idsFromSection ? idsFromSection.size : 0);
+    let answered = 0;
+    sectionItems.forEach((item) => {
+      const idx = item._fromSection ? `q-${item.questionId}` : attempt.items.indexOf(item);
+      if (answers[idx] !== undefined) answered++;
+    });
+    if (sectionItems.length === 0 && idsFromSection) {
+      idsFromSection.forEach((qid) => {
+        if (answers[`q-${qid}`] !== undefined) answered++;
+      });
+    }
+    return { answered, total };
+  };
+
+  const SKILL_ICONS = { hoeren: '🎧', lesen: '📖', schreiben: '✍️', sprechen: '🗣️' };
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {/* الشريط العلوي */}
-        <div className="flex items-center justify-between mb-6">
+      {/* الشريط العلوي */}
+      <div className={`${hasSections ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 pt-8 pb-2`}>
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => navigate(-1)}
             className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
@@ -1115,7 +1358,7 @@ function ExamPage() {
         </div>
 
         {/* عنوان الامتحان */}
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-xl font-bold text-slate-900 mb-1">
             {attempt.exam?.title || 'امتحان'}
           </h1>
@@ -1123,6 +1366,97 @@ function ExamPage() {
             {totalQuestions} سؤال • أجب على جميع الأسئلة ثم اضغط "تسليم الامتحان"
           </p>
         </div>
+      </div>
+
+      <div className={`${hasSections ? 'max-w-6xl flex gap-6' : 'max-w-3xl'} mx-auto px-4 pb-8`}>
+        {/* Sections Sidebar */}
+        {hasSections && (
+          <aside className="w-64 flex-shrink-0 sticky top-4 self-start">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="text-sm font-bold text-slate-800">أقسام الامتحان</h3>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {answeredCount}/{totalQuestions} سؤال تمت الإجابة عليه
+                </p>
+              </div>
+              <div className="p-2 space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
+                {/* All questions option */}
+                <button
+                  onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
+                  className={`w-full text-right p-3 rounded-xl text-xs transition-all ${
+                    !selectedSectionKey
+                      ? 'bg-red-50 border border-red-200 text-red-700 font-semibold'
+                      : 'hover:bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📋</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">كل الأسئلة</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {answeredCount}/{totalQuestions}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {sectionsOverview.map((section) => {
+                  const progress = getSectionProgress(section.key);
+                  const isActive = selectedSectionKey === section.key;
+                  const progressPercent = progress.total > 0 ? Math.round((progress.answered / progress.total) * 100) : 0;
+                  const isComplete = progress.total > 0 && progress.answered === progress.total;
+
+                  return (
+                    <button
+                      key={section.key}
+                      onClick={() => { setSelectedSectionKey(section.key); setSelectedExercise(null); }}
+                      className={`w-full text-right p-3 rounded-xl text-xs transition-all ${
+                        isActive
+                          ? 'bg-red-50 border border-red-200 text-red-700'
+                          : 'hover:bg-slate-50 text-slate-600 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-shrink-0">
+                          <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                            <circle
+                              cx="18" cy="18" r="15.5" fill="none"
+                              stroke={isComplete ? '#22c55e' : '#ef4444'}
+                              strokeWidth="3"
+                              strokeDasharray={`${progressPercent} ${100 - progressPercent}`}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-[11px]">
+                            {SKILL_ICONS[section.skill] || '📄'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-semibold truncate ${isActive ? 'text-red-700' : 'text-slate-800'}`}>
+                            {section.title}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {progress.answered}/{progress.total} سؤال
+                            {section.timeLimitMin > 0 && ` • ${section.timeLimitMin}د`}
+                          </div>
+                        </div>
+                        {sectionSummaries[section.key]?.data ? (
+                          <span className="text-green-500 text-sm flex-shrink-0" title="تم إنهاء القسم">✓</span>
+                        ) : isComplete ? (
+                          <span className="text-yellow-500 text-sm flex-shrink-0" title="تمت الإجابة على الكل">●</span>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* Main Content */}
+        <div className="flex-1 min-w-0">
 
         {/* رسالة خطأ */}
         {error && (
@@ -1145,152 +1479,6 @@ function ExamPage() {
           </div>
         ) : (
           <>
-            {/* ✅ مشغل الصوت الواحد - يعرض مرة واحدة في الأعلى من attempt.listeningClip.audioUrl */}
-            {(() => {
-              // ✅ الحصول على audioUrl من attempt.listeningClip
-              const audioPath = attempt?.listeningClip?.audioUrl;
-              
-              if (!audioPath) {
-                console.warn('⚠️ No audioPath found in attempt.listeningClip:', attempt?.listeningClip);
-                return null;
-              }
-              
-              // ✅ استخدام toApiUrl لتحويل URL النسبي إلى full URL
-              // هذا يضمن أن المسار النسبي مثل "/uploads/audio/..." 
-              // يتم تحويله إلى "https://api.deutsch-tests.com/uploads/audio/..."
-              // ✅ مهم: الحفاظ على نفس الحالة (case) التي يرجعها الباك
-              const audioSrc = toApiUrl(audioPath);
-              
-              // ✅ Debug: التأكد من أن audioPath و audioSrc متطابقان في الحالة
-              if (audioPath && audioSrc) {
-                const pathAfterBase = audioSrc.replace(API_BASE_URL, '');
-                if (pathAfterBase !== audioPath) {
-                  console.warn('⚠️ URL case mismatch detected:', {
-                    originalPath: audioPath,
-                    constructedPath: pathAfterBase,
-                    fullUrl: audioSrc
-                  });
-                }
-              }
-              
-              // ✅ Debug: طباعة معلومات الصوت للتأكد من أن URL صحيح
-              console.log('🎵 Audio Player Debug:', {
-                originalAudioPath: audioPath,
-                API_BASE_URL: API_BASE_URL,
-                finalAudioSrc: audioSrc,
-                isFullUrl: audioSrc.startsWith('http'),
-                willRequestFrom: audioSrc.startsWith('http') ? 'API Server ✅' : 'localhost ❌ (WRONG!)',
-                envVars: {
-                  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
-                  VITE_API_URL: import.meta.env.VITE_API_URL
-                },
-                attemptListeningClip: attempt?.listeningClip
-              });
-              
-              // ✅ التحقق من أن audioSrc هو full URL
-              if (!audioSrc || !audioSrc.startsWith('http')) {
-                console.error('❌ CRITICAL ERROR: audioSrc is not a full URL!', {
-                  audioSrc,
-                  API_BASE_URL,
-                  audioPath,
-                  message: 'المتصفح سيحاول طلب الملف من localhost بدلاً من السيرفر!'
-                });
-                return null; // لا نعرض audio player إذا كان URL غير صحيح
-              }
-              
-              return (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold text-blue-700">
-                      🎵 {attempt.listeningClip?.teil ? `Teil ${attempt.listeningClip.teil}` : 'ملف الاستماع'}
-                    </span>
-                  </div>
-                  <audio 
-                    controls 
-                    preload="metadata" 
-                    src={audioSrc} 
-                    className="w-full"
-                    onError={(e) => {
-                      const audioEl = e.target;
-                      const error = audioEl.error;
-                      let errorMessage = 'Unknown error';
-                      let errorCode = null;
-                      
-                      if (error) {
-                        switch (error.code) {
-                          case error.MEDIA_ERR_ABORTED:
-                            errorMessage = 'The user aborted the audio';
-                            errorCode = 'MEDIA_ERR_ABORTED';
-                            break;
-                          case error.MEDIA_ERR_NETWORK:
-                            errorMessage = 'A network error occurred while fetching the audio';
-                            errorCode = 'MEDIA_ERR_NETWORK';
-                            break;
-                          case error.MEDIA_ERR_DECODE:
-                            errorMessage = 'An error occurred while decoding the audio';
-                            errorCode = 'MEDIA_ERR_DECODE';
-                            break;
-                          case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                            errorMessage = 'The audio format is not supported by your browser';
-                            errorCode = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
-                            break;
-                          default:
-                            errorMessage = `Unknown error (code: ${error.code})`;
-                            errorCode = error.code;
-                        }
-                      }
-                      
-                      // ✅ محاولة إصلاح مشكلة الحالة (case) - إذا كان الملف بحرف كبير
-                      if (errorCode === error.MEDIA_ERR_NETWORK || errorCode === error.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-                        const pathAfterBase = audioSrc.replace(API_BASE_URL, '');
-                        const filename = pathAfterBase.split('/').pop() || '';
-                        if (filename && filename.toLowerCase().startsWith('listening')) {
-                          // محاولة استخدام الحرف الكبير
-                          const correctedPath = pathAfterBase.replace(/listening/i, (match) => {
-                            return match.charAt(0).toUpperCase() + match.slice(1);
-                          });
-                          const correctedSrc = `${API_BASE_URL}${correctedPath}`;
-                          console.warn('⚠️ Attempting to fix case sensitivity:', {
-                            original: audioSrc,
-                            corrected: correctedSrc
-                          });
-                          // تحديث src
-                          audioEl.src = correctedSrc;
-                          return; // لا نطبع الخطأ بعد
-                        }
-                      }
-                      
-                      console.error('❌ Audio playback error:', {
-                        errorMessage,
-                        errorCode,
-                        audioSrc,
-                        originalAudioPath: audioPath,
-                        audioElement: audioEl,
-                        networkState: audioEl.networkState,
-                        readyState: audioEl.readyState,
-                        error: error,
-                        suggestion: 'تحقق من: 1) CORS على السيرفر 2) الملف موجود 3) MIME type صحيح 4) حالة الحروف في اسم الملف'
-                      });
-                    }}
-                    onLoadStart={() => {
-                      console.log('✅ Audio loading started:', audioSrc);
-                    }}
-                    onCanPlay={() => {
-                      console.log('✅ Audio can play:', audioSrc);
-                    }}
-                    onLoadedMetadata={(e) => {
-                      console.log('✅ Audio metadata loaded:', {
-                        duration: e.target.duration,
-                        src: audioSrc
-                      });
-                    }}
-                  >
-                    المتصفح لا يدعم تشغيل الملفات الصوتية
-                  </audio>
-                </div>
-              );
-            })()}
-
             {/* نص القراءة - يظهر مرة واحدة فوق الأسئلة */}
             {attempt.readingText && (
               <div className="reading-text-card bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
@@ -1306,74 +1494,120 @@ function ExamPage() {
               </div>
             )}
 
-            {/* عرض كل الأسئلة */}
+            {/* Section title when filtering */}
+            {hasSections && selectedSectionKey && !selectedExercise && (() => {
+              const activeSection = sectionsOverview.find(s => s.key === selectedSectionKey);
+              if (!activeSection) return null;
+              return (
+                <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4 flex items-center gap-3">
+                  <span className="text-xl">{SKILL_ICONS[activeSection.skill] || '📄'}</span>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">{activeSection.title}</h2>
+                    <p className="text-xs text-slate-500">
+                      {hasExercises
+                        ? `${currentSectionData.exercises.length} تمرين`
+                        : `${displayedItems.length} سؤال`}
+                      {activeSection.timeLimitMin > 0 && ` • ${activeSection.timeLimitMin} دقيقة`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ✅ وضع التمارين: عرض قائمة التمارين */}
+            {hasSections && selectedSectionKey && hasExercises && !selectedExercise && !loadingExercises && (
+              <ExercisesList
+                exercises={currentSectionData.exercises}
+                onSelectExercise={setSelectedExercise}
+                answers={answers}
+                questionIdToItemIndex={questionIdToItemIndex}
+              />
+            )}
+
+            {/* ✅ تحميل التمارين */}
+            {loadingExercises && (
+              <div className="text-center py-8">
+                <div className="inline-block w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                <p className="text-sm text-slate-500">جاري تحميل التمارين...</p>
+              </div>
+            )}
+
+            {/* ✅ وضع التمرين المختار: عنوان التمرين + زر رجوع + صوت */}
+            {selectedExercise && (
+              <div className="mb-6">
+                <button
+                  onClick={() => setSelectedExercise(null)}
+                  className="text-xs text-slate-500 hover:text-slate-700 transition-colors mb-3 inline-block"
+                >
+                  ← العودة لقائمة التمارين
+                </button>
+                <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4">
+                  <h2 className="text-base font-bold text-slate-900">
+                    Übung {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}{selectedExercise.title ? `: ${selectedExercise.title}` : ''}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {selectedExercise.questionCount || selectedExercise.questions?.length || 0} سؤال
+                  </p>
+                </div>
+                {/* مشغل صوت التمرين */}
+                {selectedExercise.audioUrl && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                    <span className="text-sm font-semibold text-blue-700 mb-2 block">
+                      🎵 ملف الاستماع
+                    </span>
+                    <audio
+                      controls
+                      preload="metadata"
+                      src={toApiUrl(selectedExercise.audioUrl)}
+                      className="w-full"
+                    >
+                      المتصفح لا يدعم تشغيل الملفات الصوتية
+                    </audio>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* عرض الأسئلة - لا تعرض إذا كان هناك تمارين ولم يتم اختيار تمرين */}
+            {!(hasSections && selectedSectionKey && hasExercises && !selectedExercise) && !loadingExercises && (
+            <>
+            {displayedItems.length === 0 && hasSections && selectedSectionKey && (
+              <div className="text-center text-slate-500 text-sm bg-slate-50 border border-slate-200 rounded-xl py-8 mb-6">
+                لا توجد أسئلة في هذا القسم
+              </div>
+            )}
             <div className="space-y-6 mb-6">
-          {attempt.items.map((item, itemIndex) => {
-            // ✅ قاعدة عرض بسيطة: لا نعرض audio للسؤال إلا إذا كان مختلف عن صوت القسم
-            // 1. صوت القسم (section audio)
-            const sectionAudio = attempt?.listeningClip?.audioUrl || null;
-            
-            // 2. صوت السؤال (من question.media.url مباشرة - الحل الصحيح)
-            // ✅ استخدام question.media.url مباشرة بدلاً من mediaSnapshot
+          {displayedItems.map((item, displayIndex) => {
+            // Get the global index for this item (for answers tracking); للعناصر من القسم (_fromSection) نستخدم مفتاحاً بالـ questionId
+            const rawItemIndex = attempt.items.indexOf(item);
+            const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
+            const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? displayIndex + 1 : rawItemIndex + 1;
+            const itemOverride = item._fromSection ? item : undefined;
+            // صوت السؤال (من question.media أو mediaSnapshot)
             const questionMedia = item.question?.media || item.questionSnapshot?.media;
             const questionMediaUrl = questionMedia?.url;
             const questionMediaType = questionMedia?.type || (questionMediaUrl ? 'audio' : null);
-            
-            const questionAudio = (questionMediaType === "audio") 
+
+            const questionAudio = (questionMediaType === "audio")
               ? questionMediaUrl
-              : (item.mediaSnapshot?.type === "audio" 
+              : (item.mediaSnapshot?.type === "audio"
                 ? (item.mediaSnapshot.url || item.mediaSnapshot.key || null)
                 : null);
+
+            // عرض صوت السؤال فقط إذا الـ exercise ما عنده صوت مشترك
+            const exerciseHasAudio = !!selectedExercise?.audioUrl;
+            const shouldShowQuestionAudio = !!questionAudio && !exerciseHasAudio;
             
-            // 3. شرط العرض: نعرض صوت السؤال فقط إذا كان موجود ومختلف عن صوت القسم
-            const shouldShowQuestionAudio = !!questionAudio && questionAudio !== sectionAudio;
-            
-            // Debug: طباعة معلومات الصوت لكل سؤال
-            console.log(`🎵 Question ${itemIndex + 1} Audio Logic:`, {
-              sectionAudio,
-              questionAudio,
-              shouldShowQuestionAudio,
-              questionMediaUrl,
-              questionMediaType,
-              mediaSnapshot: item.mediaSnapshot
-            });
-            
-            // قراءة prompt من promptSnapshot أولاً (الحقل الصحيح من الباك)
+            // قراءة prompt بأمان (يتحمل قيم غريبة مثل "9"9" أو object)
             const qType = item.qType || item.question?.qType || item.questionSnapshot?.qType || item.type || 'mcq';
-            // ✅ قراءة prompt من promptSnapshot (قد يكون string مباشرة أو object)
-            const promptSnapshotValue = typeof item.promptSnapshot === 'string' 
-              ? item.promptSnapshot 
-              : (item.promptSnapshot?.text || item.promptSnapshot?.prompt || item.promptSnapshot);
             const prompt =
-              promptSnapshotValue ||           // الحقل الصحيح من الباك
-              item.prompt ||                   // fallback للشكل القديم
-              item.text ||                     // fallback
-              'لا يوجد نص للسؤال';             // fallback نهائي
-            
-            // قراءة options من optionsText و optionOrder (الحقل الصحيح من الباك)
-            let options = [];
-            if (item.optionsText && item.optionOrder) {
-              // optionsText هو object، و optionOrder هو array من indexes
-              options = item.optionOrder.map((idx) => {
-                const optionText = item.optionsText[idx] || item.optionsText[String(idx)];
-                return typeof optionText === 'string' ? optionText : (optionText?.text || optionText);
-              });
-            } else if (item.optionsText && typeof item.optionsText === 'object') {
-              // لو optionsText موجود لكن optionOrder مش موجود، نستخدم keys
-              options = Object.values(item.optionsText).map(opt => 
-                typeof opt === 'string' ? opt : (opt?.text || opt)
-              );
-            } else if (Array.isArray(item.optionsText)) {
-              // لو optionsText هو array مباشرة
-              options = item.optionsText.map(opt => 
-                typeof opt === 'string' ? opt : (opt?.text || opt)
-              );
-            } else if (item.options) {
-              // fallback للشكل القديم
-              options = (item.options || []).map(opt => 
-                typeof opt === 'string' ? opt : (opt.text || opt)
-              );
-            }
+              safePromptString(item.promptSnapshot) ||
+              safePromptString(item.prompt) ||
+              safePromptString(item.text) ||
+              'لا يوجد نص للسؤال';
+
+            // قراءة options بأمان (لا نستدعي .map إلا على مصفوفات)
+            const options = safeOptionsArray(item);
 
             // ✅ استخدام معرف فريد للسؤال (questionId أو id) بدلاً من itemIndex
             // ✅ إضافة itemIndex للتأكد من التفرد حتى لو كان questionId متكرراً
@@ -1421,7 +1655,7 @@ function ExamPage() {
                       {/* رقم السؤال */}
                       <div className="flex items-center gap-2 mb-4 justify-end">
                         <span className="text-xs font-semibold px-2 py-1 bg-red-600 text-white rounded">
-                          سؤال {itemIndex + 1}
+                          سؤال {displayNumber}
                         </span>
                         {item.points && (
                           <span className="text-[10px] text-slate-400">
@@ -1431,10 +1665,10 @@ function ExamPage() {
                       </div>
 
                       {/* Media (Audio/Image/Video) - من question.media.url مباشرة */}
-                      {/* ✅ لا نعرض audio داخل السؤال إذا كان نفس listeningClip.audioUrl */}
+                      {/* Media (Audio/Image/Video) */}
                       {(() => {
                         // ✅ استخدام question.media.url مباشرة (الحل الصحيح)
-                        // أولوية: question.media.url > questionSnapshot.media.url > بناء من mediaSnapshot.key > mediaSnapshot.url (fallback) > mediaUrl (قديم)
+                        // أولوية: question.media.url > questionSnapshot.media.url > بناء من mediaSnapshot.key > mediaSnapshot.url (fallback)
                         const questionMedia = item.question?.media || item.questionSnapshot?.media;
                         let questionMediaUrl = questionMedia?.url;
                         const questionMediaType = questionMedia?.type;
@@ -1469,23 +1703,12 @@ function ExamPage() {
                           itemKeys: Object.keys(item)
                         });
                         
-                        // ✅ قاعدة عرض بسيطة: لا نعرض audio للسؤال إلا إذا كان مختلف عن صوت القسم
-                        const sectionAudioForOldLogic = attempt?.listeningClip?.audioUrl || null;
-                        const questionAudioForOldLogic = (finalMediaType === "audio") 
-                          ? questionMediaUrl
-                          : null;
-                        const shouldShowQuestionAudioForOldLogic = !!questionAudioForOldLogic && questionAudioForOldLogic !== sectionAudioForOldLogic;
-                        
-                        // Fallback للشكل القديم (mediaSnapshot.url أو mediaUrl) - فقط إذا لم يكن هناك question.media.url ولا يمكن بناءه من key
+                        // عرض صوت السؤال إذا كان موجوداً (الصوت الآن في mediaSnapshot لكل سؤال)
+                        const shouldShowQuestionAudioForOldLogic = finalMediaType === "audio" && !!questionMediaUrl && !exerciseHasAudio;
+
+                        // Fallback: mediaSnapshot (إذا لم يكن هناك question.media)
                         const mediaSnapshot = item.mediaSnapshot;
-                        // ✅ hasMediaSnapshot: فقط إذا كان mediaSnapshot موجود ولم نتمكن من بناء اللينك من key أو question.media
                         const hasMediaSnapshot = mediaSnapshot && mediaSnapshot.type && mediaSnapshot.url && !questionMediaUrl;
-                        const hasOldMedia = item.mediaUrl && !sectionAudioForOldLogic && !questionMediaUrl;
-                        
-                        // ✅ لا نعرض audio إذا كان نفس صوت القسم
-                        if (finalMediaType === 'audio' && !shouldShowQuestionAudioForOldLogic && !hasOldMedia && !hasMediaSnapshot) {
-                          return null;
-                        }
                         
                         // ✅ معالجة imagesSnapshot - إذا كان هناك عدة صور
                         // نستخدم متغير خارجي لحفظ الصور لعرضها بعد نص السؤال
@@ -1803,7 +2026,7 @@ function ExamPage() {
                             imagesSnapshotCount: imagesSnapshot.length
                           });
                           
-                          if (finalMediaType === 'audio' && mediaSrc) {
+                          if (finalMediaType === 'audio' && mediaSrc && !exerciseHasAudio) {
                             // ✅ إصلاح mime type لملفات .opus
                             const correctMime = getCorrectMimeType(mediaSrc, questionMedia?.mime || item.mediaSnapshot?.mime);
                             return (
@@ -1841,13 +2064,11 @@ function ExamPage() {
                           return null;
                         }
                         
-                        // Fallback: استخدام mediaSnapshot (من محاولة الامتحان) - فقط إذا لم يكن هناك question.media
-                        // ✅ للصور والفيديو: نعرضها دائماً إذا كانت موجودة
-                        // ✅ للصوت: نعرضها فقط إذا كانت مختلفة عن صوت القسم
+                        // Fallback: استخدام mediaSnapshot - فقط إذا لم يكن هناك question.media
                         const shouldShowMediaSnapshot = hasMediaSnapshot && (
-                          mediaSnapshot.type === 'image' || 
-                          mediaSnapshot.type === 'video' || 
-                          (mediaSnapshot.type === 'audio' && shouldShowQuestionAudioForOldLogic)
+                          mediaSnapshot.type === 'image' ||
+                          mediaSnapshot.type === 'video' ||
+                          mediaSnapshot.type === 'audio'
                         );
                         
                         if (shouldShowMediaSnapshot) {
@@ -1863,7 +2084,7 @@ function ExamPage() {
                             type: mediaSnapshot.type
                           });
                           
-                          if (mediaSnapshot.type === 'audio' && mediaSrc) {
+                          if (mediaSnapshot.type === 'audio' && mediaSrc && !exerciseHasAudio) {
                             // ✅ إصلاح mime type لملفات .opus
                             const correctMime = getCorrectMimeType(rawMediaPath, mediaSnapshot.mime);
                             return (
@@ -1908,32 +2129,6 @@ function ExamPage() {
                           }
                         }
                         
-                        // Fallback للشكل القديم (mediaUrl)
-                        if (hasOldMedia) {
-                          // ✅ استخدام toApiUrl لتحويل URL النسبي إلى full URL
-                          const oldMediaSrc = toApiUrl(item.mediaUrl);
-                          // ✅ إصلاح mime type لملفات .opus
-                          const correctMime = getCorrectMimeType(item.mediaUrl, item.mediaType === 'audio' ? 'audio/mpeg' : null);
-                          
-                          return (
-                            <div className="mb-4">
-                              {item.mediaType === 'audio' && (
-                                <audio controls src={oldMediaSrc} className="w-full" style={{ width: '100%' }}>
-                                  المتصفح لا يدعم تشغيل الملفات الصوتية
-                                </audio>
-                              )}
-                              {item.mediaType === 'image' && (
-                                <img src={oldMediaSrc} alt="Question" className="w-full max-w-md rounded-lg" />
-                              )}
-                              {item.mediaType === 'video' && (
-                                <video controls src={oldMediaSrc} className="w-full">
-                                  المتصفح لا يدعم تشغيل الفيديو
-                                </video>
-                              )}
-                            </div>
-                          );
-                        }
-                        
                         return null;
                       })()}
 
@@ -1953,7 +2148,7 @@ function ExamPage() {
                               itemIndex={itemIndex}
                               answers={answers}
                               setAnswers={setAnswers}
-                              saveAnswer={saveAnswer}
+                              saveAnswer={(idx, qid, ans) => saveAnswer(idx, qid, ans, itemOverride)}
                               isSubmitted={isSubmitted}
                               questionId={item.questionId}
                             />
@@ -2124,7 +2319,7 @@ function ExamPage() {
                                           saveAnswer(itemIndex, item.questionId, {
                                             ...newAnswers[itemIndex],
                                             interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
-                                          });
+                                          }, itemOverride);
                                         }}
                                         className="mx-1 px-2 py-1 border border-slate-300 rounded bg-white text-slate-900 min-w-[100px]"
                                       >
@@ -2156,7 +2351,7 @@ function ExamPage() {
                                           saveAnswer(itemIndex, item.questionId, {
                                             ...newAnswers[itemIndex],
                                             interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
-                                          });
+                                          }, itemOverride);
                                         }}
                                         placeholder={blank.hint || `فراغ ${blank.id.toUpperCase()}`}
                                         className="mx-1 px-2 py-1 border border-slate-300 rounded bg-white text-slate-900 min-w-[120px]"
@@ -2242,7 +2437,7 @@ function ExamPage() {
                                           window.saveTimeout = setTimeout(() => {
                                             saveAnswer(itemIndex, item.questionId, {
                                               fillAnswers: newAnswers[itemIndex].fillAnswers
-                                            });
+                                            }, itemOverride);
                                           }, 1000);
                                         }}
                                         className="inline-input-fill"
@@ -2435,7 +2630,7 @@ function ExamPage() {
                                 onClick={() => {
                                   // لكل سؤال، خزني خيار واحد فقط (يحل محل القديم)
                                   handleAnswerChange(itemIndex, optIdx, 'mcq');
-                                  saveAnswer(itemIndex, item.questionId, optIdx);
+                                  saveAnswer(itemIndex, item.questionId, optIdx, itemOverride);
                                 }}
                                 disabled={isSubmitted}
                                 className={`w-full flex items-center gap-3 p-3 rounded-lg border text-base transition ${
@@ -2465,7 +2660,7 @@ function ExamPage() {
                           <button
                             onClick={() => {
                               handleAnswerChange(itemIndex, true, 'true_false');
-                              saveAnswer(itemIndex, item.questionId, true);
+                              saveAnswer(itemIndex, item.questionId, true, itemOverride);
                             }}
                             disabled={isSubmitted}
                             className={`w-full flex items-center gap-3 p-3 rounded-lg border text-base transition ${
@@ -2489,7 +2684,7 @@ function ExamPage() {
                           <button
                             onClick={() => {
                               handleAnswerChange(itemIndex, false, 'true_false');
-                              saveAnswer(itemIndex, item.questionId, false);
+                              saveAnswer(itemIndex, item.questionId, false, itemOverride);
                             }}
                             disabled={isSubmitted}
                             className={`w-full flex items-center gap-3 p-3 rounded-lg border text-base transition ${
@@ -2653,7 +2848,7 @@ function ExamPage() {
                                         handleAnswerChange(itemIndex, newAnswer, 'match');
                                         clearTimeout(window.saveTimeout);
                                         window.saveTimeout = setTimeout(() => {
-                                          saveAnswer(itemIndex, item.questionId, newAnswer);
+                                          saveAnswer(itemIndex, item.questionId, newAnswer, itemOverride);
                                         }, 500);
                                       }}
                                       className="flex-1 p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-red-500"
@@ -2686,7 +2881,7 @@ function ExamPage() {
                               handleAnswerChange(itemIndex, e.target.value, 'free_text');
                               clearTimeout(window.saveTimeout);
                               window.saveTimeout = setTimeout(() => {
-                                saveAnswer(itemIndex, item.questionId, e.target.value);
+                                saveAnswer(itemIndex, item.questionId, e.target.value, itemOverride);
                               }, 1000);
                             }}
                             placeholder="اكتب إجابتك النصية هنا..."
@@ -2715,11 +2910,86 @@ function ExamPage() {
                           isSubmitted={isSubmitted}
                           onAnswerChange={(audioUrl) => {
                             handleAnswerChange(itemIndex, audioUrl, 'speaking');
-                            saveAnswer(itemIndex, item.questionId, audioUrl);
+                            saveAnswer(itemIndex, item.questionId, audioUrl, itemOverride);
                           }}
                           minDuration={item.minDuration}
                           maxDuration={item.maxDuration}
                         />
+                      )}
+
+                      {/* ✅ زر "تحقق" + نتيجة الفحص — يظهر فقط داخل الأقسام وقبل التسليم */}
+                      {!isSubmitted && selectedSectionKey && qType !== 'free_text' && qType !== 'speaking' && (
+                        <div className="mt-3">
+                          {/* زر تحقق */}
+                          {!checkedQuestions[itemIndex]?.isCorrect && !checkedQuestions[itemIndex]?.error && (
+                            <button
+                              onClick={() => handleCheckAnswer(itemIndex, item.questionId, itemOverride)}
+                              disabled={!answers[itemIndex] || checkedQuestions[itemIndex]?.checking}
+                              className="px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed bg-blue-500 text-white hover:bg-blue-600"
+                            >
+                              {checkedQuestions[itemIndex]?.checking ? 'جاري الفحص...' : 'تحقق'}
+                            </button>
+                          )}
+
+                          {/* نتيجة الفحص */}
+                          {checkedQuestions[itemIndex] && !checkedQuestions[itemIndex].checking && !checkedQuestions[itemIndex].error && (
+                            <div className={`mt-2 p-3 rounded-lg border text-sm ${
+                              checkedQuestions[itemIndex].isCorrect
+                                ? 'bg-green-50 border-green-300 text-green-800'
+                                : 'bg-red-50 border-red-300 text-red-800'
+                            }`}>
+                              <div className="font-semibold mb-1">
+                                {checkedQuestions[itemIndex].isCorrect ? '✓ إجابة صحيحة' : '✗ إجابة خاطئة'}
+                                <span className="text-xs font-normal mr-2">
+                                  ({checkedQuestions[itemIndex].score}/{checkedQuestions[itemIndex].maxPoints} نقطة)
+                                </span>
+                              </div>
+
+                              {/* عرض الإجابة الصحيحة عند الخطأ */}
+                              {!checkedQuestions[itemIndex].isCorrect && checkedQuestions[itemIndex].correctAnswer && (() => {
+                                const ca = checkedQuestions[itemIndex].correctAnswer;
+                                const cqType = checkedQuestions[itemIndex].qType || qType;
+                                let correctText = '';
+
+                                if ((cqType === 'mcq' || cqType === 'listen') && ca.correctOptionIndexes) {
+                                  const opts = safeOptionsArray(item);
+                                  correctText = ca.correctOptionIndexes.map(i => opts[i] || `خيار ${i + 1}`).join('، ');
+                                } else if (cqType === 'true_false' && ca.correctOptionIndexes) {
+                                  correctText = ca.correctOptionIndexes[0] === 0 ? 'صحيح' : 'خطأ';
+                                } else if (cqType === 'fill' && ca.fillExact) {
+                                  correctText = Array.isArray(ca.fillExact) ? ca.fillExact.join(' / ') : ca.fillExact;
+                                } else if (cqType === 'match' && ca.answerKeyMatch) {
+                                  correctText = ca.answerKeyMatch.map(p => `${p[0]} → ${p[1]}`).join('، ');
+                                } else if (cqType === 'reorder' && ca.answerKeyReorder) {
+                                  correctText = ca.answerKeyReorder.join(' → ');
+                                } else if (cqType === 'interactive_text' && (ca.interactiveBlanks || ca.interactiveReorder)) {
+                                  if (ca.interactiveBlanks) {
+                                    correctText = ca.interactiveBlanks.map(b => `${b.id || ''}: ${b.answer || b.text || ''}`).join('، ');
+                                  }
+                                }
+
+                                return correctText ? (
+                                  <div className="text-xs mt-1">
+                                    <span className="font-medium">الإجابة الصحيحة: </span>{correctText}
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
+                          )}
+
+                          {/* خطأ بالفحص */}
+                          {checkedQuestions[itemIndex]?.error && (
+                            <div className="mt-2 p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs">
+                              حدث خطأ أثناء الفحص. حاول مرة أخرى.
+                              <button
+                                onClick={() => setCheckedQuestions(prev => { const n = {...prev}; delete n[itemIndex]; return n; })}
+                                className="mr-2 underline"
+                              >
+                                إعادة المحاولة
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                 </div>
               </div>
@@ -2727,18 +2997,107 @@ function ExamPage() {
           })}
             </div>
 
-            {/* زر تسليم الامتحان - فقط إذا لم يتم التسليم */}
-            <div className="flex justify-end mt-8">
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || isSubmitted}
-                className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
-              >
-                {submitting ? 'جاري التسليم…' : isSubmitted ? 'تم التسليم' : '✅ تسليم الامتحان'}
-              </button>
-            </div>
+            {/* ✅ نتيجة القسم الحالي */}
+            {selectedSectionKey && sectionSummaries[selectedSectionKey]?.data && (
+              <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <h3 className="text-base font-bold text-slate-800">
+                  نتيجة القسم
+                </h3>
+                {(() => {
+                  const s = sectionSummaries[selectedSectionKey].data;
+                  const pct = s.percent ?? Math.round((s.score / (s.maxScore || 1)) * 100);
+                  return (
+                    <>
+                      {/* شريط النسبة */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{pct}%</span>
+                      </div>
+
+                      {/* إحصائيات */}
+                      <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                        <div className="bg-green-50 rounded-lg p-2">
+                          <div className="text-lg font-bold text-green-700">{s.correct}</div>
+                          <div className="text-green-600">صحيحة</div>
+                        </div>
+                        <div className="bg-red-50 rounded-lg p-2">
+                          <div className="text-lg font-bold text-red-700">{s.wrong}</div>
+                          <div className="text-red-600">خاطئة</div>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg p-2">
+                          <div className="text-lg font-bold text-slate-700">{s.unanswered}</div>
+                          <div className="text-slate-600">بدون إجابة</div>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-slate-500 text-center">
+                        النقاط: {s.score} / {s.maxScore}
+                      </div>
+
+                      {/* تفاصيل كل سؤال */}
+                      {s.questions && s.questions.length > 0 && (
+                        <div className="space-y-2 mt-3">
+                          <p className="text-xs font-semibold text-slate-600">تفاصيل الأسئلة:</p>
+                          {s.questions.map((q, qi) => (
+                            <div key={q.questionId || qi} className={`flex items-center justify-between text-xs p-2 rounded-lg border ${
+                              !q.hasAnswer ? 'bg-slate-50 border-slate-200' : q.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                            }`}>
+                              <span className="font-medium">سؤال {qi + 1}</span>
+                              <span>
+                                {!q.hasAnswer ? '— لم تتم الإجابة' : q.isCorrect ? '✓ صحيح' : '✗ خطأ'}
+                                <span className="text-slate-400 mr-1">({q.score}/{q.maxPoints})</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ✅ زر إنهاء القسم — يظهر فقط داخل قسم مختار ولم يتم عرض نتيجته بعد */}
+            {selectedSectionKey && !sectionSummaries[selectedSectionKey]?.data && !isSubmitted && (
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => handleFinishSection(selectedSectionKey)}
+                  disabled={sectionSummaries[selectedSectionKey]?.loading}
+                  className="px-5 py-2.5 bg-blue-500 text-white text-sm font-semibold rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  {sectionSummaries[selectedSectionKey]?.loading ? 'جاري التحميل...' : 'إنهاء القسم وعرض النتيجة'}
+                </button>
+              </div>
+            )}
+
+            {/* ✅ زر تسليم الامتحان — يظهر فقط إذا ما في أقسام، أو كل الأقسام تم إنهاؤها */}
+            {!isSubmitted && (() => {
+              const allSectionsFinished = hasSections && sectionsOverview
+                ? sectionsOverview.every(sec => sectionSummaries[sec.sectionKey || sec.key]?.data)
+                : true; // لا أقسام → يظهر مباشرة
+              return (!hasSections || allSectionsFinished) ? (
+                <div className="flex justify-end mt-8">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {submitting ? 'جاري التسليم…' : '✅ تسليم الامتحان'}
+                  </button>
+                </div>
+              ) : null;
+            })()}
+            </>
+            )}
           </>
         )}
+
+        </div>{/* End Main Content */}
       </div>
     </div>
   );
