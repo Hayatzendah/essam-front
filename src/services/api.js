@@ -335,6 +335,12 @@ export const deleteVocabularyWord = async (topicId, wordId) => {
   return response.data;
 };
 
+// 6. إعادة ترتيب الكلمات
+export const reorderVocabularyWords = async (wordIds) => {
+  const response = await api.patch('/vocabulary-words/reorder', { topicIds: wordIds });
+  return response.data;
+};
+
 // 3. جلب أسئلة القواعد المتعلقة بالموضوع
 export const getGrammarQuestions = async ({ level, tags, page = '1', limit = '20' }) => {
   const response = await api.get('/questions/grammar', {
