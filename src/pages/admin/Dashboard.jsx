@@ -37,6 +37,12 @@ function Dashboard() {
             <p>أضف سؤالاً جديداً للامتحانات</p>
           </div>
 
+          <div className="dashboard-card" onClick={() => navigate('/admin/questions/bulk-create')}>
+            <div className="card-icon">📦</div>
+            <h3>إضافة أسئلة متعددة</h3>
+            <p>أضف عدة أسئلة دفعة واحدة (مع صوت أو فقرة قراءة)</p>
+          </div>
+
           <div className="dashboard-card" onClick={() => navigate('/admin/questions')}>
             <div className="card-icon">📋</div>
             <h3>عرض جميع الأسئلة</h3>
@@ -53,6 +59,12 @@ function Dashboard() {
             <div className="card-icon">📊</div>
             <h3>الإحصائيات</h3>
             <p>عرض إحصائيات النظام</p>
+          </div>
+
+          <div className="dashboard-card" onClick={() => navigate('/admin/vocabulary/topics')}>
+            <div className="card-icon">📚</div>
+            <h3>إدارة مواضيع المفردات</h3>
+            <p>إضافة وإدارة مواضيع المفردات والكلمات</p>
           </div>
         </div>
       </div>

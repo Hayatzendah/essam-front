@@ -2,77 +2,81 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usersAPI } from '../../services/usersAPI';
 import { examsAPI } from '../../services/examsAPI';
-import { authAPI } from '../../services/api';
-import StateSelectionModal from './StateSelectionModal';
-import './LebenInDeutschland.css';
+
+const GERMAN_STATES = [
+  'Baden-Württemberg',
+  'Bayern',
+  'Berlin',
+  'Brandenburg',
+  'Bremen',
+  'Hamburg',
+  'Hessen',
+  'Mecklenburg-Vorpommern',
+  'Niedersachsen',
+  'Nordrhein-Westfalen',
+  'Rheinland-Pfalz',
+  'Saarland',
+  'Sachsen',
+  'Sachsen-Anhalt',
+  'Schleswig-Holstein',
+  'Thüringen',
+];
 
 function LebenInDeutschland() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const [selectedState, setSelectedState] = useState('');
   const [availableExams, setAvailableExams] = useState([]);
   const [error, setError] = useState('');
-  const [showStateModal, setShowStateModal] = useState(false);
   const [loadingExams, setLoadingExams] = useState(false);
 
   useEffect(() => {
-    loadUserData();
+    loadUserState();
   }, []);
 
-  const loadUserData = async () => {
+  useEffect(() => {
+    if (selectedState) {
+      loadAvailableExams(selectedState);
+    }
+  }, [selectedState]);
+
+  const loadUserState = async () => {
     try {
       setLoading(true);
       const userData = await usersAPI.getMe();
-      setUser(userData);
 
-      // إذا لم يكن لدى المستخدم ولاية محددة، نعرض Modal
-      if (!userData.state) {
-        setShowStateModal(true);
-      } else {
-        // جلب الامتحانات المتاحة فقط (بدون جلب الأسئلة مباشرة)
-        await loadAvailableExams(userData.state);
+      // إذا كان المستخدم لديه ولاية محفوظة، نستخدمها
+      if (userData.state) {
+        setSelectedState(userData.state);
       }
     } catch (err) {
       console.error('Error loading user data:', err);
-      
-      // معالجة خاصة لخطأ 502
-      if (err.response?.status === 502) {
-        setError(
-          '❌ لا يمكن الوصول إلى الـ Backend. تأكد من أن السيرفر يعمل على http://localhost:4000'
-        );
+
+      if (err.response?.status === 401) {
+        navigate('/login');
+      } else if (err.response?.status === 502) {
+        setError('❌ لا يمكن الوصول إلى الـ Backend. تأكد من أن السيرفر يعمل على http://localhost:4000');
       } else {
-        setError(
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          'حدث خطأ أثناء تحميل البيانات'
-        );
+        setError(err.response?.data?.message || 'حدث خطأ أثناء تحميل البيانات');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStateSelect = async (state) => {
+  const handleStateChange = async (newState) => {
     try {
-      // تحديث ولاية المستخدم في قاعدة البيانات
-      const updatedUser = await usersAPI.updateState(state);
-      setUser(updatedUser);
-      
+      setSelectedState(newState);
+
+      // حفظ الولاية في قاعدة البيانات
+      await usersAPI.updateState(newState);
+
       // تحديث localStorage
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      localStorage.setItem('user', JSON.stringify({ ...currentUser, state }));
-      
-      // جلب الامتحانات المتاحة فقط
-      await loadAvailableExams(state);
+      localStorage.setItem('user', JSON.stringify({ ...currentUser, state: newState }));
     } catch (err) {
       console.error('Error updating state:', err);
-      
-      // معالجة خاصة لخطأ 502
-      if (err.response?.status === 502) {
-        throw new Error('❌ لا يمكن الوصول إلى الـ Backend. تأكد من أن السيرفر يعمل.');
-      }
-      
-      throw err;
+      setError(err.response?.data?.message || 'حدث خطأ أثناء حفظ الولاية');
     }
   };
 
@@ -80,63 +84,24 @@ function LebenInDeutschland() {
     try {
       setLoadingExams(true);
       setError('');
-      
-      // جلب الامتحانات المتاحة لـ Leben in Deutschland
-      // استخدام /exams?status=published&state=Bayern&provider=LiD
-      // محاولة البحث بـ 'LiD' أولاً (كما في CreateExam.jsx)، ثم 'Deutschland-in-Leben' كبديل
-      let response;
-      try {
-        // محاولة استخدام /exams/available أولاً
-        response = await examsAPI.getAvailable({
-          provider: 'LiD',
+
+      const response = await examsAPI.getLebenAvailable({
+          provider: 'Deutschland-in-Leben',
           state: state,
         });
-      } catch (err) {
-        // إذا فشل، جرب /exams?status=published&state=...&provider=...
-        try {
-          response = await examsAPI.getAvailableExams({
-            provider: 'LiD',
-            state: state,
-          });
-        } catch (err2) {
-          // إذا فشل أيضاً، جرب 'Deutschland-in-Leben'
-          try {
-            response = await examsAPI.getAvailable({
-              provider: 'Deutschland-in-Leben',
-              state: state,
-            });
-          } catch (err3) {
-            response = await examsAPI.getAvailableExams({
-              provider: 'Deutschland-in-Leben',
-              state: state,
-            });
-          }
-        }
-      }
-      
-      // Response format: { items: [...], count: ... } أو { page, limit, total, items: [...] }
+
       const exams = response.items || response || [];
-      
-      // التحقق من أن كل exam له id (قد يكون _id في MongoDB)
+
       const examsWithId = exams.map(exam => ({
         ...exam,
-        id: exam.id || exam._id, // دعم كل من id و _id
+        id: exam.id || exam._id,
       }));
-      
+
       console.log('Available exams loaded:', examsWithId);
       setAvailableExams(examsWithId);
-      
-      // إذا لم توجد امتحانات، نعرض رسالة واضحة
-      if (exams.length === 0) {
-        setError('لا توجد امتحانات متاحة حالياً. تأكد من أن المعلم أنشأ امتحان بحالة "منشور (Published)" للولاية المحددة.');
-      }
     } catch (err) {
       console.error('Error loading available exams:', err);
-      setError(
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'حدث خطأ أثناء تحميل الامتحانات المتاحة'
-      );
+      setError(err.response?.data?.message || 'حدث خطأ أثناء تحميل الامتحانات المتاحة');
     } finally {
       setLoadingExams(false);
     }
@@ -145,81 +110,56 @@ function LebenInDeutschland() {
   const handleStartExam = async (examId) => {
     try {
       setError('');
-      
-      // التحقق من أن examId موجود وصحيح
+
       if (!examId) {
         throw new Error('معرف الامتحان غير موجود');
       }
-      
-      console.log('🚀 Starting attempt for examId:', examId);
-      
-      // بدء محاولة جديدة - POST /attempts مع { examId }
-      // الـ Backend يختار الأسئلة ويرجع snapshot جاهزة في response.items
-      const attempt = await examsAPI.startAttempt(examId);
-      
-      console.log('✅ Attempt created:', attempt);
-      console.log('📋 Attempt items:', attempt.items);
-      console.log('📊 Items count:', attempt.items?.length || 0);
-      console.log('📦 Full response structure:', JSON.stringify(attempt, null, 2));
-      
-      // Response format حسب Api.md: { attemptId, examId, status, attemptCount, expiresAt, items: [...] }
-      // معالجة محسّنة للـ response structure
-      const attemptId = attempt.attemptId || attempt.id || attempt._id;
-      
+
+      if (!selectedState) {
+        setError('يجب اختيار الولاية أولاً');
+        return;
+      }
+
+      console.log('🚀 Starting Leben exam with:', { examId, state: selectedState });
+
+      // بدء امتحان Leben in Deutschland مع الولاية - استخدام /exams/leben/start
+      const response = await examsAPI.startLebenExam(examId, selectedState);
+
+      console.log('✅ Leben exam response:', response);
+
+      // Response format: { attemptId, exam, questions }
+      const { attemptId, exam, questions } = response;
+
       if (!attemptId) {
-        console.error('❌ No attemptId in response:', attempt);
+        console.error('❌ No attemptId in response:', response);
         throw new Error('لم يتم إرجاع attemptId من السيرفر');
       }
-      
-      // التحقق من وجود items
-      const items = attempt.items || attempt.data?.items || [];
-      if (!Array.isArray(items) || items.length === 0) {
-        console.warn('⚠️ لا توجد items في الـ response');
-        console.warn('   Response structure:', JSON.stringify(attempt, null, 2));
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.warn('⚠️ لا توجد questions في الـ response');
         setError('لا توجد أسئلة في هذا الامتحان. تأكد من أن الامتحان يحتوي على أسئلة.');
         return;
       }
-      
-      console.log('✅ Attempt has', items.length, 'items. Navigating to exam page...');
-      
-      // الانتقال إلى صفحة الامتحان التي تعرض الأسئلة من attempt.items
-      navigate(`/student/exam/${attemptId}`);
-    } catch (err) {
-      console.error('Error starting exam:', err);
-      console.error('Error details:', {
-        status: err.response?.status,
-        data: err.response?.data,
-        message: err.message,
-        examId: examId,
+
+      console.log('✅ Exam has', questions.length, 'questions. Navigating to exam page...');
+
+      // ✅ الانتقال إلى صفحة الامتحان مع تمرير البيانات وإضافة examId في query string
+      navigate(`/student/exam/${attemptId}?examId=${examId}`, {
+        state: {
+          attemptId,
+          exam,
+          questions,
+          examType: 'leben_test',
+        },
       });
-      
-      // معالجة أفضل للأخطاء
+    } catch (err) {
+      console.error('Error starting Leben exam:', err);
+
       let errorMessage = 'حدث خطأ أثناء بدء الامتحان';
-      
+
       if (err.response?.status === 400) {
-        // Bad Request - قد يكون examId غير صحيح
         const errorData = err.response?.data;
-        if (errorData?.message) {
-          errorMessage = errorData.message;
-        } else if (errorData?.error) {
-          errorMessage = typeof errorData.error === 'string' 
-            ? errorData.error 
-            : JSON.stringify(errorData.error);
-        } else if (errorData?.errors) {
-          // إذا كان errors مصفوفة
-          if (Array.isArray(errorData.errors)) {
-            errorMessage = errorData.errors.map(e => 
-              typeof e === 'string' ? e : JSON.stringify(e)
-            ).join(', ');
-          } else {
-            // إذا كان errors object
-            errorMessage = Object.entries(errorData.errors)
-              .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-              .join(' | ');
-          }
-        } else {
-          errorMessage = 'خطأ في البيانات المرسلة. تأكد من أن الامتحان موجود وصحيح.';
-        }
+        errorMessage = errorData?.message || errorData?.error || 'خطأ في البيانات المرسلة';
       } else if (err.response?.status === 404) {
         errorMessage = 'الامتحان غير موجود';
       } else if (err.response?.status === 403) {
@@ -227,163 +167,239 @@ function LebenInDeutschland() {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
     }
   };
 
-  const handleChangeState = () => {
-    setShowStateModal(true);
-  };
-
-  const handleLogout = async () => {
-    await authAPI.logout();
-    navigate('/login');
-  };
-
   if (loading) {
     return (
-      <div className="liden-page">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>جاري التحميل...</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-red-600 mb-4"></div>
+          <p className="text-slate-600">جاري التحميل...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="liden-page">
-      <div className="page-header">
-        <div className="header-content">
-          <h1>🇩🇪 Leben in Deutschland</h1>
-          <p className="page-subtitle">اختبار الحياة في ألمانيا</p>
-        </div>
-        <div className="header-actions">
-          {user?.state && (
-            <div className="state-badge">
-              <span className="state-label">الولاية:</span>
-              <span className="state-name">{user.state}</span>
-              <button
-                onClick={handleChangeState}
-                className="change-state-btn"
-                title="تغيير الولاية"
-              >
-                ✏️
-              </button>
-            </div>
-          )}
-          <button onClick={() => navigate('/welcome')} className="back-btn">
-            ← العودة
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-6xl mx-auto px-4 py-10">
+        {/* شريط أعلى بسيط */}
+        <div className="flex items-center justify-between mb-8">
+          <button
+            onClick={() => navigate('/welcome')}
+            className="text-sm text-slate-500 hover:text-slate-700 transition"
+          >
+            ← العودة للرئيسية
           </button>
-          <button onClick={handleLogout} className="logout-btn">
-            تسجيل الخروج
-          </button>
+          <span className="text-xs font-semibold text-red-600">
+            Deutsch Learning App
+          </span>
         </div>
-      </div>
 
-      <div className="page-content">
+        {/* العنوان الرئيسي */}
+        <div className="text-center mb-10">
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
+            🏠 <span className="text-red-600">Leben in Deutschland</span> Test
+          </h1>
+          <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
+            اختبار الحياة في ألمانيا - 33 سؤال عشوائي: 30 من الأسئلة العامة و3 من أسئلة الولاية المختارة
+          </p>
+        </div>
+
+        {/* اختيار الولاية */}
+        <div className="max-w-md mx-auto mb-10">
+          <label htmlFor="state" className="block text-sm font-medium text-slate-700 mb-2 text-center">
+            اختر ولايتك (Bundesland) 🇩🇪
+          </label>
+          <select
+            id="state"
+            value={selectedState}
+            onChange={(e) => handleStateChange(e.target.value)}
+            className="w-full px-4 py-3 text-center border border-slate-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-red-600 bg-white text-slate-900"
+          >
+            <option value="">-- اختر الولاية --</option>
+            {GERMAN_STATES.map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500 text-center mt-2">
+            ملاحظة: سيتم حفظ اختيارك تلقائياً
+          </p>
+        </div>
+
+        {/* رسالة خطأ */}
         {error && (
-          <div className="error-banner">
-            {error}
-            <button onClick={() => loadUserData()} className="retry-btn">
-              إعادة المحاولة
-            </button>
+          <div className="max-w-2xl mx-auto mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+            <p className="text-red-600 text-sm">{error}</p>
           </div>
         )}
 
-        {user?.state ? (
-          <div className="questions-section">
-            <div className="section-header">
-              <h2>الامتحانات المتاحة</h2>
+        {/* 3 Cards للتعلم والامتحانات */}
+        <div className="max-w-5xl mx-auto mb-10">
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* Card 1: تعلم الأسئلة العامة (300) */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">
+                  📚
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                    تعلم الأسئلة العامة
+                  </h3>
+                  <p className="text-sm text-slate-600">300 سؤال</p>
+                </div>
+              </div>
               <button
-                onClick={() => loadAvailableExams(user.state)}
-                className="refresh-btn"
-                disabled={loadingExams}
+                onClick={() => navigate('/student/leben/learn', {
+                  state: { learningType: 'general' }
+                })}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg transition font-medium text-sm"
               >
-                {loadingExams ? '🔄 جاري التحديث...' : '🔄 تحديث'}
+                ابدأ التعلم
               </button>
             </div>
 
-            {loadingExams ? (
-              <div className="loading-exams">
-                <p>جاري تحميل الامتحانات...</p>
+            {/* Card 2: تعلم أسئلة الولاية (160) */}
+            <div className={`bg-white border rounded-xl p-6 shadow-sm transition ${
+              selectedState 
+                ? 'border-slate-200 hover:shadow-md' 
+                : 'border-slate-300 opacity-60'
+            }`}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="h-12 w-12 rounded-xl bg-green-50 flex items-center justify-center text-2xl flex-shrink-0">
+                  🏠
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                    تعلم أسئلة الولاية
+                  </h3>
+                  <p className="text-sm text-slate-600">160 سؤال</p>
+                  {!selectedState && (
+                    <p className="text-xs text-amber-600 mt-2">
+                      ⚠️ اختاري ولاية أولاً
+                    </p>
+                  )}
+                </div>
               </div>
-            ) : availableExams.length > 0 ? (
-              <div className="exams-list">
-                <div className="exams-info">
-                  <p className="exams-count">
-                    تم العثور على <strong>{availableExams.length}</strong> امتحان متاح
-                    {user.state && (
-                      <span>
-                        {' '}
-                        لولاية {user.state}
+              <button
+                onClick={() => {
+                  if (selectedState) {
+                    navigate('/student/leben/learn', {
+                      state: { learningType: 'state', state: selectedState }
+                    });
+                  }
+                }}
+                disabled={!selectedState}
+                className={`w-full py-2.5 rounded-lg transition font-medium text-sm ${
+                  selectedState
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                ابدأ التعلم
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* عنوان فرعي */}
+        {selectedState && (
+          <div className="text-center mb-6">
+            <p className="text-sm text-slate-600">
+              الامتحانات المتاحة لولاية{' '}
+              <span className="font-semibold text-slate-900">{selectedState}</span>
+            </p>
+          </div>
+        )}
+
+        {/* حالة التحميل */}
+        {loadingExams && (
+          <div className="text-center text-slate-500 text-sm mt-10">
+            جاري تحميل الامتحانات…
+          </div>
+        )}
+
+        {/* لا توجد ولاية مختارة */}
+        {!selectedState && !loadingExams && (
+          <div className="text-center text-slate-500 text-sm mt-10 bg-slate-100 border border-slate-200 rounded-xl py-8">
+            ⬆️ اختر ولايتك أولاً لعرض الامتحانات المتاحة
+          </div>
+        )}
+
+        {/* لا توجد امتحانات */}
+        {selectedState && !loadingExams && availableExams.length === 0 && (
+          <div className="text-center text-slate-500 text-sm mt-10 bg-amber-50 border border-amber-100 rounded-xl py-8">
+            <p className="text-amber-800 font-medium mb-2">⚠️ لا توجد امتحانات متاحة حالياً</p>
+            <p className="text-amber-600 text-xs">
+              يجب على المعلم إنشاء امتحان بحالة "منشور (Published)" أولاً
+            </p>
+          </div>
+        )}
+
+        {/* كروت الامتحانات */}
+        {!loadingExams && availableExams.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {availableExams.map((exam) => {
+              if (!exam.id) {
+                console.warn('Exam without id:', exam);
+                return null;
+              }
+
+              return (
+                <div
+                  key={exam.id}
+                  className="group bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition text-left"
+                >
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center text-2xl flex-shrink-0">
+                      🏠
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-1 break-words">
+                        {exam.title}
+                      </h3>
+                      {exam.description && (
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          {exam.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* تفاصيل الامتحان */}
+                  <div className="flex items-center gap-3 text-xs text-slate-500 mb-4">
+                    {exam.timeLimitMin > 0 && (
+                      <span className="flex items-center gap-1">
+                        ⏱️ {exam.timeLimitMin} دقيقة
                       </span>
                     )}
-                  </p>
+                    {exam.attemptLimit > 0 && (
+                      <span className="flex items-center gap-1">
+                        🔄 {exam.attemptLimit} محاولة
+                      </span>
+                    )}
+                  </div>
+
+                  {/* زر البدء */}
+                  <button
+                    onClick={() => handleStartExam(exam.id)}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg transition font-medium text-sm"
+                  >
+                    ابدأ الامتحان
+                  </button>
                 </div>
-                {availableExams.map((exam) => {
-                  // التحقق من أن exam.id موجود
-                  if (!exam.id) {
-                    console.warn('Exam without id:', exam);
-                    return null;
-                  }
-                  
-                  return (
-                    <div key={exam.id} className="exam-card">
-                      <div className="exam-info">
-                        <h4>{exam.title}</h4>
-                        {exam.description && (
-                          <p className="exam-description">{exam.description}</p>
-                        )}
-                        <div className="exam-details">
-                          {exam.timeLimitMin > 0 && (
-                            <span className="exam-detail">
-                              ⏱️ {exam.timeLimitMin} دقيقة
-                            </span>
-                          )}
-                          {exam.attemptLimit > 0 && (
-                            <span className="exam-detail">
-                              🔄 {exam.attemptLimit} محاولة
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleStartExam(exam.id)}
-                        className="start-exam-btn"
-                      >
-                        ابدأ المحاولة
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="no-exams-message">
-                <p>⚠️ لا توجد امتحانات متاحة حالياً</p>
-                <p className="hint">
-                  يجب على المعلم إنشاء امتحان بحالة "منشور (Published)" أولاً
-                </p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="no-state-message">
-            <p>⚠️ يجب اختيار ولاية لعرض الامتحانات المتاحة</p>
-            <button onClick={handleChangeState} className="select-state-btn">
-              اختر ولايتك الآن
-            </button>
+              );
+            })}
           </div>
         )}
       </div>
-
-      {showStateModal && (
-        <StateSelectionModal
-          onSelect={handleStateSelect}
-          onClose={() => setShowStateModal(false)}
-        />
-      )}
     </div>
   );
 }
