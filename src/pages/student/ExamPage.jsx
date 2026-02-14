@@ -370,7 +370,7 @@ function SpeakingAnswerComponent({ itemIndex, item, answer, isSubmitted, onAnswe
               </button>
             )}
           </div>
-          <audio src={audioUrl} controls className="w-full" />
+          <audio src={audioUrl} controls controlsList="nodownload" className="w-full" />
         </div>
       )}
 
@@ -1344,34 +1344,83 @@ function ExamPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* الشريط العلوي */}
-      <div className={`${hasSections ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 pt-8 pb-2`}>
-        <div className="flex items-center justify-between mb-4">
+      <div className={`${hasSections ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-2`}>
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
           <button
             onClick={() => navigate(-1)}
             className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
           >
             ← رجوع
           </button>
-          <span className="text-xs font-semibold text-red-600">
+          <span className="text-xs font-semibold text-red-600 truncate max-w-[200px]">
             {attempt.exam?.title || 'امتحان'}
           </span>
         </div>
 
         {/* عنوان الامتحان */}
-        <div className="mb-4">
-          <h1 className="text-xl font-bold text-slate-900 mb-1">
+        <div className="mb-3 sm:mb-4">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
             {attempt.exam?.title || 'امتحان'}
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-xs sm:text-sm text-slate-600">
             {totalQuestions} سؤال • أجب على جميع الأسئلة ثم اضغط "تسليم الامتحان"
           </p>
         </div>
       </div>
 
-      <div className={`${hasSections ? 'max-w-6xl flex gap-6' : 'max-w-3xl'} mx-auto px-4 pb-8`}>
-        {/* Sections Sidebar */}
+      <div className={`${hasSections ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-3 sm:px-4 pb-8`}>
+        {/* Sections - Mobile: horizontal tabs, Desktop: sidebar */}
         {hasSections && (
-          <aside className="w-64 flex-shrink-0 sticky top-4 self-start">
+          <>
+            {/* Mobile: horizontal scrollable tabs */}
+            <div className="md:hidden mb-4 -mx-3 px-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <button
+                  onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition-all ${
+                    !selectedSectionKey
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  <span>📋</span>
+                  <span>الكل</span>
+                  <span className="text-[10px] opacity-75">{answeredCount}/{totalQuestions}</span>
+                </button>
+
+                {sectionsOverview.map((section) => {
+                  const progress = getSectionProgress(section.key);
+                  const isActive = selectedSectionKey === section.key;
+                  const isComplete = progress.total > 0 && progress.answered === progress.total;
+
+                  return (
+                    <button
+                      key={section.key}
+                      onClick={() => { setSelectedSectionKey(section.key); setSelectedExercise(null); }}
+                      className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition-all ${
+                        isActive
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'bg-white text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      <span>{SKILL_ICONS[section.skill] || '📄'}</span>
+                      <span className="max-w-[80px] truncate">{section.title}</span>
+                      <span className="text-[10px] opacity-75">
+                        {progress.answered}/{progress.total}
+                        {isComplete && ' ✓'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className={`${hasSections ? 'md:flex md:gap-6' : ''}`}>
+        {/* Desktop sidebar */}
+        {hasSections && (
+          <aside className="hidden md:block w-64 flex-shrink-0 sticky top-4 self-start">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-4 border-b border-slate-100 bg-slate-50">
                 <h3 className="text-sm font-bold text-slate-800">أقسام الامتحان</h3>
@@ -1481,12 +1530,12 @@ function ExamPage() {
           <>
             {/* نص القراءة - يظهر مرة واحدة فوق الأسئلة */}
             {attempt.readingText && (
-              <div className="reading-text-card bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
-                <h3 className="text-base font-bold text-amber-800 mb-3 flex items-center gap-2">
+              <div className="reading-text-card bg-amber-50 border border-amber-200 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
+                <h3 className="text-sm sm:text-base font-bold text-amber-800 mb-2 sm:mb-3 flex items-center gap-2">
                   📖 نص القراءة {attempt.readingText.teil && `(Teil ${attempt.readingText.teil})`}
                 </h3>
-                <div 
-                  className="text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-4 border border-amber-100"
+                <div
+                  className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100"
                   style={{ whiteSpace: 'pre-line' }}
                 >
                   {attempt.readingText.content}
@@ -1499,11 +1548,11 @@ function ExamPage() {
               const activeSection = sectionsOverview.find(s => s.key === selectedSectionKey);
               if (!activeSection) return null;
               return (
-                <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4 flex items-center gap-3">
-                  <span className="text-xl">{SKILL_ICONS[activeSection.skill] || '📄'}</span>
+                <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4 flex items-center gap-2 sm:gap-3">
+                  <span className="text-lg sm:text-xl">{SKILL_ICONS[activeSection.skill] || '📄'}</span>
                   <div>
-                    <h2 className="text-base font-bold text-slate-900">{activeSection.title}</h2>
-                    <p className="text-xs text-slate-500">
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900">{activeSection.title}</h2>
+                    <p className="text-[10px] sm:text-xs text-slate-500">
                       {hasExercises
                         ? `${currentSectionData.exercises.length} تمرين`
                         : `${displayedItems.length} سؤال`}
@@ -1541,22 +1590,23 @@ function ExamPage() {
                 >
                   ← العودة لقائمة التمارين
                 </button>
-                <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4">
-                  <h2 className="text-base font-bold text-slate-900">
+                <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
                     Übung {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}{selectedExercise.title ? `: ${selectedExercise.title}` : ''}
                   </h2>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-[10px] sm:text-xs text-slate-500 mt-1">
                     {selectedExercise.questionCount || selectedExercise.questions?.length || 0} سؤال
                   </p>
                 </div>
                 {/* مشغل صوت التمرين */}
                 {selectedExercise.audioUrl && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                    <span className="text-sm font-semibold text-blue-700 mb-2 block">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+                    <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">
                       🎵 ملف الاستماع
                     </span>
                     <audio
                       controls
+                      controlsList="nodownload"
                       preload="metadata"
                       src={toApiUrl(selectedExercise.audioUrl)}
                       className="w-full"
@@ -1567,11 +1617,11 @@ function ExamPage() {
                 )}
                 {/* فقرة القراءة المشتركة للتمرين */}
                 {selectedExercise.readingPassage && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4">
-                    <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-5 mb-3 sm:mb-4">
+                    <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
                       📖 نص القراءة
                     </h4>
-                    <div className="text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-4 border border-amber-100"
+                    <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100"
                       style={{ whiteSpace: 'pre-line' }}>
                       {selectedExercise.readingPassage}
                     </div>
@@ -1648,13 +1698,13 @@ function ExamPage() {
                   );
                   
                   return (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-semibold text-blue-700">
+                        <span className="text-xs sm:text-sm font-semibold text-blue-700">
                           🎵 ملف صوتي خاص بالسؤال
                         </span>
                       </div>
-                      <audio src={mediaSrc} controls className="w-full">
+                      <audio src={mediaSrc} controls controlsList="nodownload" className="w-full">
                         <source src={mediaSrc} type={correctMime} />
                         المتصفح لا يدعم تشغيل الملفات الصوتية
                       </audio>
@@ -1663,9 +1713,9 @@ function ExamPage() {
                 })()}
 
                 {/* عرض السؤال */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6">
                       {/* رقم السؤال */}
-                      <div className="flex items-center gap-2 mb-4 justify-end">
+                      <div className="flex items-center gap-2 mb-3 sm:mb-4 justify-end">
                         <span className="text-xs font-semibold px-2 py-1 bg-red-600 text-white rounded">
                           سؤال {displayNumber}
                         </span>
@@ -2038,12 +2088,12 @@ function ExamPage() {
                             imagesSnapshotCount: imagesSnapshot.length
                           });
                           
-                          if (finalMediaType === 'audio' && mediaSrc && !exerciseHasAudio) {
+                          if (finalMediaType === 'audio' && mediaSrc && !exerciseHasAudio && !shouldShowQuestionAudio) {
                             // ✅ إصلاح mime type لملفات .opus
                             const correctMime = getCorrectMimeType(mediaSrc, questionMedia?.mime || item.mediaSnapshot?.mime);
                             return (
                               <div className="mb-4">
-                                <audio controls style={{ width: '100%' }}>
+                                <audio controls controlsList="nodownload" style={{ width: '100%' }}>
                                   <source src={mediaSrc} type={correctMime} />
                                   متصفحك لا يدعم تشغيل الصوت.
                                 </audio>
@@ -2096,12 +2146,12 @@ function ExamPage() {
                             type: mediaSnapshot.type
                           });
                           
-                          if (mediaSnapshot.type === 'audio' && mediaSrc && !exerciseHasAudio) {
+                          if (mediaSnapshot.type === 'audio' && mediaSrc && !exerciseHasAudio && !shouldShowQuestionAudio) {
                             // ✅ إصلاح mime type لملفات .opus
                             const correctMime = getCorrectMimeType(rawMediaPath, mediaSnapshot.mime);
                             return (
                               <div className="mb-4">
-                                <audio controls style={{ width: '100%' }}>
+                                <audio controls controlsList="nodownload" style={{ width: '100%' }}>
                                   <source src={mediaSrc} type={correctMime} />
                                   متصفحك لا يدعم تشغيل الصوت.
                                 </audio>
@@ -3076,29 +3126,25 @@ function ExamPage() {
 
             {/* زر إنهاء القسم — تم إزالته حسب طلب المستخدم */}
 
-            {/* ✅ زر تسليم الامتحان — يظهر فقط إذا ما في أقسام، أو كل الأقسام تم إنهاؤها */}
-            {!isSubmitted && (() => {
-              const allSectionsFinished = hasSections && sectionsOverview
-                ? sectionsOverview.every(sec => sectionSummaries[sec.sectionKey || sec.key]?.data)
-                : true; // لا أقسام → يظهر مباشرة
-              return (!hasSections || allSectionsFinished) ? (
-                <div className="flex justify-end mt-8">
+            {/* ✅ زر تسليم الامتحان — يظهر في "كل الأسئلة" أو إذا ما في أقسام */}
+            {!isSubmitted && (!hasSections || !selectedSectionKey) && (
+                <div className="flex justify-center sm:justify-end mt-6 sm:mt-8">
                   <button
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
+                    className="w-full sm:w-auto px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
                   >
                     {submitting ? 'جاري التسليم…' : '✅ تسليم الامتحان'}
                   </button>
                 </div>
-              ) : null;
-            })()}
+            )}
             </>
             )}
           </>
         )}
 
         </div>{/* End Main Content */}
+        </div>{/* End flex container */}
       </div>
     </div>
   );

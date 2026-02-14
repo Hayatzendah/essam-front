@@ -14,7 +14,7 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
   }
 
   return (
-    <div className="space-y-4 mb-6">
+    <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
       {exercises.map((exercise) => {
         // حساب التقدم من answers المحلية
         const total = exercise.questionCount || exercise.questions?.length || 0;
@@ -34,12 +34,12 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
           <button
             key={exercise.exerciseIndex ?? exercise.exerciseNumber ?? exercise.listeningClipId}
             onClick={() => onSelectExercise(exercise)}
-            className="w-full text-right bg-white rounded-2xl shadow-sm border border-slate-100 p-5 hover:border-red-200 hover:shadow-md transition-all"
+            className="w-full text-right bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-5 hover:border-red-200 hover:shadow-md transition-all"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               {/* دائرة التقدم */}
-              <div className="relative flex-shrink-0 w-14 h-14">
-                <svg className="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
+              <div className="relative flex-shrink-0 w-11 h-11 sm:w-14 sm:h-14">
+                <svg className="w-11 h-11 sm:w-14 sm:h-14 -rotate-90" viewBox="0 0 36 36">
                   <circle
                     cx="18" cy="18" r="15.5"
                     fill="none" stroke="#e2e8f0" strokeWidth="2.5"
@@ -53,14 +53,14 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-700">
+                <span className="absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-bold text-slate-700">
                   {exercise.exerciseIndex ?? exercise.exerciseNumber ?? '?'}
                 </span>
               </div>
 
               {/* معلومات التمرين */}
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-slate-900 text-base truncate">
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
                   Übung {exercise.exerciseIndex ?? exercise.exerciseNumber}{exercise.title ? `: ${exercise.title}` : ''}
                 </h3>
                 <div className="flex items-center gap-3 mt-1.5">
