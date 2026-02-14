@@ -1732,7 +1732,7 @@ function ExamPage() {
                 {/* ✅ عنوان التمرين + صوت/قراءة مشتركة في "كل الأسئلة" */}
                 {showExerciseHeader && (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
-                    <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
                       Übung {exerciseInfo.exerciseIndex}{exerciseInfo.title ? `: ${exerciseInfo.title}` : ''}
                     </h3>
                     {exerciseInfo.audioUrl && (
