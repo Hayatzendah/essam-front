@@ -516,10 +516,27 @@ function ExamPage() {
     return map;
   }, [attempt?.items]);
 
-  // ✅ جلب التمارين عند اختيار قسم
+  // ✅ جلب التمارين لكل الأقسام عند تحميل الامتحان (لعرضها في "كل الأسئلة")
+  useEffect(() => {
+    if (!sectionsOverview || !attempt) return;
+    const examId = attempt.examId || attempt.exam?.id || attempt.exam?._id;
+    if (!examId) return;
+
+    sectionsOverview.forEach((section) => {
+      if (sectionExercises[section.key]) return;
+      examsAPI.getSectionQuestions(examId, section.key)
+        .then((data) => {
+          if (data?.exercises && data.exercises.length > 0) {
+            setSectionExercises(prev => ({ ...prev, [section.key]: data }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [sectionsOverview, attempt]);
+
+  // ✅ جلب التمارين عند اختيار قسم (loading state)
   useEffect(() => {
     if (!selectedSectionKey || !attempt) return;
-    // لا نعيد الجلب إذا كانت مخزنة مسبقاً
     if (sectionExercises[selectedSectionKey]) return;
 
     const examId = attempt.examId || attempt.exam?.id || attempt.exam?._id;
@@ -531,13 +548,10 @@ function ExamPage() {
     examsAPI.getSectionQuestions(examId, selectedSectionKey)
       .then((data) => {
         if (data?.exercises && data.exercises.length > 0) {
-          console.log('✅ تم جلب التمارين للقسم:', selectedSectionKey, data.exercises.length);
           setSectionExercises(prev => ({ ...prev, [selectedSectionKey]: data }));
         }
       })
-      .catch((err) => {
-        console.log('لا توجد تمارين للقسم:', selectedSectionKey, err.response?.status);
-      })
+      .catch(() => {})
       .finally(() => {
         setLoadingExercises(false);
       });
@@ -555,6 +569,27 @@ function ExamPage() {
     });
     return ids;
   }, [selectedSectionKey, currentSectionData]);
+
+  // ✅ خريطة questionId → بيانات التمرين (صوت، قراءة) لعرضها في "كل الأسئلة"
+  const questionExerciseMap = useMemo(() => {
+    const map = new Map();
+    Object.values(sectionExercises).forEach((sectionData) => {
+      (sectionData.exercises || []).forEach((exercise) => {
+        (exercise.questions || []).forEach((q) => {
+          if (q.questionId) {
+            map.set(q.questionId, {
+              audioUrl: exercise.audioUrl,
+              readingPassage: exercise.readingPassage,
+              title: exercise.title,
+              exerciseIndex: exercise.exerciseIndex ?? exercise.exerciseNumber,
+              exerciseId: `ex-${exercise.exerciseIndex ?? exercise.exerciseNumber}-${exercise.title || ''}`,
+            });
+          }
+        });
+      });
+    });
+    return map;
+  }, [sectionExercises]);
 
   const loadAttempt = async () => {
     try {
@@ -1639,12 +1674,28 @@ function ExamPage() {
               </div>
             )}
             <div className="space-y-6 mb-6">
-          {displayedItems.map((item, displayIndex) => {
+          {(() => {
+            // تتبع أي تمرين تم عرض صوته بالفعل (لعدم التكرار في "كل الأسئلة")
+            const shownExerciseIds = new Set();
+            return displayedItems.map((item, displayIndex) => {
             // Get the global index for this item (for answers tracking); للعناصر من القسم (_fromSection) نستخدم مفتاحاً بالـ questionId
             const rawItemIndex = attempt.items.indexOf(item);
             const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
             const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? displayIndex + 1 : rawItemIndex + 1;
             const itemOverride = item._fromSection ? item : undefined;
+
+            // ✅ في "كل الأسئلة": عرض صوت/قراءة التمرين فوق أول سؤال لكل تمرين
+            const qId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
+            const exerciseInfo = qId ? questionExerciseMap.get(qId) : null;
+            const isAllQuestionsMode = !selectedSectionKey && !selectedExercise;
+            let showExerciseHeader = false;
+            if (isAllQuestionsMode && exerciseInfo?.exerciseId && !shownExerciseIds.has(exerciseInfo.exerciseId)) {
+              if (exerciseInfo.audioUrl || exerciseInfo.readingPassage) {
+                showExerciseHeader = true;
+                shownExerciseIds.add(exerciseInfo.exerciseId);
+              }
+            }
+
             // صوت السؤال (من question.media أو mediaSnapshot)
             const questionMedia = item.question?.media || item.questionSnapshot?.media;
             const questionMediaUrl = questionMedia?.url;
@@ -1656,8 +1707,8 @@ function ExamPage() {
                 ? (item.mediaSnapshot.url || item.mediaSnapshot.key || null)
                 : null);
 
-            // عرض صوت السؤال فقط إذا الـ exercise ما عنده صوت مشترك
-            const exerciseHasAudio = !!selectedExercise?.audioUrl;
+            // عرض صوت السؤال فقط إذا الـ exercise ما عنده صوت مشترك وما عنده صوت تمرين
+            const exerciseHasAudio = !!selectedExercise?.audioUrl || (isAllQuestionsMode && !!exerciseInfo?.audioUrl);
             const shouldShowQuestionAudio = !!questionAudio && !exerciseHasAudio;
             
             // قراءة prompt بأمان (يتحمل قيم غريبة مثل "9"9" أو object)
@@ -1678,6 +1729,31 @@ function ExamPage() {
             
             return (
               <div key={uniqueKey} className="space-y-4">
+                {/* ✅ عنوان التمرين + صوت/قراءة مشتركة في "كل الأسئلة" */}
+                {showExerciseHeader && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                      Übung {exerciseInfo.exerciseIndex}{exerciseInfo.title ? `: ${exerciseInfo.title}` : ''}
+                    </h3>
+                    {exerciseInfo.audioUrl && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">🎵 ملف الاستماع</span>
+                        <audio controls controlsList="nodownload" preload="metadata" src={toApiUrl(exerciseInfo.audioUrl)} className="w-full">
+                          المتصفح لا يدعم تشغيل الملفات الصوتية
+                        </audio>
+                      </div>
+                    )}
+                    {exerciseInfo.readingPassage && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2">📖 نص القراءة</h4>
+                        <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 border border-amber-100" style={{ whiteSpace: 'pre-line' }}>
+                          {exerciseInfo.readingPassage}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* ✅ Audio Player - فقط إذا كان السؤال له صوت خاص به (مختلف عن صوت الـ Section) */}
                 {shouldShowQuestionAudio && (() => {
                   // ✅ استخدام questionAudio (من question.media.url مباشرة)
@@ -3056,7 +3132,8 @@ function ExamPage() {
                 </div>
               </div>
             );
-          })}
+          });
+          })()}
             </div>
 
             {/* ✅ نتيجة القسم الحالي */}
