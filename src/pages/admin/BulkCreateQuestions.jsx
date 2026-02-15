@@ -61,6 +61,7 @@ function BulkCreateQuestions() {
   // Reading passage (optional - for Lesen)
   const [readingPassage, setReadingPassage] = useState('');
   const [readingCards, setReadingCards] = useState([]);
+  const [cardsLayout, setCardsLayout] = useState('horizontal'); // 'horizontal' | 'vertical'
 
   // Questions
   const [questions, setQuestions] = useState([emptyQuestion()]);
@@ -401,17 +402,48 @@ function BulkCreateQuestions() {
                   <label style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>
                     بطاقات المعلومات (اختياري)
                   </label>
-                  <button
-                    type="button"
-                    onClick={addReadingCard}
-                    style={{
-                      padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                      border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    + بطاقة جديدة
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {readingCards.length > 0 && (
+                      <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #f59e0b' }}>
+                        <button
+                          type="button"
+                          onClick={() => setCardsLayout('horizontal')}
+                          title="جنب بعض"
+                          style={{
+                            padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            backgroundColor: cardsLayout === 'horizontal' ? '#f59e0b' : '#fef3c7',
+                            color: cardsLayout === 'horizontal' ? '#fff' : '#92400e',
+                          }}
+                        >
+                          ▦ أفقي
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCardsLayout('vertical')}
+                          title="تحت بعض"
+                          style={{
+                            padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            borderRight: '1px solid #f59e0b',
+                            backgroundColor: cardsLayout === 'vertical' ? '#f59e0b' : '#fef3c7',
+                            color: cardsLayout === 'vertical' ? '#fff' : '#92400e',
+                          }}
+                        >
+                          ▤ عمودي
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={addReadingCard}
+                      style={{
+                        padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + بطاقة جديدة
+                    </button>
+                  </div>
                 </div>
 
                 {readingCards.length === 0 && (
@@ -420,7 +452,7 @@ function BulkCreateQuestions() {
                   </p>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'vertical' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
                   {readingCards.map((card, idx) => {
                     const ADMIN_CARD_COLORS = [
                       { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
