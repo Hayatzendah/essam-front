@@ -185,6 +185,19 @@ function EditQuestion() {
     usageCategory: '',
     mainSkill: '',
     images: [],
+    // Interactive Text fields
+    interactiveTextType: 'fill_blanks',
+    text: '',
+    interactiveBlanks: [],
+    interactiveReorder: { parts: [] },
+    // Free Text fields
+    sampleAnswer: '',
+    minWords: '',
+    maxWords: '',
+    // Speaking fields
+    modelAnswerText: '',
+    minSeconds: '',
+    maxSeconds: '',
   });
 
   const [newTag, setNewTag] = useState('');
@@ -232,9 +245,11 @@ function EditQuestion() {
       let usageCategory = '';
       let selectedState = '';
       let mainSkill = '';
-      
+
+      const providerLower = (question.provider || '').toLowerCase();
+
       // تحديد usageCategory من provider و tags
-      if (question.provider === 'leben_in_deutschland' || question.provider === 'Deutschland-in-Leben' || question.provider === 'LiD') {
+      if (providerLower === 'leben_in_deutschland' || providerLower === 'deutschland-in-leben' || providerLower === 'lid') {
         if (question.usageCategory === 'common' || question.tags?.includes('300-Fragen')) {
           usageCategory = 'common';
         } else if (question.usageCategory === 'state_specific' || question.state) {
@@ -242,6 +257,15 @@ function EditQuestion() {
           selectedState = question.state || question.tags?.find(tag => germanStates.includes(tag)) || '';
         }
         mainSkill = question.mainSkill || 'leben_test';
+      } else if (providerLower === 'grammatik' || providerLower === 'wortschatz') {
+        usageCategory = 'grammar';
+      } else if (['goethe', 'telc', 'osd', 'ecl', 'dtb', 'dtz'].includes(providerLower)) {
+        usageCategory = 'provider';
+      }
+
+      // إذا كان usageCategory محفوظ في السؤال نفسه، نستخدمه
+      if (question.usageCategory && !usageCategory) {
+        usageCategory = question.usageCategory;
       }
 
       // تحويل البيانات من API format إلى form format
@@ -366,6 +390,37 @@ function EditQuestion() {
 
       console.log('🖼️ Final processed images:', images);
 
+      // معالجة بيانات Interactive Text
+      let interactiveBlanks = [];
+      if (Array.isArray(question.interactiveBlanks) && question.interactiveBlanks.length > 0) {
+        interactiveBlanks = question.interactiveBlanks.map(blank => ({
+          id: blank.id || '',
+          type: blank.type || 'textInput',
+          correctAnswers: Array.isArray(blank.correctAnswers) ? blank.correctAnswers : [],
+          choices: Array.isArray(blank.choices) ? blank.choices : [],
+          hint: blank.hint || '',
+        }));
+      }
+
+      let interactiveReorder = { parts: [] };
+      if (question.interactiveReorder && Array.isArray(question.interactiveReorder.parts)) {
+        interactiveReorder = {
+          parts: question.interactiveReorder.parts.map(part => ({
+            id: part.id || '',
+            text: part.text || '',
+            order: part.order || 0,
+          })),
+        };
+      }
+
+      // تحديد نوع Interactive Text
+      let interactiveTextType = 'fill_blanks';
+      if (interactiveBlanks.length > 0) {
+        interactiveTextType = 'fill_blanks';
+      } else if (interactiveReorder.parts.length > 0) {
+        interactiveTextType = 'reorder';
+      }
+
       setFormData({
         prompt: question.prompt || '',
         qType: question.qType || 'mcq',
@@ -385,6 +440,19 @@ function EditQuestion() {
         usageCategory: usageCategory,
         mainSkill: mainSkill,
         images: images,
+        // Interactive Text fields
+        interactiveTextType: interactiveTextType,
+        text: question.interactiveText || question.text || '',
+        interactiveBlanks: interactiveBlanks,
+        interactiveReorder: interactiveReorder,
+        // Free Text fields
+        sampleAnswer: question.sampleAnswer || '',
+        minWords: question.minWords || '',
+        maxWords: question.maxWords || '',
+        // Speaking fields
+        modelAnswerText: question.modelAnswerText || '',
+        minSeconds: question.minSeconds || '',
+        maxSeconds: question.maxSeconds || '',
       });
 
       // إذا كان هناك media (صوت)
@@ -440,16 +508,25 @@ function EditQuestion() {
       // إذا تغير نوع السؤال (qType)، نعيد تعيين الحقول
       if (name === 'qType') {
         if (value === 'mcq') {
-          updated.options = [{ text: '', isCorrect: false }];
+          updated.options = prev.options?.length > 0 ? prev.options : [{ text: '', isCorrect: false }];
         } else if (value === 'true_false') {
-          updated.answerKeyBoolean = true;
+          updated.answerKeyBoolean = prev.answerKeyBoolean !== undefined ? prev.answerKeyBoolean : true;
         } else if (value === 'fill') {
-          updated.fillExact = '';
-          updated.regexList = [];
+          updated.fillExact = prev.fillExact || '';
+          updated.regexList = prev.regexList?.length > 0 ? prev.regexList : [];
         } else if (value === 'match') {
-          updated.answerKeyMatch = [{ left: '', right: '' }];
+          updated.answerKeyMatch = prev.answerKeyMatch?.length > 0 ? prev.answerKeyMatch : [{ left: '', right: '' }];
         } else if (value === 'reorder') {
-          updated.answerKeyReorder = [];
+          updated.answerKeyReorder = prev.answerKeyReorder?.length > 0 ? prev.answerKeyReorder : [];
+        } else if (value === 'interactive_text') {
+          updated.interactiveTextType = prev.interactiveTextType || 'fill_blanks';
+          updated.text = prev.text || '';
+          updated.interactiveBlanks = prev.interactiveBlanks?.length > 0 ? prev.interactiveBlanks : [];
+          updated.interactiveReorder = prev.interactiveReorder?.parts?.length > 0 ? prev.interactiveReorder : { parts: [] };
+        } else if (value === 'free_text') {
+          updated.sampleAnswer = prev.sampleAnswer || '';
+        } else if (value === 'speaking') {
+          updated.modelAnswerText = prev.modelAnswerText || '';
         }
       }
       
@@ -562,6 +639,144 @@ function EditQuestion() {
     setFormData((prev) => ({
       ...prev,
       answerKeyReorder: prev.answerKeyReorder.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Handlers for Interactive Text - Fill-in-the-blanks
+  const handleAddInteractiveBlank = () => {
+    const nextId = String.fromCharCode(97 + formData.interactiveBlanks.length);
+    if (formData.interactiveBlanks.length >= 10) {
+      setError('الحد الأقصى للفراغات هو 10');
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      interactiveBlanks: [
+        ...prev.interactiveBlanks,
+        { id: nextId, type: 'textInput', correctAnswers: [], choices: [], hint: '' },
+      ],
+    }));
+  };
+
+  const handleUpdateInteractiveBlank = (index, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      interactiveBlanks: prev.interactiveBlanks.map((blank, i) =>
+        i === index ? { ...blank, [field]: value } : blank
+      ),
+    }));
+  };
+
+  const handleRemoveInteractiveBlank = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      interactiveBlanks: prev.interactiveBlanks.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleAddCorrectAnswer = (blankIndex) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        correctAnswers: [...(updated.interactiveBlanks[blankIndex].correctAnswers || []), ''],
+      };
+      return updated;
+    });
+  };
+
+  const handleUpdateCorrectAnswer = (blankIndex, answerIndex, value) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      const newAnswers = [...updated.interactiveBlanks[blankIndex].correctAnswers];
+      newAnswers[answerIndex] = value;
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        correctAnswers: newAnswers,
+      };
+      return updated;
+    });
+  };
+
+  const handleRemoveCorrectAnswer = (blankIndex, answerIndex) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        correctAnswers: updated.interactiveBlanks[blankIndex].correctAnswers.filter((_, i) => i !== answerIndex),
+      };
+      return updated;
+    });
+  };
+
+  const handleAddChoice = (blankIndex) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        choices: [...(updated.interactiveBlanks[blankIndex].choices || []), ''],
+      };
+      return updated;
+    });
+  };
+
+  const handleUpdateChoice = (blankIndex, choiceIndex, value) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      const newChoices = [...updated.interactiveBlanks[blankIndex].choices];
+      newChoices[choiceIndex] = value;
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        choices: newChoices,
+      };
+      return updated;
+    });
+  };
+
+  const handleRemoveChoice = (blankIndex, choiceIndex) => {
+    setFormData((prev) => {
+      const updated = { ...prev, interactiveBlanks: [...prev.interactiveBlanks] };
+      updated.interactiveBlanks[blankIndex] = {
+        ...updated.interactiveBlanks[blankIndex],
+        choices: updated.interactiveBlanks[blankIndex].choices.filter((_, i) => i !== choiceIndex),
+      };
+      return updated;
+    });
+  };
+
+  // Handlers for Interactive Text - Reorder
+  const handleAddReorderPart = () => {
+    setFormData((prev) => ({
+      ...prev,
+      interactiveReorder: {
+        ...prev.interactiveReorder,
+        parts: [
+          ...prev.interactiveReorder.parts,
+          { id: `part_${prev.interactiveReorder.parts.length + 1}`, text: '', order: prev.interactiveReorder.parts.length + 1 },
+        ],
+      },
+    }));
+  };
+
+  const handleUpdateReorderPart = (index, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      interactiveReorder: {
+        ...prev.interactiveReorder,
+        parts: prev.interactiveReorder.parts.map((part, i) =>
+          i === index ? { ...part, [field]: value } : part
+        ),
+      },
+    }));
+  };
+
+  const handleRemoveReorderPart = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      interactiveReorder: {
+        ...prev.interactiveReorder,
+        parts: prev.interactiveReorder.parts.filter((_, i) => i !== index),
+      },
     }));
   };
 
@@ -734,6 +949,7 @@ function EditQuestion() {
         'listen',
         'free_text',
         'speaking',
+        'interactive_text',
       ]);
 
       // ✅ Normalize qType - يجب أن يكون lowercase وواحد من القيم المسموحة
@@ -805,6 +1021,37 @@ function EditQuestion() {
         questionData.answerKeyMatch = formData.answerKeyMatch;
       } else if (normalizedQType === 'reorder') {
         questionData.answerKeyReorder = formData.answerKeyReorder;
+      } else if (normalizedQType === 'interactive_text') {
+        // Interactive Text
+        const interactiveTextValue = formData.text?.trim();
+        if (interactiveTextValue) {
+          questionData.interactiveText = interactiveTextValue;
+        }
+        if (formData.interactiveTextType === 'fill_blanks' && formData.interactiveBlanks.length > 0) {
+          questionData.interactiveBlanks = formData.interactiveBlanks.map((blank) => ({
+            id: blank.id,
+            type: blank.type,
+            correctAnswers: blank.correctAnswers.filter(a => a.trim() !== ''),
+            ...(blank.type === 'dropdown' && blank.choices ? { choices: blank.choices.filter(c => c.trim() !== '') } : {}),
+            ...(blank.hint ? { hint: blank.hint } : {}),
+          }));
+        } else if (formData.interactiveTextType === 'reorder' && formData.interactiveReorder.parts.length > 0) {
+          questionData.interactiveReorder = {
+            parts: formData.interactiveReorder.parts.map(part => ({
+              id: part.id,
+              text: part.text,
+              order: part.order,
+            })),
+          };
+        }
+      } else if (normalizedQType === 'free_text') {
+        if (formData.sampleAnswer) questionData.sampleAnswer = formData.sampleAnswer;
+        if (formData.minWords) questionData.minWords = parseInt(formData.minWords) || undefined;
+        if (formData.maxWords) questionData.maxWords = parseInt(formData.maxWords) || undefined;
+      } else if (normalizedQType === 'speaking') {
+        if (formData.modelAnswerText) questionData.modelAnswerText = formData.modelAnswerText;
+        if (formData.minSeconds) questionData.minSeconds = parseInt(formData.minSeconds) || undefined;
+        if (formData.maxSeconds) questionData.maxSeconds = parseInt(formData.maxSeconds) || undefined;
       }
 
       // إضافة media إذا كان موجود (صوت)
@@ -956,6 +1203,10 @@ function EditQuestion() {
               <option value="true_false">صحيح/خطأ (True/False)</option>
               <option value="fill">ملء الفراغ (Fill)</option>
               <option value="match">مطابقة (Match)</option>
+              <option value="reorder">ترتيب (Reorder)</option>
+              <option value="interactive_text">نص تفاعلي (Interactive Text)</option>
+              <option value="free_text">نص حر (Free Text)</option>
+              <option value="speaking">تحدث (Speaking)</option>
             </select>
           </div>
 
@@ -1140,6 +1391,307 @@ function EditQuestion() {
               >
                 + إضافة عنصر
               </button>
+            </div>
+          )}
+
+          {/* Interactive Text */}
+          {formData.qType === 'interactive_text' && (
+            <div className="form-group">
+              <label>نوع المهمة التفاعلية *</label>
+              <select
+                value={formData.interactiveTextType}
+                onChange={(e) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    interactiveTextType: e.target.value,
+                    interactiveBlanks: e.target.value === 'fill_blanks' ? prev.interactiveBlanks : [],
+                    interactiveReorder: e.target.value === 'reorder' ? prev.interactiveReorder : { parts: [] },
+                  }));
+                }}
+                style={{ marginBottom: '16px' }}
+              >
+                <option value="fill_blanks">Fill-in-the-blanks (فراغات متعددة)</option>
+                <option value="reorder">Reorder (ترتيب الأجزاء)</option>
+              </select>
+
+              {/* Fill-in-the-blanks */}
+              {formData.interactiveTextType === 'fill_blanks' && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    النص مع الفراغات *
+                  </label>
+                  <small style={{ display: 'block', marginBottom: '8px', color: '#6b7280' }}>
+                    استخدم placeholders مثل {'{{a}}'}, {'{{b}}'}, {'{{c}}'} للفراغات
+                  </small>
+                  <textarea
+                    value={formData.text}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, text: e.target.value }))}
+                    placeholder="مثال: Guten Tag! Ich {{a}} Anna. Ich {{b}} aus {{c}}."
+                    rows={5}
+                    style={{ marginBottom: '16px', width: '100%' }}
+                  />
+
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    الفراغات (3-10 فراغات) *
+                  </label>
+                  {formData.interactiveBlanks.map((blank, blankIndex) => (
+                    <div
+                      key={blankIndex}
+                      style={{
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        marginBottom: '12px',
+                        backgroundColor: '#f9fafb',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold' }}>
+                          فراغ {blank.id.toUpperCase()} ({'{{' + blank.id + '}}'})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInteractiveBlank(blankIndex)}
+                          className="remove-btn"
+                        >
+                          حذف
+                        </button>
+                      </div>
+
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
+                          نوع الإدخال *
+                        </label>
+                        <select
+                          value={blank.type}
+                          onChange={(e) => handleUpdateInteractiveBlank(blankIndex, 'type', e.target.value)}
+                        >
+                          <option value="textInput">Text Input (إدخال نص)</option>
+                          <option value="dropdown">Dropdown (قائمة منسدلة)</option>
+                        </select>
+                      </div>
+
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
+                          الإجابات الصحيحة * (يمكن إضافة أكثر من إجابة)
+                        </label>
+                        {blank.correctAnswers.map((answer, answerIndex) => (
+                          <div key={answerIndex} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                            <input
+                              type="text"
+                              value={answer}
+                              onChange={(e) => handleUpdateCorrectAnswer(blankIndex, answerIndex, e.target.value)}
+                              placeholder="إجابة صحيحة"
+                              style={{ flex: 1 }}
+                            />
+                            {blank.correctAnswers.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCorrectAnswer(blankIndex, answerIndex)}
+                                className="remove-btn"
+                              >
+                                حذف
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => handleAddCorrectAnswer(blankIndex)}
+                          className="add-btn"
+                          style={{ fontSize: '12px', padding: '6px 12px' }}
+                        >
+                          + إضافة إجابة صحيحة
+                        </button>
+                      </div>
+
+                      {blank.type === 'dropdown' && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
+                            الخيارات * (حد أدنى 2 خيارات)
+                          </label>
+                          {(blank.choices || []).map((choice, choiceIndex) => (
+                            <div key={choiceIndex} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                              <input
+                                type="text"
+                                value={choice}
+                                onChange={(e) => handleUpdateChoice(blankIndex, choiceIndex, e.target.value)}
+                                placeholder="خيار"
+                                style={{ flex: 1 }}
+                              />
+                              {(blank.choices || []).length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveChoice(blankIndex, choiceIndex)}
+                                  className="remove-btn"
+                                >
+                                  حذف
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => handleAddChoice(blankIndex)}
+                            className="add-btn"
+                            style={{ fontSize: '12px', padding: '6px 12px' }}
+                          >
+                            + إضافة خيار
+                          </button>
+                        </div>
+                      )}
+
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
+                          تلميح (اختياري)
+                        </label>
+                        <input
+                          type="text"
+                          value={blank.hint || ''}
+                          onChange={(e) => handleUpdateInteractiveBlank(blankIndex, 'hint', e.target.value)}
+                          placeholder="مثال: Verb: sein oder heißen"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleAddInteractiveBlank}
+                    className="add-btn"
+                    disabled={formData.interactiveBlanks.length >= 10}
+                  >
+                    + إضافة فراغ ({formData.interactiveBlanks.length}/10)
+                  </button>
+                </div>
+              )}
+
+              {/* Interactive Reorder */}
+              {formData.interactiveTextType === 'reorder' && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    أجزاء النص (2+ أجزاء) *
+                  </label>
+                  <small style={{ display: 'block', marginBottom: '8px', color: '#6b7280' }}>
+                    أدخل الأجزاء بالترتيب الصحيح (order يبدأ من 1)
+                  </small>
+                  {formData.interactiveReorder.parts.map((part, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        marginBottom: '12px',
+                        backgroundColor: '#f9fafb',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 'bold' }}>جزء {index + 1}</span>
+                        <button type="button" onClick={() => handleRemoveReorderPart(index)} className="remove-btn">حذف</button>
+                      </div>
+                      <input
+                        type="text"
+                        value={part.text}
+                        onChange={(e) => handleUpdateReorderPart(index, 'text', e.target.value)}
+                        placeholder="نص الجزء"
+                        style={{ width: '100%', marginBottom: '8px' }}
+                      />
+                      <input
+                        type="number"
+                        value={part.order}
+                        onChange={(e) => handleUpdateReorderPart(index, 'order', parseInt(e.target.value) || 0)}
+                        placeholder="الترتيب"
+                        style={{ width: '80px' }}
+                      />
+                    </div>
+                  ))}
+                  <button type="button" onClick={handleAddReorderPart} className="add-btn">
+                    + إضافة جزء
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Free Text */}
+          {formData.qType === 'free_text' && (
+            <div className="form-group">
+              <label htmlFor="sampleAnswer">نموذج الإجابة (Sample Answer)</label>
+              <textarea
+                id="sampleAnswer"
+                name="sampleAnswer"
+                value={formData.sampleAnswer}
+                onChange={handleInputChange}
+                placeholder="أدخل نموذج الإجابة هنا..."
+                rows={4}
+              />
+              <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="minWords">الحد الأدنى للكلمات</label>
+                  <input
+                    type="number"
+                    id="minWords"
+                    name="minWords"
+                    value={formData.minWords}
+                    onChange={handleInputChange}
+                    placeholder="مثال: 50"
+                    min="0"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="maxWords">الحد الأقصى للكلمات</label>
+                  <input
+                    type="number"
+                    id="maxWords"
+                    name="maxWords"
+                    value={formData.maxWords}
+                    onChange={handleInputChange}
+                    placeholder="مثال: 200"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Speaking */}
+          {formData.qType === 'speaking' && (
+            <div className="form-group">
+              <label htmlFor="modelAnswerText">نموذج الإجابة (Model Answer Text)</label>
+              <textarea
+                id="modelAnswerText"
+                name="modelAnswerText"
+                value={formData.modelAnswerText}
+                onChange={handleInputChange}
+                placeholder="أدخل نموذج الإجابة هنا..."
+                rows={4}
+              />
+              <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="minSeconds">الحد الأدنى بالثواني</label>
+                  <input
+                    type="number"
+                    id="minSeconds"
+                    name="minSeconds"
+                    value={formData.minSeconds}
+                    onChange={handleInputChange}
+                    placeholder="مثال: 30"
+                    min="0"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="maxSeconds">الحد الأقصى بالثواني</label>
+                  <input
+                    type="number"
+                    id="maxSeconds"
+                    name="maxSeconds"
+                    value={formData.maxSeconds}
+                    onChange={handleInputChange}
+                    placeholder="مثال: 120"
+                    min="0"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
