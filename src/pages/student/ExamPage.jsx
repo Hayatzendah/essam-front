@@ -2982,8 +2982,8 @@ function ExamPage() {
                           'rightItems length': rightItems.length
                         });
                         
-                        // ✅ Shuffle القائمة اليمنى
-                        const shuffledRight = [...rightItems].sort(() => Math.random() - 0.5);
+                        // ✅ القائمة اليمنى بترتيبها الأصلي (بدون shuffle)
+                        const shuffledRight = [...rightItems];
                         
                         // ✅ تحذير إذا لم يتم العثور على pairs
                         if (leftItems.length === 0 || rightItems.length === 0) {
