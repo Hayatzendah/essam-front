@@ -876,40 +876,6 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### `GET /exams/providers`
-**الوصف:** الحصول على قائمة مزوّدي الامتحانات المتاحة + مستوياتهم  
-**المصادقة:** غير مطلوبة (Public endpoint)  
-**الأدوار المسموحة:** جميع المستخدمين
-
-**Headers:**
-```
-Content-Type: application/json
-```
-
-**ملاحظة:** هذا endpoint Public - لا يحتاج JWT Token
-
-**Response (200):**
-```json
-[
-  {
-    "provider": "goethe",
-    "levels": ["A1", "A2", "B1", "B2"]
-  },
-  {
-    "provider": "telc",
-    "levels": ["A1", "B1", "B2"]
-  },
-  {
-    "provider": "osd",
-    "levels": ["A1", "A2", "B1"]
-  }
-]
-```
-
-**الاستخدام:** لبناء كروت المعاهد في صفحة Prüfungen الرئيسية، ولكي أستخرج تحت كل كرت المستويات المتاحة.
-
----
-
 ### `GET /exams`
 **الوصف:** الحصول على قائمة الامتحانات  
 **المصادقة:** مطلوبة (Bearer Token)  
@@ -923,27 +889,8 @@ Authorization: Bearer <accessToken>
 **Query Parameters:**
 - `status`: فلترة حسب الحالة (draft/published/archived) - **للطلاب: يتم تجاهل هذا الحقل وفرض 'published'**
 - `level`: فلترة حسب المستوى (A1, A2, B1, B2, C1)
-- `provider`: فلترة حسب المزود (goethe, telc, osd, ecl, dtb, dtz, Deutschland-in-Leben, etc.)
-- `examCategory`: فلترة حسب نوع الامتحان - `'provider_exam' | 'grammar_exam' | 'vocab_exam' | 'lid_exam' | 'other'`
-- `mainSkill`: فلترة حسب المهارة الرئيسية - `'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen'`
+- `provider`: فلترة حسب المزود (telc, Goethe, ÖSD, Deutschland-in-Leben, etc.)
 - `state`: فلترة حسب الولاية الألمانية (Bayern, Berlin, etc.) - يتم البحث في sections.tags
-
-**أمثلة:**
-
-1. جلب كل امتحانات Goethe B1 (full + skills):
-```
-GET /exams?examCategory=provider_exam&provider=goethe&level=B1&status=published
-```
-
-2. جلب امتحانات الاستماع فقط لـ Goethe B1:
-```
-GET /exams?examCategory=provider_exam&provider=goethe&level=B1&mainSkill=hoeren&status=published
-```
-
-3. جلب كل الامتحانات الرسمية المنشورة لأي مزوّد:
-```
-GET /exams?examCategory=provider_exam&status=published
-```
 
 **Response (200):**
 ```json
@@ -1227,31 +1174,12 @@ const fetchExamDetails = async (examId) => {
 Authorization: Bearer <accessToken>
 ```
 
-**Path Parameters:**
-- `id`: معرف الامتحان (MongoDB ObjectId)
-
 **Response (200):**
 ```json
 {
   "id": "...",
   "title": "...",
   "description": "...",
-  "provider": "goethe",
-  "level": "B1",
-  "examCategory": "provider_exam",
-  "mainSkill": "mixed",
-  "status": "published",
-  "sections": [
-    {
-      "key": "hoeren_teil1",
-      "title": "Hören – Teil 1",
-      "skill": "hoeren",
-      "teilNumber": 1,
-      "timeLimitMin": 20,
-      "quota": 5,
-      "items": [...]
-    }
-  ],
   "questions": [
     {
       "id": "...",
@@ -1724,6 +1652,166 @@ Authorization: Bearer <accessToken>
 ```
 
 **الاستخدام:** للمعلمين لإنشاء أسئلة جديدة (يمكن إضافة وسائط مثل صوت أو صورة)
+
+---
+
+### `POST /questions/bulk`
+**الوصف:** إنشاء عدة أسئلة دفعة واحدة (Bulk Create)  
+**المصادقة:** مطلوبة (Bearer Token)  
+**الأدوار المسموحة:** teacher, admin
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "questions": [
+    {
+      "prompt": "ما هي عاصمة ألمانيا؟",
+      "qType": "mcq",
+      "options": [
+        { "text": "برلين", "isCorrect": true },
+        { "text": "ميونخ", "isCorrect": false },
+        { "text": "هامبورغ", "isCorrect": false },
+        { "text": "فرانكفورت", "isCorrect": false }
+      ],
+      "provider": "leben_in_deutschland",
+      "mainSkill": "leben_test",
+      "usageCategory": "common",
+      "level": "A1",
+      "status": "published",
+      "tags": ["300-Fragen"]
+    },
+    {
+      "prompt": "ما هي عاصمة ولاية بايرن؟",
+      "qType": "mcq",
+      "options": [
+        { "text": "ميونخ", "isCorrect": true },
+        { "text": "برلين", "isCorrect": false },
+        { "text": "هامبورغ", "isCorrect": false },
+        { "text": "فرانكفورت", "isCorrect": false }
+      ],
+      "provider": "leben_in_deutschland",
+      "mainSkill": "leben_test",
+      "usageCategory": "state_specific",
+      "state": "Bayern",
+      "level": "A1",
+      "status": "published",
+      "tags": ["Bayern"]
+    }
+  ]
+}
+```
+
+**ملاحظات:**
+- يجب أن يكون Body عبارة عن object يحتوي على `questions` array
+- كل سؤال في الـ array يجب أن يتبع نفس القواعد كـ `POST /questions`
+- الحقول الخاصة بـ Leben in Deutschland:
+  - `mainSkill`: `"leben_test"` (من ExamSkillEnum)
+  - `usageCategory`: `"common"` للأسئلة العامة أو `"state_specific"` للأسئلة الخاصة بالولايات
+  - `state`: اسم الولاية (مثل `"Bayern"`, `"Berlin"`) - مطلوب فقط للأسئلة مع `usageCategory: "state_specific"`
+
+**Response (201):**
+```json
+{
+  "success": 2,
+  "failed": 0,
+  "total": 2,
+  "results": [
+    {
+      "index": 0,
+      "id": "questionId1",
+      "prompt": "ما هي عاصمة ألمانيا؟",
+      "status": "published"
+    },
+    {
+      "index": 1,
+      "id": "questionId2",
+      "prompt": "ما هي عاصمة ولاية بايرن؟",
+      "status": "published"
+    }
+  ]
+}
+```
+
+**Response (201) - مع أخطاء:**
+```json
+{
+  "success": 1,
+  "failed": 1,
+  "total": 2,
+  "results": [
+    {
+      "index": 0,
+      "id": "questionId1",
+      "prompt": "ما هي عاصمة ألمانيا؟",
+      "status": "published"
+    }
+  ],
+  "errors": [
+    {
+      "index": 1,
+      "prompt": "ما هي عاصمة ولاية بايرن؟",
+      "error": "MCQ must include at least one option with isCorrect=true"
+    }
+  ]
+}
+```
+
+**أمثلة على الاستخدام:**
+
+**1. إرسال 300 سؤال عام:**
+```javascript
+// قراءة ملف JSON
+const questions = require('./leben-in-deutschland-300-questions.json');
+
+// إرسال الأسئلة
+const response = await api.post('/questions/bulk', {
+  questions: questions.questions // إذا كان الملف يحتوي على { "questions": [...] }
+});
+```
+
+**2. إرسال أسئلة الولايات:**
+```javascript
+// قراءة ملف JSON
+const stateQuestions = require('./leben-in-deutschland-state-questions.json');
+
+// إرسال الأسئلة
+const response = await api.post('/questions/bulk', {
+  questions: stateQuestions.questions
+});
+```
+
+**3. استخدام في React/Vue:**
+```javascript
+// رفع ملف JSON وإرسال الأسئلة
+const handleBulkUpload = async (file) => {
+  const fileContent = await file.text();
+  const jsonData = JSON.parse(fileContent);
+  
+  try {
+    const response = await api.post('/questions/bulk', {
+      questions: jsonData.questions || jsonData // يدعم كلا الشكلين
+    });
+    
+    console.log(`تم إنشاء ${response.data.success} سؤال بنجاح`);
+    if (response.data.errors) {
+      console.warn(`فشل في إنشاء ${response.data.failed} سؤال:`, response.data.errors);
+    }
+  } catch (error) {
+    console.error('خطأ في رفع الأسئلة:', error);
+  }
+};
+```
+
+**الاستخدام:**
+- **لرفع كميات كبيرة من الأسئلة:** مثل 300 سؤال عام أو 160 سؤال للولايات
+- **للاستيراد الجماعي:** استيراد أسئلة من ملفات JSON
+- **للمعلمين:** رفع مجموعات كبيرة من الأسئلة دفعة واحدة
 
 ---
 
@@ -2800,90 +2888,36 @@ Authorization: Bearer <accessToken>
 **Headers:**
 ```
 Authorization: Bearer <accessToken>
-Content-Type: application/json
 ```
 
 **Body:**
 ```json
-{
-  "answers": [
-    {
-      "questionId": "questionId123",
-      "selectedOptionIds": ["0", "2"]  // للـ MCQ: indexes كـ strings (0-based)
-    },
-    {
-      "questionId": "questionId456",
-      "studentAnswerText": "الإجابة النصية"  // للـ Fill
-    },
-    {
-      "questionId": "questionId789",
-      "studentAnswerBoolean": true  // للـ True/False
-    }
-  ]
-}
+{} // فارغ
 ```
-
-**ملاحظة:** الـ Body اختياري (يمكن إرسال `{}` فارغ إذا تم حفظ الإجابات مسبقاً)
 
 **Response (200):**
 ```json
 {
-  "attemptId": "attemptId123",
-  "examId": "examId123",
+  "id": "attemptId123",
   "status": "submitted",
-  "attemptCount": 1,
-  "startedAt": "2024-01-01T10:00:00.000Z",
   "submittedAt": "2024-01-01T10:45:00.000Z",
-  "finalScore": 75,              // ⭐ النتيجة النهائية
-  "totalMaxScore": 100,          // ⭐ مجموع النقاط الكلي
-  "totalAutoScore": 75,          // ⭐ النقاط من التصحيح الآلي
-  "totalManualScore": 0,         // ⭐ النقاط من التصحيح اليدوي
+  "score": 75, // إذا كان التصحيح تلقائي
+  "totalPoints": 100,
   "items": [
     {
-      "questionId": "questionId123",
-      "qType": "mcq",            // نوع السؤال: mcq, fill, true_false, match, reorder
-      "promptSnapshot": "ما هي عاصمة فرنسا؟",
-      "optionsText": ["باريس", "لندن", "برلين", "مدريد"],
-      "points": 10,              // ⭐ نقاط السؤال
-      "autoScore": 10,           // ⭐ النقاط المحصلة (من التصحيح الآلي)
-      "manualScore": 0,          // ⭐ النقاط المحصلة (من التصحيح اليدوي)
-      "studentAnswerIndexes": [0],  // إجابة الطالب (indexes)
-      "correctOptionIndexes": [0],  // الإجابة الصحيحة (إذا كان policy يسمح)
-      "isCorrect": true          // ⭐ هل الإجابة صحيحة (في correct_with_scores policy)
-    },
-    {
-      "questionId": "questionId456",
-      "qType": "fill",
-      "promptSnapshot": "اكمل: عاصمة مصر هي _____",
+      "questionId": "...",
+      "studentAnswer": {...},
+      "correctAnswer": {...},
+      "isCorrect": true,
       "points": 10,
-      "autoScore": 0,
-      "manualScore": 0,
-      "studentAnswerText": "القاهرة",
-      "fillExact": "القاهرة",    // الإجابة الصحيحة (إذا كان policy يسمح)
-      "isCorrect": false
-    },
-    {
-      "questionId": "questionId789",
-      "qType": "true_false",
-      "promptSnapshot": "2 + 2 = 4",
-      "points": 5,
-      "autoScore": 5,
-      "manualScore": 0,
-      "studentAnswerBoolean": true,
-      "answerKeyBoolean": true,  // الإجابة الصحيحة (إذا كان policy يسمح)
-      "isCorrect": true
+      "maxPoints": 10
     }
-  ]
+  ],
+  ...
 }
 ```
 
 **الاستخدام:** للطالب لتسليم المحاولة (يتم التصحيح التلقائي للأسئلة الموضوعية)
-
-**ملاحظات مهمة:**
-- `finalScore` = `totalAutoScore` + `totalManualScore` - هذا هو الحقل الرئيسي للنتيجة الإجمالية
-- `selectedOptionIds` يجب أن تكون indexes (0-based) كـ strings
-- `correctOptionIndexes` / `answerKeyBoolean` / `fillExact` تظهر فقط إذا كان `resultsPolicy = 'explanations_with_scores'` أو إذا كان المستخدم معلم/أدمن
-- `isCorrect` يظهر فقط في `correct_with_scores` policy
 
 ---
 

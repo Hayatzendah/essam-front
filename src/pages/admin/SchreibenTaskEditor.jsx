@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getSchreibenTask,
   createSchreibenTask,
   updateSchreibenTask,
   linkSchreibenExam,
-  unlinkSchreibenExam
+  unlinkSchreibenExam,
+  updateFieldCorrectAnswer,
+  uploadImage
 } from '../../services/api';
 
 // Field Types for form blocks
@@ -144,15 +146,47 @@ const ImageBlockEditor = ({ block, onChange, onRemove }) => (
 );
 
 // Single field editor within a form block
-const FieldEditor = ({ field, onChange, onRemove }) => {
+const FieldEditor = ({ field, onChange, onRemove, taskId, isEditing }) => {
+  const [savingAnswer, setSavingAnswer] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
+
   const handleFieldChange = (key, value) => {
     onChange({ ...field, [key]: value });
+    setSaveSuccess('');
   };
 
-  const handleOptionsChange = (optionsText) => {
-    const options = optionsText.split('\n').filter(o => o.trim());
-    handleFieldChange('options', options);
+
+  const handleSaveCorrectAnswer = async () => {
+    const fieldId = field._id || field.id || field.fieldId;
+    if (!fieldId || !taskId) return;
+
+    try {
+      setSavingAnswer(true);
+      setSaveSuccess('');
+
+      let body;
+      if (field.type === 'text_input') {
+        body = { value: field.value || '' };
+      } else if (field.type === 'select' || field.type === 'multiselect') {
+        body = { correctAnswers: field.correctAnswers || [] };
+      } else {
+        return;
+      }
+
+      await updateFieldCorrectAnswer(taskId, fieldId, body);
+      setSaveSuccess('تم الحفظ');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error saving correct answer:', err);
+      setSaveSuccess('خطأ في الحفظ');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } finally {
+      setSavingAnswer(false);
+    }
   };
+
+  const fieldId = field._id || field.id || field.fieldId;
+  const canSave = isEditing && fieldId && (field.type === 'text_input' || field.type === 'select' || field.type === 'multiselect');
 
   return (
     <div style={{
@@ -227,46 +261,223 @@ const FieldEditor = ({ field, onChange, onRemove }) => {
         />
       )}
 
-      {(field.type === 'select' || field.type === 'multiselect') && (
-        <textarea
-          value={(field.options || []).join('\n')}
-          onChange={(e) => handleOptionsChange(e.target.value)}
-          placeholder="الخيارات (خيار واحد في كل سطر)"
-          style={{
-            width: '100%',
-            minHeight: '80px',
-            padding: '8px 10px',
-            border: '1px solid #d1d5db',
-            borderRadius: '4px',
-            fontSize: '13px',
-            marginTop: '8px',
-            resize: 'vertical',
-          }}
-        />
-      )}
+      {(field.type === 'select' || field.type === 'multiselect') && (() => {
+        // Track correct answers by INDEX to avoid issues with empty/duplicate text
+        const options = field.options || [];
+        const correctAnswers = field.correctAnswers || [];
+        const correctIndices = new Set();
+        const remaining = [...correctAnswers];
+        options.forEach((opt, i) => {
+          const idx = remaining.indexOf(opt);
+          if (idx !== -1) {
+            correctIndices.add(i);
+            remaining.splice(idx, 1);
+          }
+        });
+
+        const rebuildCorrectAnswers = (newIndices, opts) => {
+          return [...newIndices].sort((a, b) => a - b).map(idx => opts[idx]).filter(v => v !== undefined);
+        };
+
+        return (
+        <div style={{ marginTop: '8px' }}>
+          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px', fontWeight: '600' }}>
+            الخيارات {field.type === 'multiselect' ? '(اختر الإجابات الصحيحة)' : '(اختر الإجابة الصحيحة)'}:
+          </p>
+          {options.map((opt, i) => {
+            const isCorrect = correctIndices.has(i);
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <input
+                  type={field.type === 'multiselect' ? 'checkbox' : 'radio'}
+                  name={`correct-${fieldId || field.label || 'field'}`}
+                  checked={isCorrect}
+                  onChange={() => {
+                    const newIndices = new Set(correctIndices);
+                    if (field.type === 'multiselect') {
+                      if (isCorrect) newIndices.delete(i); else newIndices.add(i);
+                    } else {
+                      newIndices.clear();
+                      newIndices.add(i);
+                    }
+                    handleFieldChange('correctAnswers', rebuildCorrectAnswers(newIndices, options));
+                  }}
+                  title="إجابة صحيحة"
+                  style={{ cursor: 'pointer', accentColor: '#10b981' }}
+                />
+                <input
+                  type="text"
+                  value={opt}
+                  onChange={(e) => {
+                    const newOptions = [...options];
+                    newOptions[i] = e.target.value;
+                    // Rebuild correctAnswers with same indices but updated text
+                    const newCorrect = rebuildCorrectAnswers(correctIndices, newOptions);
+                    onChange({ ...field, options: newOptions, correctAnswers: newCorrect });
+                  }}
+                  placeholder={`خيار ${i + 1}`}
+                  style={{
+                    flex: '1',
+                    padding: '7px 10px',
+                    border: isCorrect ? '1px solid #10b981' : '1px solid #d1d5db',
+                    background: isCorrect ? '#f0fdf4' : 'white',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newOptions = options.filter((_, idx) => idx !== i);
+                    // Rebuild indices: shift down indices after removed one
+                    const newIndices = new Set();
+                    correctIndices.forEach(ci => {
+                      if (ci < i) newIndices.add(ci);
+                      else if (ci > i) newIndices.add(ci - 1);
+                      // ci === i is removed
+                    });
+                    onChange({ ...field, options: newOptions, correctAnswers: rebuildCorrectAnswers(newIndices, newOptions) });
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    padding: '4px',
+                  }}
+                  title="حذف الخيار"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              const newOptions = [...(field.options || []), ''];
+              handleFieldChange('options', newOptions);
+            }}
+            style={{
+              padding: '6px 14px',
+              background: '#f8fafc',
+              color: '#3b82f6',
+              border: '1px dashed #93c5fd',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: '600',
+              marginTop: '4px',
+            }}
+          >
+            + إضافة خيار
+          </button>
+          {canSave && (field.options || []).length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
+              <button
+                type="button"
+                onClick={handleSaveCorrectAnswer}
+                disabled={savingAnswer}
+                style={{
+                  padding: '6px 14px',
+                  background: savingAnswer ? '#d1d5db' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  cursor: savingAnswer ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                {savingAnswer ? '...' : 'حفظ الإجابة'}
+              </button>
+              {saveSuccess && (
+                <span style={{
+                  fontSize: '12px',
+                  color: saveSuccess === 'تم الحفظ' ? '#10b981' : '#ef4444',
+                  fontWeight: '600',
+                }}>
+                  {saveSuccess}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        );
+      })()}
 
       {field.type === 'text_input' && (
-        <input
-          type="text"
-          value={field.placeholder || ''}
-          onChange={(e) => handleFieldChange('placeholder', e.target.value)}
-          placeholder="نص التلميح (Placeholder)"
-          style={{
-            width: '100%',
-            padding: '8px 10px',
-            border: '1px solid #d1d5db',
-            borderRadius: '4px',
-            fontSize: '13px',
-            marginTop: '8px',
-          }}
-        />
+        <>
+          <input
+            type="text"
+            value={field.placeholder || ''}
+            onChange={(e) => handleFieldChange('placeholder', e.target.value)}
+            placeholder="نص التلميح (Placeholder)"
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              fontSize: '13px',
+              marginTop: '8px',
+            }}
+          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+            <input
+              type="text"
+              value={field.value || ''}
+              onChange={(e) => handleFieldChange('value', e.target.value)}
+              placeholder="الإجابة الصحيحة"
+              style={{
+                flex: '1',
+                padding: '8px 10px',
+                border: '1px solid #10b981',
+                borderRadius: '4px',
+                fontSize: '13px',
+                background: '#f0fdf4',
+              }}
+            />
+            {canSave && (
+              <button
+                type="button"
+                onClick={handleSaveCorrectAnswer}
+                disabled={savingAnswer}
+                style={{
+                  padding: '8px 14px',
+                  background: savingAnswer ? '#d1d5db' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  cursor: savingAnswer ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  fontWeight: '600',
+                }}
+              >
+                {savingAnswer ? '...' : 'حفظ'}
+              </button>
+            )}
+            {saveSuccess && (
+              <span style={{
+                fontSize: '12px',
+                color: saveSuccess === 'تم الحفظ' ? '#10b981' : '#ef4444',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+              }}>
+                {saveSuccess}
+              </span>
+            )}
+          </div>
+        </>
       )}
+
     </div>
   );
 };
 
 // Block type component for Form
-const FormBlockEditor = ({ block, onChange, onRemove }) => {
+const FormBlockEditor = ({ block, onChange, onRemove, taskId, isEditing }) => {
   const fields = block.data?.fields || [];
 
   const addField = () => {
@@ -342,6 +553,8 @@ const FormBlockEditor = ({ block, onChange, onRemove }) => {
             field={field}
             onChange={(updated) => updateField(index, updated)}
             onRemove={() => removeField(index)}
+            taskId={taskId}
+            isEditing={isEditing}
           />
         ))}
       </div>
@@ -389,6 +602,10 @@ function SchreibenTaskEditor() {
   const [linkedExamId, setLinkedExamId] = useState('');
   const [examIdInput, setExamIdInput] = useState('');
   const [linkingExam, setLinkingExam] = useState(false);
+
+  // Image upload
+  const imageInputRef = useRef(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   const providers = [
@@ -482,6 +699,33 @@ function SchreibenTaskEditor() {
     setContentBlocks(newBlocks);
   };
 
+  // Upload image and add as content block
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      setError('');
+      const data = await uploadImage(file);
+      const src = data.url || data.path || data.src;
+      if (!src) throw new Error('لم يتم إرجاع رابط الصورة');
+
+      const newBlock = {
+        id: generateBlockId(),
+        type: 'image',
+        data: { src, alt: '', caption: '' },
+      };
+      setContentBlocks(prev => [...prev, newBlock]);
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      setError(err.response?.data?.message || err.message || 'حدث خطأ أثناء رفع الصورة');
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
   // Link exam to task
   const handleLinkExam = async () => {
     if (!examIdInput.trim()) {
@@ -542,8 +786,8 @@ function SchreibenTaskEditor() {
           return block.data?.content?.trim().length > 0;
         }
         if (block.type === 'form') {
-          // تأكد إن title موجود و fields مش فاضية
-          return block.data?.title && block.data?.fields?.length > 0;
+          // form block صالح لو فيه عنوان أو حقول (العنوان اختياري)
+          return (block.data?.title?.trim()) || (block.data?.fields?.length > 0);
         }
         if (block.type === 'image') {
           // تأكد إن src موجود
@@ -845,6 +1089,8 @@ function SchreibenTaskEditor() {
                 block={block}
                 onChange={(updated) => updateBlock(index, updated)}
                 onRemove={() => removeBlock(index)}
+                taskId={taskId}
+                isEditing={isEditing}
               />
             )}
             {block.type === 'image' && (
@@ -896,21 +1142,6 @@ function SchreibenTaskEditor() {
             }}
           >
             📋 إضافة نموذج
-          </button>
-          <button
-            type="button"
-            onClick={() => addBlock('image')}
-            style={{
-              padding: '10px 20px',
-              background: '#f0fdf4',
-              color: '#166534',
-              border: '1px solid #bbf7d0',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '500',
-            }}
-          >
-            🖼️ إضافة صورة
           </button>
         </div>
       </div>

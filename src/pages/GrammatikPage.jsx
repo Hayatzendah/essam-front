@@ -57,7 +57,7 @@ export default function GrammatikPage() {
           >
             ← العودة للرئيسية
           </button>
-          <span className="text-xs font-semibold text-rose-500">
+          <span className="text-xs font-semibold text-red-600">
             Deutsch Learning App
           </span>
         </div>
@@ -65,7 +65,7 @@ export default function GrammatikPage() {
         {/* العنوان الرئيسي */}
         <div className="text-center mb-10">
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
-            القواعد <span className="text-rose-500">Grammatik</span>
+            القواعد <span className="text-red-600">Grammatik</span>
           </h1>
           <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
             اختاري مستواك ثم موضوع القاعدة اللي حابة تتدربي عليه. بعد ما تفهمي
@@ -82,8 +82,8 @@ export default function GrammatikPage() {
               onClick={() => setActiveLevel(level)}
               className={`px-4 py-2 text-sm rounded-full border transition ${
                 activeLevel === level
-                  ? "bg-rose-500 text-white border-rose-500 shadow-sm"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-rose-400 hover:text-rose-600"
+                  ? "bg-red-600 text-white border-red-600 shadow-sm"
+                  : "bg-white text-slate-700 border-slate-200 hover:border-red-500 hover:text-red-600"
               }`}
             >
               مستوى {level}
@@ -108,7 +108,7 @@ export default function GrammatikPage() {
 
         {/* حالة الخطأ */}
         {error && !loading && (
-          <div className="text-center text-rose-600 text-sm mt-10 bg-rose-50 border border-rose-100 rounded-xl py-4">
+          <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl py-4">
             {error}
           </div>
         )}
@@ -130,7 +130,7 @@ export default function GrammatikPage() {
                 className="group text-right bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-rose-50 flex items-center justify-center text-xl">
+                  <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center text-xl">
                     {topic.icon}
                   </div>
                   <div>
@@ -145,7 +145,7 @@ export default function GrammatikPage() {
                 <p className="text-xs text-slate-600 mb-3">
                   {topic.shortDescription || topic.description}
                 </p>
-                <div className="flex items-center justify-between text-[11px] text-rose-600">
+                <div className="flex items-center justify-between text-[11px] text-red-600">
                   <span className="font-semibold group-hover:underline">
                     عرض القاعدة والتدريب
                   </span>

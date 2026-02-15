@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { questionsAPI } from '../../services/questionsAPI';
 import './QuestionsList.css';
@@ -10,51 +10,73 @@ function QuestionsList() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [deletingId, setDeletingId] = useState(null);
-  const [filters, setFilters] = useState({
-    provider: '',
-    level: '',
-    status: '',
-    qType: '',
-    page: 1,
-    limit: 20,
-  });
+  const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
     total: 0,
   });
 
-  useEffect(() => {
-    loadQuestions();
-  }, [filters.page, filters.provider, filters.level, filters.status, filters.qType]);
-
-  const loadQuestions = async () => {
+  // Load questions function - memoized with useCallback to avoid unnecessary re-renders
+  const loadQuestions = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
       
       const params = {
-        page: filters.page,
-        limit: filters.limit,
+        page: pagination.page,
+        limit: pagination.limit,
       };
       
-      if (filters.provider) params.provider = filters.provider;
-      if (filters.level) params.level = filters.level;
-      if (filters.status) params.status = filters.status;
-      if (filters.qType) params.qType = filters.qType;
+      // إضافة البحث فقط إذا كان موجوداً
+      // الـ API endpoint /questions يتوقع معامل 'text' للبحث
+      if (searchTerm && searchTerm.trim() !== '') {
+        params.text = searchTerm.trim();
+      }
+      
+      console.log('🔍 Sending search params:', params);
+      console.log('🔍 Search term:', searchTerm);
       
       const response = await questionsAPI.getAll(params);
       
       // Response format: { page, limit, total, items: [...] }
-      const questionsData = response.items || response || [];
+      let questionsData = response.items || response || [];
+      
+      // فلترة إضافية على الفرونت إند إذا كان الباك إند لا يفلتر بشكل صحيح
+      // هذا حل مؤقت للتأكد من أن البحث يعمل
+      if (searchTerm && searchTerm.trim() !== '') {
+        const searchLower = searchTerm.toLowerCase().trim();
+        questionsData = questionsData.filter(question => {
+          const prompt = (question.prompt || '').toLowerCase();
+          return prompt.includes(searchLower);
+        });
+        console.log('📊 Questions after frontend filtering:', questionsData.length);
+      }
+      
+      console.log('📊 Questions returned:', questionsData.length);
+      
       setQuestions(questionsData);
       
-      if (response.page && response.total) {
-        setPagination({
+      // تحديث pagination - إذا كان هناك بحث، نستخدم عدد النتائج المفلترة
+      if (searchTerm && searchTerm.trim() !== '') {
+        setPagination(prev => ({
+          ...prev,
+          page: 1, // إعادة تعيين الصفحة عند البحث
+          total: questionsData.length, // استخدام عدد النتائج المفلترة
+        }));
+      } else if (response.page !== undefined && response.total !== undefined) {
+        setPagination(prev => ({
+          ...prev,
           page: response.page,
-          limit: response.limit || filters.limit,
+          limit: response.limit || prev.limit,
           total: response.total,
-        });
+        }));
+      } else {
+        // إذا لم يكن هناك pagination في الـ response، نستخدم القيم الافتراضية
+        setPagination(prev => ({
+          ...prev,
+          total: questionsData.length,
+        }));
       }
     } catch (err) {
       console.error('Error loading questions:', err);
@@ -63,10 +85,26 @@ function QuestionsList() {
         err.response?.data?.error ||
         'حدث خطأ أثناء تحميل الأسئلة'
       );
+      setQuestions([]);
+      setPagination(prev => ({
+        ...prev,
+        total: 0,
+      }));
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, searchTerm]);
+
+  // Always fetch questions when component mounts or search changes
+  // This ensures fresh data is always loaded from the API, not from stale state
+  useEffect(() => {
+    // Debounce البحث - انتظر 500ms بعد توقف المستخدم عن الكتابة
+    const timeoutId = setTimeout(() => {
+      loadQuestions();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [loadQuestions]);
 
   const handleDelete = async (questionId, hard = false) => {
     if (!window.confirm(`هل أنت متأكد من حذف هذا السؤال؟ ${hard ? '(حذف نهائي)' : '(حذف مؤقت)'}`)) {
@@ -97,16 +135,18 @@ function QuestionsList() {
     }
   };
 
-  const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    // إعادة تعيين الصفحة عند البحث
+    setPagination(prev => ({
       ...prev,
-      [field]: value,
-      page: 1, // إعادة تعيين الصفحة عند تغيير الفلتر
+      page: 1,
     }));
   };
 
   const handlePageChange = (newPage) => {
-    setFilters((prev) => ({
+    setPagination(prev => ({
       ...prev,
       page: newPage,
     }));
@@ -135,8 +175,17 @@ function QuestionsList() {
   return (
     <div className="questions-list-page">
       <div className="page-header">
-        <button onClick={() => navigate('/admin')} className="back-btn">
-          ← العودة للوحة التحكم
+        <button onClick={() => navigate('/welcome')} className="back-btn" title="العودة للوحة التحكم">
+          <svg fill="none" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={3} 
+              d="M10 19l-7-7m0 0l7-7m-7 7h18" 
+              stroke="#000000" 
+              fill="none"
+            />
+          </svg>
         </button>
         <h1>جميع الأسئلة</h1>
       </div>
@@ -145,73 +194,24 @@ function QuestionsList() {
         {error && <div className="error-message">{error}</div>}
         {success && <div className="success-message">{success}</div>}
 
-        {/* Filters */}
+        {/* Search */}
         <div className="filters-section">
-          <div className="filter-group">
-            <label>المزود</label>
-            <select
-              value={filters.provider}
-              onChange={(e) => handleFilterChange('provider', e.target.value)}
-            >
-              <option value="">الكل</option>
-              <option value="Deutschland-in-Leben">Deutschland-in-Leben</option>
-              <option value="telc">telc</option>
-              <option value="Goethe">Goethe</option>
-              <option value="ÖSD">ÖSD</option>
-              <option value="ECL">ECL</option>
-              <option value="DTB">DTB</option>
-              <option value="DTZ">DTZ</option>
-              <option value="Grammatik">Grammatik</option>
-              <option value="Wortschatz">Wortschatz</option>
-            </select>
+          <div className="filter-group" style={{ flex: 1, maxWidth: '500px' }}>
+            <label>🔍 البحث في الأسئلة</label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="ابحث في نص السؤال..."
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '6px',
+                border: '2px solid #e5e7eb',
+                fontSize: '14px',
+              }}
+            />
           </div>
-
-          <div className="filter-group">
-            <label>المستوى</label>
-            <select
-              value={filters.level}
-              onChange={(e) => handleFilterChange('level', e.target.value)}
-            >
-              <option value="">الكل</option>
-              <option value="A1">A1</option>
-              <option value="A2">A2</option>
-              <option value="B1">B1</option>
-              <option value="B2">B2</option>
-              <option value="C1">C1</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>الحالة</label>
-            <select
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-            >
-              <option value="">الكل</option>
-              <option value="draft">مسودة</option>
-              <option value="published">منشور</option>
-              <option value="archived">مؤرشف</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>نوع السؤال</label>
-            <select
-              value={filters.qType}
-              onChange={(e) => handleFilterChange('qType', e.target.value)}
-            >
-              <option value="">الكل</option>
-              <option value="mcq">اختيار متعدد</option>
-              <option value="true_false">صحيح/خطأ</option>
-              <option value="fill">ملء الفراغ</option>
-              <option value="match">مطابقة</option>
-              <option value="reorder">إعادة ترتيب</option>
-            </select>
-          </div>
-
-          <button onClick={loadQuestions} className="refresh-btn">
-            🔄 تحديث
-          </button>
         </div>
 
         {/* Questions List */}
@@ -222,7 +222,31 @@ function QuestionsList() {
           </div>
         ) : questions.length === 0 ? (
           <div className="empty-state">
-            <p>لا توجد أسئلة</p>
+            <p>
+              {searchTerm && searchTerm.trim() !== '' 
+                ? `لا توجد نتائج للبحث عن: "${searchTerm}"`
+                : 'لا توجد أسئلة'
+              }
+            </p>
+            {searchTerm && searchTerm.trim() !== '' && (
+              <button 
+                onClick={() => {
+                  setSearchTerm('');
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                style={{
+                  marginTop: '10px',
+                  padding: '8px 16px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                مسح البحث وعرض جميع الأسئلة
+              </button>
+            )}
           </div>
         ) : (
           <>

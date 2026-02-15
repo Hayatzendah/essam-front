@@ -1,108 +1,44 @@
 // src/pages/Wortschatz.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { getVocabularyTopics } from "../services/api";
 
 const LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
-const TOPICS_BY_LEVEL = {
-  A1: [
-    {
-      slug: "daily-life",
-      icon: "🏠",
-      title: "الحياة اليومية",
-      description: "كلمات عن الروتين اليومي، البيت، الشارع، المواصلات…",
-    },
-    {
-      slug: "family",
-      icon: "👨‍👩‍👧",
-      title: "العائلة",
-      description: "أفراد العائلة، العلاقات، الحالات الاجتماعية…",
-    },
-    {
-      slug: "food",
-      icon: "🍽️",
-      title: "الطعام والشراب",
-      description: "أسماء الأطعمة، المطعم، التسوّق من السوبرماركت…",
-    },
-    {
-      slug: "work",
-      icon: "💼",
-      title: "العمل",
-      description: "أماكن العمل، المهن، أدوات العمل الأساسية…",
-    },
-  ],
-  A2: [
-    {
-      slug: "travel",
-      icon: "✈️",
-      title: "السفر",
-      description: "المطار، القطار، الفندق، حجز التذاكر…",
-    },
-    {
-      slug: "health",
-      icon: "❤️",
-      title: "الصحة",
-      description: "زيارة الطبيب، الأعراض، أجزاء الجسم…",
-    },
-    {
-      slug: "shopping",
-      icon: "🛍️",
-      title: "التسوّق",
-      description: "الملابس، المقاسات، وسائل الدفع…",
-    },
-  ],
-  B1: [
-    {
-      slug: "environment",
-      icon: "🌍",
-      title: "البيئة",
-      description: "المناخ، التلوث، إعادة التدوير، الطاقة…",
-    },
-    {
-      slug: "society",
-      icon: "👥",
-      title: "المجتمع",
-      description: "العادات، التقاليد، التعامل مع الآخرين…",
-    },
-  ],
-  B2: [
-    {
-      slug: "politics",
-      icon: "🗳️",
-      title: "السياسة",
-      description: "الانتخابات، الحكومة، الأحزاب، الحقوق والواجبات…",
-    },
-    {
-      slug: "education",
-      icon: "🎓",
-      title: "التعليم",
-      description: "المدرسة، الجامعة، الدورات التدريبية…",
-    },
-  ],
-  C1: [
-    {
-      slug: "media",
-      icon: "📰",
-      title: "الإعلام",
-      description: "الصحافة، الأخبار، وسائل الإعلام المختلفة…",
-    },
-    {
-      slug: "culture",
-      icon: "🎭",
-      title: "الثقافة والفنون",
-      description: "المسرح، السينما، الأدب، الفنون…",
-    },
-  ],
-};
-
 export default function WortschatzPage() {
   const [activeLevel, setActiveLevel] = useState("A1");
+  const [topics, setTopics] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const topics = TOPICS_BY_LEVEL[activeLevel] ?? [];
+  // جلب المواضيع من الـ API عند تغيير المستوى
+  useEffect(() => {
+    async function loadTopics() {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await getVocabularyTopics(activeLevel);
+        // الباك يرجع array مباشر
+        const topicsList = Array.isArray(data) ? data : [];
+        // فلترة المواضيع النشطة فقط
+        const activeTopics = topicsList.filter(topic => topic.isActive !== false);
+        setTopics(activeTopics);
+      } catch (err) {
+        console.error('Error loading topics:', err);
+        setError("حدث خطأ أثناء تحميل المواضيع");
+        setTopics([]);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  const handleTopicClick = (topicSlug) => {
-    // هنستخدم الروت ده لاحقًا لعرض الكلمات واستدعاء /questions/vocab
+    loadTopics();
+  }, [activeLevel]);
+
+  const handleTopicClick = (topic) => {
+    // استخدام slug أو _id للتنقل
+    const topicSlug = topic.slug || topic._id || topic.id;
     navigate(`/wortschatz/${activeLevel}/${topicSlug}`);
   };
 
@@ -117,7 +53,7 @@ export default function WortschatzPage() {
           >
             ← العودة للرئيسية
           </button>
-          <span className="text-xs font-semibold text-rose-500">
+          <span className="text-xs font-semibold text-red-600">
             Deutsch Learning App
           </span>
         </div>
@@ -125,7 +61,7 @@ export default function WortschatzPage() {
         {/* العنوان الرئيسي */}
         <div className="text-center mb-10">
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
-            المفردات <span className="text-rose-500">Wortschatz</span>
+            المفردات <span className="text-red-600">Wortschatz</span>
           </h1>
           <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
             اختاري مستواك ثم موضوع المفردات الذي تحبين التدرب عليه. يمكنك لاحقًا
@@ -142,8 +78,8 @@ export default function WortschatzPage() {
               onClick={() => setActiveLevel(level)}
               className={`px-4 py-2 text-sm rounded-full border transition ${
                 activeLevel === level
-                  ? "bg-rose-500 text-white border-rose-500 shadow-sm"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-rose-400 hover:text-rose-600"
+                  ? "bg-red-600 text-white border-red-600 shadow-sm"
+                  : "bg-white text-slate-700 border-slate-200 hover:border-red-500 hover:text-red-600"
               }`}
             >
               مستوى {level}
@@ -159,23 +95,39 @@ export default function WortschatzPage() {
           </p>
         </div>
 
+        {/* حالة التحميل */}
+        {loading && (
+          <div className="text-center text-slate-500 text-sm mt-10">
+            جاري تحميل المواضيع…
+          </div>
+        )}
+
+        {/* حالة الخطأ */}
+        {error && !loading && (
+          <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl p-4">
+            {error}
+          </div>
+        )}
+
         {/* كروت المواضيع */}
-        {topics.length === 0 ? (
+        {!loading && !error && topics.length === 0 && (
           <div className="text-center text-slate-500 text-sm mt-10">
             لا توجد مواضيع مضافة لهذا المستوى حتى الآن.
           </div>
-        ) : (
+        )}
+
+        {!loading && !error && topics.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topics.map((topic) => (
               <button
-                key={topic.slug}
+                key={topic._id || topic.id || topic.slug}
                 type="button"
-                onClick={() => handleTopicClick(topic.slug)}
+                onClick={() => handleTopicClick(topic)}
                 className="group text-right bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-rose-50 flex items-center justify-center text-xl">
-                    {topic.icon}
+                  <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center text-xl">
+                    {topic.icon || "📝"}
                   </div>
                   <div>
                     <h2 className="text-sm font-semibold text-slate-900">
@@ -187,9 +139,9 @@ export default function WortschatzPage() {
                   </div>
                 </div>
                 <p className="text-xs text-slate-600 mb-3">
-                  {topic.description}
+                  {topic.description || topic.shortDescription || "موضوع مفردات"}
                 </p>
-                <div className="flex items-center justify-between text-[11px] text-rose-600">
+                <div className="flex items-center justify-between text-[11px] text-red-600">
                   <span className="font-semibold group-hover:underline">
                     عرض الكلمات والتدريب
                   </span>

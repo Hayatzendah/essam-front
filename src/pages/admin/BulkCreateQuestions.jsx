@@ -60,6 +60,7 @@ function BulkCreateQuestions() {
 
   // Reading passage (optional - for Lesen)
   const [readingPassage, setReadingPassage] = useState('');
+  const [readingCards, setReadingCards] = useState([]);
 
   // Questions
   const [questions, setQuestions] = useState([emptyQuestion()]);
@@ -234,6 +235,17 @@ function BulkCreateQuestions() {
     return data;
   };
 
+  // --- Reading Cards ---
+  const addReadingCard = () => {
+    setReadingCards(prev => [...prev, { title: '', content: '' }]);
+  };
+  const updateReadingCard = (index, field, value) => {
+    setReadingCards(prev => prev.map((card, i) => i === index ? { ...card, [field]: value } : card));
+  };
+  const removeReadingCard = (index) => {
+    setReadingCards(prev => prev.filter((_, i) => i !== index));
+  };
+
   // --- Submit ---
   const handleSubmit = async () => {
     setError('');
@@ -250,9 +262,11 @@ function BulkCreateQuestions() {
     setLoading(true);
     try {
       const payload = questions.map(buildQuestionPayload);
+      const validCards = !useAudio ? readingCards.filter(c => c.title.trim() && c.content.trim()) : [];
       const result = await examsAPI.bulkCreateQuestions(
         examId, sectionKey, useAudio ? listeningClipId : null, payload,
-        !useAudio ? readingPassage.trim() || null : null
+        !useAudio ? readingPassage.trim() || null : null,
+        validCards.length > 0 ? validCards : null
       );
       setResults(result);
       setSuccess(`تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`);
@@ -338,7 +352,7 @@ function BulkCreateQuestions() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
-                onClick={() => { setUseAudio(true); setReadingPassage(''); }}
+                onClick={() => { setUseAudio(true); setReadingPassage(''); setReadingCards([]); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: useAudio ? '2px solid #0ea5e9' : '1px solid #cbd5e1',
@@ -376,10 +390,99 @@ function BulkCreateQuestions() {
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 14, resize: 'vertical', minHeight: 80 }}
               />
               <p style={{ margin: '6px 0 0', fontSize: 11, color: '#92400e' }}>
-                {readingPassage.trim()
-                  ? 'جميع الأسئلة أدناه ستظهر تحت هذه الفقرة كتمرين واحد'
+                {readingPassage.trim() || readingCards.length > 0
+                  ? 'جميع الأسئلة أدناه ستظهر تحت هذه الفقرة/البطاقات كتمرين واحد'
                   : 'بدون فقرة — كل سؤال سيظهر كتمرين منفصل'}
               </p>
+
+              {/* بطاقات المعلومات */}
+              <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>
+                    بطاقات المعلومات (اختياري)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addReadingCard}
+                    style={{
+                      padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                      border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + بطاقة جديدة
+                  </button>
+                </div>
+
+                {readingCards.length === 0 && (
+                  <p style={{ fontSize: 11, color: '#92400e', margin: 0 }}>
+                    لم تُضاف بطاقات بعد — اضغط "بطاقة جديدة" لإضافة بطاقات معلومات (مثل إعلانات، كورسات، أقسام)
+                  </p>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                  {readingCards.map((card, idx) => {
+                    const ADMIN_CARD_COLORS = [
+                      { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
+                      { key: 'sky', label: 'أزرق فاتح', bg: '#f0f9ff', border: '#bae6fd', text: '#0c4a6e' },
+                      { key: 'emerald', label: 'أخضر', bg: '#ecfdf5', border: '#a7f3d0', text: '#064e3b' },
+                      { key: 'violet', label: 'بنفسجي', bg: '#f5f3ff', border: '#c4b5fd', text: '#4c1d95' },
+                      { key: 'rose', label: 'وردي', bg: '#fff1f2', border: '#fecdd3', text: '#881337' },
+                      { key: 'amber', label: 'ذهبي', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
+                      { key: 'orange', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
+                      { key: 'indigo', label: 'نيلي', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+                    ];
+                    const selectedColor = ADMIN_CARD_COLORS.find(c => c.key === card.color) || ADMIN_CARD_COLORS[idx % ADMIN_CARD_COLORS.length];
+                    return (
+                      <div key={idx} style={{
+                        padding: 12, backgroundColor: selectedColor.bg, border: `2px solid ${selectedColor.border}`,
+                        borderRadius: 8
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: selectedColor.text }}>بطاقة {idx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeReadingCard(idx)}
+                            style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
+                          >
+                            حذف
+                          </button>
+                        </div>
+                        {/* اختيار اللون */}
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                          {ADMIN_CARD_COLORS.map(c => (
+                            <button
+                              key={c.key}
+                              type="button"
+                              title={c.label}
+                              onClick={() => updateReadingCard(idx, 'color', c.key)}
+                              style={{
+                                width: 22, height: 22, borderRadius: '50%',
+                                backgroundColor: c.bg, border: `2px solid ${card.color === c.key ? c.text : c.border}`,
+                                cursor: 'pointer', boxShadow: card.color === c.key ? `0 0 0 2px ${c.border}` : 'none',
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          value={card.title}
+                          onChange={(e) => updateReadingCard(idx, 'title', e.target.value)}
+                          placeholder="عنوان البطاقة (مثل: 1. Etage - Technik & Freizeit)"
+                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1px solid ${selectedColor.border}`, fontSize: 13, marginBottom: 6, boxSizing: 'border-box', backgroundColor: 'white' }}
+                        />
+                        <textarea
+                          value={card.content}
+                          onChange={(e) => updateReadingCard(idx, 'content', e.target.value)}
+                          placeholder="محتوى البطاقة..."
+                          rows={3}
+                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1px solid ${selectedColor.border}`, fontSize: 13, resize: 'vertical', minHeight: 50, boxSizing: 'border-box', backgroundColor: 'white' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           ) : listeningClipId ? (
             <div style={{ padding: 12, backgroundColor: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 8 }}>
@@ -755,6 +858,8 @@ function BulkCreateQuestions() {
                 setQuestions([emptyQuestion()]);
                 setResults(null);
                 setSuccess('');
+                setReadingPassage('');
+                setReadingCards([]);
               }}
               style={{ padding: '8px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
             >

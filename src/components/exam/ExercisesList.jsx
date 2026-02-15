@@ -72,7 +72,7 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
                       🎧 صوت
                     </span>
                   )}
-                  {exercise.readingPassage && (
+                  {(exercise.readingPassage || (exercise.readingCards && exercise.readingCards.length > 0)) && (
                     <span className="text-xs text-amber-600 flex items-center gap-1">
                       📖 فقرة
                     </span>

@@ -1,39 +1,76 @@
 .create-question-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #F8F9FA;
   padding: 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .page-header {
   background: white;
-  border-radius: 16px;
-  padding: 24px 32px;
-  margin-bottom: 24px;
+  border-radius: 12px;
+  padding: 20px 28px;
+  margin-bottom: 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #E9ECEF;
 }
 
 .back-btn {
-  background: #f0f0f0;
-  border: none;
-  padding: 10px 20px;
+  background: white;
+  border: 1px solid #DEE2E6;
+  padding: 10px;
   border-radius: 8px;
   cursor: pointer;
-  font-weight: 600;
-  color: #333;
-  transition: all 0.3s ease;
+  font-weight: 400;
+  color: #000000;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .back-btn:hover {
-  background: #e0e0e0;
+  background: #f8f9fa;
+  border-color: #212529;
+  transform: translateX(-2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.create-question-back-btn:hover {
+  background: #f8f9fa !important;
+  border-color: #212529 !important;
+}
+
+.back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Force black color for back button icon - always black, even on hover */
+.create-question-back-btn svg,
+.create-question-back-btn svg path,
+.back-btn.create-question-back-btn svg,
+.back-btn.create-question-back-btn svg path,
+.create-question-back-btn:hover svg,
+.create-question-back-btn:hover svg path,
+.back-btn.create-question-back-btn:hover svg,
+.back-btn.create-question-back-btn:hover svg path {
+  stroke: #000000 !important;
+  color: #000000 !important;
 }
 
 .page-header h1 {
-  color: #667eea;
+  color: #212529;
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
+  font-weight: 600;
+  font-family: inherit;
 }
 
 .create-question-container {
@@ -42,11 +79,11 @@
 }
 
 .loading-spinner {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #667eea;
+  border: 3px solid #F1F3F5;
+  border-top: 3px solid #212529;
   border-radius: 50%;
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   animation: spin 1s linear infinite;
 }
 
@@ -57,54 +94,59 @@
 
 .question-form {
   background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #E9ECEF;
 }
 
 .form-group {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 8px;
-  color: #333;
-  font-weight: 600;
+  margin-bottom: 6px;
+  color: #212529;
+  font-weight: 500;
   font-size: 14px;
+  font-family: inherit;
 }
 
 .form-group input[type="text"],
 .form-group input[type="email"],
+.form-group input[type="number"],
 .form-group textarea,
 .form-group select {
   width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 16px;
+  padding: 10px 14px;
+  border: 1px solid #DEE2E6;
+  border-radius: 6px;
+  font-size: 14px;
   font-family: inherit;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
+  background: white;
+  font-weight: 400;
+  color: #212529;
 }
 
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #495057;
 }
 
 .form-group textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: 90px;
 }
 
 .option-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .option-input {
@@ -114,83 +156,95 @@
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
   margin: 0;
+  color: #495057;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .checkbox-label input[type="checkbox"] {
   width: auto;
   cursor: pointer;
+  accent-color: #212529;
 }
 
 .remove-btn {
-  background: #ff4444;
-  color: white;
-  border: none;
-  padding: 8px 16px;
+  background: white;
+  color: #495057;
+  border: 1px solid #DEE2E6;
+  padding: 6px 14px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.3s ease;
+  font-size: 13px;
+  font-weight: 400;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .remove-btn:hover {
-  background: #cc0000;
+  background: #F8F9FA;
+  color: #212529;
 }
 
 .add-option-btn {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  background: white;
+  color: #212529;
+  border: 1px solid #212529;
+  padding: 8px 18px;
+  border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
+  font-weight: 400;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .add-option-btn:hover {
-  background: #5568d3;
+  background: #212529;
+  color: white;
 }
 
 .tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .tag {
-  background: #667eea;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 14px;
+  background: #F8F9FA;
+  color: #212529;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 400;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  border: 1px solid #DEE2E6;
+  font-family: inherit;
 }
 
 .tag-remove {
-  background: rgba(255, 255, 255, 0.3);
+  background: transparent;
   border: none;
-  color: white;
-  width: 20px;
-  height: 20px;
+  color: #495057;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
 }
 
 .tag-remove:hover {
-  background: rgba(255, 255, 255, 0.5);
+  color: #212529;
 }
 
 .tag-input-container {
@@ -204,124 +258,135 @@
 }
 
 .add-tag-btn {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  background: white;
+  color: #212529;
+  border: 1px solid #212529;
+  padding: 8px 18px;
+  border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 400;
   white-space: nowrap;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .add-tag-btn:hover {
-  background: #5568d3;
+  background: #212529;
+  color: white;
 }
 
 .error-message {
-  background: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 8px;
+  background: #dc2626;
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 6px;
   margin-bottom: 20px;
-  border: 1px solid #fcc;
+  border: 1px solid #dc2626;
+  font-weight: 400;
+  font-size: 14px;
 }
 
 .success-message {
-  background: #efe;
-  color: #3c3;
-  padding: 12px;
-  border-radius: 8px;
+  background: #F3FFF3;
+  color: #2B8A3E;
+  padding: 12px 16px;
+  border-radius: 6px;
   margin-bottom: 20px;
-  border: 1px solid #cfc;
+  border: 1px solid #D3F9D8;
+  font-weight: 400;
+  font-size: 14px;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 28px;
   padding-top: 24px;
-  border-top: 2px solid #f0f0f0;
+  border-top: 1px solid #E9ECEF;
 }
 
 .cancel-btn {
-  background: #f0f0f0;
-  color: #333;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  background: white;
+  color: #495057;
+  border: 1px solid #DEE2E6;
+  padding: 10px 24px;
+  border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
+  font-weight: 400;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .cancel-btn:hover {
-  background: #e0e0e0;
+  background: #F8F9FA;
+  color: #212529;
 }
 
 .submit-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #000000;
   color: white;
   border: none;
-  padding: 12px 32px;
-  border-radius: 8px;
+  padding: 10px 28px;
+  border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 16px;
-  transition: all 0.3s ease;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .submit-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+  background: #333333;
 }
 
 .submit-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .radio-group {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   flex-wrap: wrap;
 }
 
 .radio-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   margin: 0;
-  font-weight: normal;
+  font-weight: 400;
+  color: #495057;
+  font-size: 14px;
 }
 
 .radio-label input[type="radio"] {
   width: auto;
   cursor: pointer;
   margin: 0;
+  accent-color: #212529;
 }
 
 .radio-label span {
-  color: #333;
-  font-size: 16px;
+  color: #212529;
+  font-size: 14px;
 }
 
 /* File Upload Styles */
 .file-upload-container {
-  border: 2px dashed #e0e0e0;
+  border: 2px dashed #DEE2E6;
   border-radius: 8px;
-  padding: 24px;
+  padding: 28px;
   text-align: center;
-  transition: all 0.3s ease;
-  background: #fafafa;
+  transition: all 0.15s ease;
+  background: #F8F9FA;
 }
 
 .file-upload-container:hover {
-  border-color: #667eea;
-  background: #f5f5ff;
+  border-color: #495057;
+  background: white;
 }
 
 .file-input {
@@ -332,10 +397,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
-  color: #667eea;
-  font-weight: 600;
+  color: #212529;
+  font-weight: 400;
 }
 
 .file-upload-icon {
@@ -343,16 +408,17 @@
 }
 
 .file-upload-hint {
-  margin-top: 12px;
-  color: #666;
-  font-size: 12px;
+  margin-top: 8px;
+  color: #6C757D;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .audio-preview-container {
-  border: 2px solid #667eea;
+  border: 1px solid #DEE2E6;
   border-radius: 8px;
   padding: 16px;
-  background: #f5f5ff;
+  background: #F8F9FA;
 }
 
 .audio-preview-info {
@@ -372,39 +438,56 @@
 
 .audio-name {
   margin: 0;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+  color: #212529;
   word-break: break-all;
+  font-size: 14px;
 }
 
 .audio-size {
   margin: 4px 0 0 0;
-  color: #666;
-  font-size: 14px;
+  color: #6C757D;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .remove-audio-btn {
-  background: #ff4444;
-  color: white;
-  border: none;
+  background: white;
+  color: #495057;
+  border: 1px solid #DEE2E6;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
 }
 
 .remove-audio-btn:hover {
-  background: #cc0000;
-  transform: scale(1.1);
+  background: #F8F9FA;
+  color: #212529;
 }
 
 .audio-player {
   width: 100%;
   margin-top: 12px;
+  border-radius: 6px;
 }
 
+.correct-badge {
+  background: #212529;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}.option-item input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #212529;
+}

@@ -11,7 +11,7 @@ export default function GrammarExercisePage() {
   const [topic, setTopic] = useState(null);
   const [attemptId, setAttemptId] = useState(null);
   const [attemptItems, setAttemptItems] = useState([]);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState([]); // تغيير من {} إلى [] لأننا نستخدم find()
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [results, setResults] = useState(null);
@@ -40,9 +40,13 @@ export default function GrammarExercisePage() {
         }
 
         // 3. بدء محاولة على الامتحان الموجود - استخدام POST /exams/:examId/attempts
+        // ⚠️ shuffle: false لتثبيت ترتيب الأسئلة (لا يتغير من محاولة لأخرى)
         console.log('📤 Starting attempt for exam:', topicData.examId);
 
-        const attemptRes = await api.post(`/exams/${topicData.examId}/attempts`, {});
+        const attemptRes = await api.post(`/exams/${topicData.examId}/attempts`, {
+          shuffle: false,
+          shuffleOptions: false
+        });
 
         console.log('✅ Attempt started successfully:', attemptRes.data);
         console.log('🔍 Attempt Response Full Object:', attemptRes.data);
@@ -64,28 +68,99 @@ export default function GrammarExercisePage() {
         console.log('💾 Raw items:', receivedItems);
         console.log('💾 First item structure:', JSON.stringify(receivedItems[0], null, 2));
 
-        // استخراج بيانات الأسئلة من questionSnapshot
+        // تطبيع items - المهم: استخدام questionSnapshot.options مباشرة
         const formattedItems = receivedItems.map((item, idx) => {
-          console.log(`Item ${idx} - _id:`, item._id);
-          console.log(`Item ${idx} - questionSnapshot:`, item.questionSnapshot);
-          console.log(`Item ${idx} - options:`, item.questionSnapshot?.options);
+          const snap = item.questionSnapshot || {};
+          
+          // قراءة البيانات الأساسية
+          const questionId = snap.questionId || item.questionId;
+          const qType = snap.qType || item.qType || 'mcq';
+          const prompt = item.promptSnapshot || snap.prompt || item.prompt || '';
+          
+          // بناء options array - المهم: كل option يحتوي على id حقيقي من الباك
+          let options = [];
+          
+          // الطريقة المفضلة: استخدام questionSnapshot.options مباشرة - render كـ strings
+          if (snap.options && Array.isArray(snap.options) && snap.options.length > 0) {
+            options = snap.options.map((opt) => {
+              // عرض كـ string مباشرة
+              if (typeof opt === 'string') {
+                return opt;
+              }
+              return opt?.text ?? opt?.label ?? opt ?? '';
+            });
+          }
+          // Fallback: استخدام options مباشرة من item (إذا كانت موجودة)
+          else if (item.options && Array.isArray(item.options) && item.options.length > 0) {
+            options = item.options.map((opt) => {
+              if (typeof opt === 'string') {
+                return opt;
+              }
+              return opt?.text ?? opt?.label ?? opt ?? '';
+            });
+          }
+          // Fallback: استخدام optionsText و optionOrder
+          else if (item.optionsText && item.optionOrder) {
+            options = item.optionOrder.map((originalIdx) => {
+              const optionText = item.optionsText[originalIdx] || item.optionsText[String(originalIdx)];
+              return typeof optionText === 'string' ? optionText : (optionText?.text || optionText || '');
+            });
+          }
+          // Fallback آخر: استخدام optionsText فقط
+          else if (item.optionsText && typeof item.optionsText === 'object') {
+            options = Object.values(item.optionsText).map((opt) => {
+              return typeof opt === 'string' ? opt : (opt?.text || opt || '');
+            });
+          }
+          
+          // Fallback خاص لأسئلة True/False: إذا لم نجد options، ننشئها افتراضياً
+          if (options.length === 0 && (qType === 'true_false' || qType === 'TRUE_FALSE')) {
+            console.warn(`⚠️ No options found for True/False question ${idx}, creating default options`);
+            // إنشاء options افتراضية لـ True/False
+            options = ['صح', 'خطأ'];
+          }
+          
+          // Log للتحقق
+          if (options.length === 0 && qType === 'mcq') {
+            console.warn(`⚠️ No options found for MCQ item ${idx}:`, {
+              qType,
+              hasSnapOptions: !!snap.options,
+              snapOptionsLength: snap.options?.length,
+              hasItemOptions: !!item.options,
+              itemOptionsLength: item.options?.length,
+              hasOptionsText: !!item.optionsText,
+              hasOptionOrder: !!item.optionOrder,
+              item: item,
+              snap: snap
+            });
+          }
+
+          console.log(`Item ${idx} - Formatted:`, { 
+            questionId,
+            prompt, 
+            qType, 
+            options,
+            optionsWithIds: options.map(opt => ({ id: opt.id, text: opt.text }))
+          });
 
           return {
             id: item._id,  // استخدام attempt item _id فقط
-            questionId: item.questionId,
+            questionId: questionId,
             points: item.points,
-            // البيانات المهمة من questionSnapshot
-            text: item.questionSnapshot?.text,
-            prompt: item.questionSnapshot?.prompt,
-            qType: item.questionSnapshot?.qType,
-            options: (item.questionSnapshot?.options || []).map((opt, optIdx) => {
-              console.log(`  Option ${optIdx}:`, opt);
-              return {
-                ...opt,
-                _id: opt._id || opt.id || `temp-${optIdx}`,
-              };
-            }),
+            // البيانات من الحقول الصحيحة
+            text: prompt,
+            prompt: prompt,
+            qType: qType,
+            options: options, // options الآن array of { id, text }
+            // حفظ البيانات الأصلية للوصول إليها عند الإرسال
+            _rawItem: item, // حفظ item الأصلي للوصول إلى questionSnapshot
           };
+        });
+        
+        // 🔍 Log للتحقق من أن كل option له id طويل (ObjectId)
+        console.log('💾 Normalized items:', formattedItems);
+        formattedItems.forEach((item, idx) => {
+          console.log(`Item ${idx} options IDs:`, item.options.map(opt => opt.id));
         });
 
         console.log('💾 Formatted items:', formattedItems);
@@ -160,88 +235,290 @@ export default function GrammarExercisePage() {
     });
   }, [attemptId, attemptItems]);
 
-  const handleAnswer = async (itemIndex, answer) => {
-    console.log('🎯 handleAnswer called with:', { itemIndex, answer });
+  // دالة عامة واحدة لجميع الأسئلة - تستقبل questionId و optionIndex
+  const setOptionAnswer = (questionId, optionIndex) => {
+    // التأكد من أن optionIndex موجود وصالح
+    if (optionIndex === undefined || optionIndex === null) {
+      console.warn('⚠️ Invalid optionIndex', { questionId, optionIndex });
+      return;
+    }
 
-    // حفظ الإجابة محلياً فقط (سنرسلها كلها عند Submit)
-    setAnswers((prev) => ({
-      ...prev,
-      [itemIndex]: answer,
-    }));
+    console.log('🎯 setOptionAnswer called:', { questionId, optionIndex });
+
+    setAnswers((prev) => {
+      const next = [...prev];
+      const idx = next.findIndex(a => a.questionId === questionId);
+
+      const updated = { 
+        questionId, 
+        selectedOptionIndex: optionIndex // حفظ index بدلاً من id
+      };
+
+      if (idx === -1) {
+        next.push(updated);
+        console.log('✅ Added new answer:', updated);
+      } else {
+        next[idx] = updated;
+        console.log('✅ Updated answer at index', idx, ':', updated);
+      }
+
+      console.log('📦 Updated answers array:', next);
+      return next;
+    });
+  };
+  
+  // دالة خاصة لـ True/False - تستخدم index مباشرة
+  const handleTrueFalseClick = (questionId, value) => {
+    console.log('🎯 handleTrueFalseClick called:', { questionId, value });
+    
+    const item = attemptItems.find(i => i.questionId === questionId);
+    if (!item) {
+      console.warn('⚠️ Item not found for questionId:', questionId, 'Available items:', attemptItems.map(i => i.questionId));
+      return;
+    }
+
+    console.log('📋 Found item:', { questionId: item.questionId, options: item.options, optionsCount: item.options?.length });
+
+    // استخدام index مباشرة: 0 لـ true (صح), 1 لـ false (خطأ)
+    const optionIndex = value === 'true' ? 0 : 1;
+    console.log('✅ Using option index:', optionIndex);
+    setOptionAnswer(questionId, optionIndex);
+  };
+
+  // دالة مساعدة لتحديث الإجابة بناءً على questionId
+  const updateAnswerForQuestion = (questionId, newAnswer) => {
+    setAnswers((prev) => {
+      console.log('📦 Previous answers:', prev);
+      // البحث عن الإجابة الموجودة لنفس السؤال
+      const existingIndex = prev.findIndex(a => a.questionId === questionId);
+      const next = [...prev];
+      
+      if (existingIndex === -1) {
+        // إضافة إجابة جديدة (أول مرة يجاوب السؤال)
+        console.log(`✅ Adding new answer for questionId: ${questionId}`);
+        next.push(newAnswer);
+      } else {
+        // تحديث الإجابة الموجودة (بدل ما نضيف واحد جديد)
+        console.log(`✅ Updating existing answer at index ${existingIndex} for questionId: ${questionId}`);
+        next[existingIndex] = newAnswer;
+      }
+      
+      // التحقق من عدم وجود عناصر مكررة
+      const duplicateCheck = next.filter(a => a.questionId === questionId);
+      if (duplicateCheck.length > 1) {
+        console.error(`⚠️ WARNING: Found ${duplicateCheck.length} answers for questionId: ${questionId}`, duplicateCheck);
+      }
+      
+      console.log('📦 Updated answers:', next);
+      return next;
+    });
+  };
+
+  const handleAnswer = async (itemIndex, answer) => {
+    console.log('🎯 handleAnswer called with:', { itemIndex, answer, answerType: typeof answer });
+
+    // الحصول على السؤال
+    const item = attemptItems[itemIndex];
+    if (!item) {
+      console.error(`⚠️ Item not found at index ${itemIndex}`);
+      return;
+    }
+
+    const questionId = item.questionId || item.id;
+    console.log('📝 Question ID:', questionId, 'from item:', { questionId: item.questionId, id: item.id });
+
+    // دالة مساعدة لتحديث الإجابات بناءً على questionId (للأنواع الأخرى)
+    const updateAnswer = (newAnswer) => {
+      updateAnswerForQuestion(questionId, newAnswer);
+    };
+
+    // إذا كانت الإجابة boolean (true/false)، نحفظها مع questionId
+    if (typeof answer === 'boolean') {
+      console.log('📦 Saving true/false answer:', { questionId, answer });
+      // true = index 0, false = index 1
+      updateAnswer({
+        questionId: questionId,
+        selectedOptionIndex: answer ? 0 : 1,
+      });
+      return;
+    }
+
+    // إذا كانت الإجابة number (index للخيار في MCQ)
+    if (typeof answer === 'number') {
+      const optionIndex = answer;
+      console.log(`✅ Selected option index for question ${itemIndex + 1}:`, optionIndex);
+      // حفظ الإجابة مع questionId و index
+      updateAnswer({
+        questionId: questionId,
+        selectedOptionIndex: optionIndex,
+      });
+    }
+
+    // إذا كانت الإجابة string (fill in blank)
+    if (typeof answer === 'string') {
+      updateAnswer({
+        questionId: questionId,
+        textAnswer: answer,
+      });
+    }
+  };
+
+  // دالة للتحقق من أن السؤال مجاوب بناءً على نوعه
+  const isAnswered = (question, answer) => {
+    const qType = question.qType;
+
+    console.log('🔍 isAnswered check:', {
+      questionId: question.questionId,
+      qType,
+      answer,
+      hasAnswer: !!answer,
+      selectedOptionIndex: answer?.selectedOptionIndex,
+      textAnswer: answer?.textAnswer
+    });
+
+    // أسئلة الاختيار (صح/غلط + اختيار واحد + اختيار متعدد)
+    if (qType === 'true_false' || qType === 'mcq' || qType === 'multi_select') {
+      // التحقق من selectedOptionIndex
+      const hasOptionIndex = answer?.selectedOptionIndex !== undefined && answer?.selectedOptionIndex !== null;
+      console.log('  → MCQ/TrueFalse check:', { hasOptionIndex, isAnswered: hasOptionIndex });
+      return hasOptionIndex;
+    }
+
+    // أسئلة املأ الفراغ
+    if (qType === 'fill' || qType === 'fill_in_blank') {
+      const hasTextAnswer = !!(answer?.textAnswer && answer.textAnswer.trim().length > 0);
+      console.log('  → Fill check:', hasTextAnswer);
+      return hasTextAnswer;
+    }
+
+    // أي نوع تاني اعتبره مجاوَب افتراضيًا
+    console.log('  → Default: true');
+    return true;
   };
 
   const handleSubmit = async () => {
-    if (!attemptId) return;
+    // Guard: منع الاستدعاء المتكرر
+    if (submitting) {
+      console.warn('⚠️ Submit already in progress, ignoring duplicate call');
+      return;
+    }
+
+    if (!attemptId) {
+      console.error('❌ No attemptId found');
+      return;
+    }
+
+    console.log('📋 questions (attemptItems):', attemptItems);
+    console.log('📋 answers:', answers);
 
     // التحقق من أن جميع الأسئلة محلولة
-    const unansweredQuestions = [];
+    const unansweredNumbers = [];
     attemptItems.forEach((item, index) => {
-      const answer = answers[index];
+      // استخدام questionId أو id كـ fallback
+      const itemQuestionId = item.questionId || item.id;
+      
+      // دور على الإجابة اللي ليها نفس questionId
+      const answer = answers.find((a) => {
+        const answerQuestionId = a.questionId;
+        const matches = answerQuestionId === itemQuestionId;
+        if (!matches && index < 3) { // فقط للأسئلة الثلاثة الأولى
+          console.log(`  🔍 QuestionId mismatch:`, {
+            answerQuestionId,
+            itemQuestionId,
+            match: matches
+          });
+        }
+        return matches;
+      });
+      
+      console.log(`\n📝 Checking question ${index + 1}:`, {
+        itemQuestionId,
+        itemQuestionIdType: typeof itemQuestionId,
+        itemId: item.id,
+        qType: item.qType,
+        foundAnswer: !!answer,
+        answer,
+        allAnswerQuestionIds: answers.map(a => a.questionId)
+      });
 
-      // للأسئلة true/false: نتحقق إذا الإجابة boolean (true أو false)
-      if (item.qType === 'true_false') {
-        if (typeof answer !== 'boolean') {
-          unansweredQuestions.push(index + 1);
-        }
-      }
-      // للأسئلة الأخرى: نتحقق إذا الإجابة موجودة
-      else {
-        if (answer === undefined || answer === null || answer === '') {
-          unansweredQuestions.push(index + 1);
-        }
+      if (!isAnswered(item, answer)) {
+        // خزّن رقم السؤال (1, 2, 3...)
+        console.log(`  ❌ Question ${index + 1} is NOT answered`);
+        unansweredNumbers.push(index + 1);
+      } else {
+        console.log(`  ✅ Question ${index + 1} IS answered`);
       }
     });
 
-    if (unansweredQuestions.length > 0) {
-      alert(`⚠️ يرجى الإجابة على جميع الأسئلة قبل التسليم.\n\nالأسئلة غير المحلولة: ${unansweredQuestions.join(', ')}`);
-      return;
+    if (unansweredNumbers.length > 0) {
+      alert(
+        `⚠️ يرجى الإجابة على جميع الأسئلة قبل التسليم.\n` +
+        `الأسئلة غير المجاوبة: ${unansweredNumbers.join(', ')}`
+      );
+      return; // ما نبعتش للباك
     }
 
     try {
       setSubmitting(true);
 
+      // 🔍 Log قبل الإرسال - مهم جداً للتحقق
+      console.log('answers before submit', answers);
       console.log('📦 Full answers state before submit:', answers);
       console.log('📋 Attempt items count:', attemptItems.length);
 
       // تحضير الإجابات بصيغة Backend المطلوبة
-      const answersArray = attemptItems.map((item, index) => {
-        const userAnswer = answers[index];
+      const answersArray = attemptItems.map((item) => {
+        // البحث عن الإجابة باستخدام questionId
+        const userAnswer = answers.find((a) => a.questionId === item.questionId);
 
-        console.log(`📝 Question ${index + 1}:`, {
-          questionId: item.questionId,
-          qType: item.qType,
-          rawAnswer: userAnswer,
-          options: item.options
-        });
+        // الحصول على selectedOptionIndex
+        const selectedOptionIndex = userAnswer?.selectedOptionIndex;
+        
+        // الحصول على textValue (للأسئلة النصية)
+        const textValue = userAnswer?.textAnswer;
 
+        // بناء كائن الإجابة حسب نوع السؤال
         const answerObj = {
-          questionId: item.questionId,  // استخدام questionId
+          questionId: item.questionId,
         };
 
-        // تحويل الإجابة حسب النوع
-        if (item.qType === 'mcq') {
-          // MCQ: إرسال indexes كـ strings (0-based)
-          if (userAnswer !== undefined && userAnswer !== null) {
-            answerObj.selectedOptionIds = [String(userAnswer)];
-          } else {
-            answerObj.selectedOptionIds = [];
-          }
-        } else if (item.qType === 'true_false') {
-          // True/False: إرسال boolean
-          answerObj.studentAnswerBoolean = userAnswer;
-        } else if (item.qType === 'fill') {
-          // Fill: إرسال النص
-          answerObj.studentAnswerText = userAnswer;
+        // fill_blank: إرسال answerText فقط (بدون selectedOptionIndexes)
+        if (item.qType === "fill" || item.qType === "fill_in_blank") {
+          answerObj.answerText = textValue;
+          // لا نرسل selectedOptionIndexes لأسئلة fill_blank
+        } else {
+          // MCQ/TrueFalse وغيرها: إرسال selectedOptionIndexes فقط (بدون answerText)
+          // لـ True/False: 0 = صح (true), 1 = خطأ (false)
+          answerObj.selectedOptionIndexes = selectedOptionIndex !== undefined && selectedOptionIndex !== null ? [selectedOptionIndex] : [];
+          // لا نرسل answerText لأسئلة MCQ/TrueFalse
         }
 
-        console.log(`✅ Formatted answer ${index + 1}:`, answerObj);
         return answerObj;
       });
 
       console.log('📤 Sending submit request to:', `/attempts/${attemptId}/submit`);
-      console.log('📤 Request body:', JSON.stringify({ answers: answersArray }, null, 2));
+      console.log('📋 answersArray after building:', answersArray);
+      console.log('📋 answersArray length:', answersArray.length);
 
-      const resultRes = await api.post(`/attempts/${attemptId}/submit`, { answers: answersArray });
+      // 🔍 التحقق من أن payload غير فارغ
+      const payload = { answers: answersArray };
+      console.log('SUBMIT PAYLOAD', payload);
+      console.log('📊 Payload validation:', {
+        answersLength: payload.answers.length,
+        answersStateLength: answers.length,
+        attemptItemsLength: attemptItems.length,
+        hasAnswers: payload.answers.length > 0
+      });
+
+      // التحقق من أن answers غير فارغ قبل الإرسال
+      if (payload.answers.length === 0) {
+        console.error('❌ ERROR: Payload is empty! answers array is empty.');
+        alert('⚠️ لا توجد إجابات للإرسال. يرجى التأكد من الإجابة على جميع الأسئلة.');
+        setSubmitting(false);
+        return;
+      }
+
+      const resultRes = await api.post(`/attempts/${attemptId}/submit`, payload);
 
       console.log('✅ Attempt submitted:', resultRes.data);
       console.log('📊 Result Details:', {
@@ -257,20 +534,64 @@ export default function GrammarExercisePage() {
       // طباعة كل سؤال مع نتيجته
       console.log('📝 تفاصيل كل سؤال:');
       resultRes.data?.items?.forEach((item, idx) => {
+        const isCorrect = (item.autoScore ?? 0) >= (item.points ?? 1);
         console.log(`سؤال ${idx + 1}:`, {
           questionId: item.questionId,
-          isCorrect: item.isCorrect,
           autoScore: item.autoScore,
+          points: item.points,
+          isCorrect: isCorrect, // حساب صحيح بناءً على autoScore و points
           studentAnswer: item.studentAnswerBoolean ?? item.studentAnswerText ?? item.studentAnswerIndexes,
           correctAnswer: item.correctAnswerBoolean ?? item.correctAnswerText ?? item.correctAnswerIndexes
         });
       });
 
+      // استخدام البيانات من response الـ submit (التي تحتوي على autoScore و points الصحيحة)
       setResults(resultRes.data);
+      
+      // تحديث attemptItems بالبيانات الجديدة من response (إذا كانت موجودة)
+      if (resultRes.data?.items && Array.isArray(resultRes.data.items)) {
+        const updatedItems = resultRes.data.items.map((resultItem) => {
+          // البحث عن attemptItem المقابل
+          const originalItem = attemptItems.find(item => item.questionId === resultItem.questionId);
+          return {
+            ...originalItem,
+            ...resultItem, // إضافة البيانات الجديدة (autoScore, points, etc.)
+          };
+        });
+        setAttemptItems(updatedItems);
+      }
+
+      // إعادة تعيين submitting بعد النجاح
+      setSubmitting(false);
+
+      // التحقق من status - إذا كان submitted، ننقل المستخدم لصفحة النتائج
+      if (resultRes.data?.status === 'submitted' || resultRes.data?.status === 'completed') {
+        console.log('✅ Attempt successfully submitted, status:', resultRes.data?.status);
+        // يمكن إضافة redirect هنا إذا لزم الأمر
+        // navigate(`/grammar/${slug}/${level}/results/${attemptId}`);
+      }
     } catch (err) {
       console.error('Error submitting attempt:', err);
-      alert('حدث خطأ أثناء تسليم التمرين');
-    } finally {
+      
+      // معالجة خطأ 403 - Attempt already submitted
+      if (err.response?.status === 403) {
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Attempt is already submitted';
+        console.error('❌ 403 Forbidden:', errorMessage);
+        alert(`⚠️ ${errorMessage}\n\nيرجى إنشاء محاولة جديدة.`);
+        
+        // إعادة تعيين attemptId لإجبار إنشاء attempt جديد
+        setAttemptId(null);
+        setAttemptItems([]);
+        setAnswers([]);
+        
+        // يمكن إضافة redirect هنا إذا لزم الأمر
+        // navigate(`/grammar/${slug}/${level}`);
+      } else {
+        // معالجة أخطاء أخرى
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message || 'حدث خطأ أثناء إرسال الإجابات';
+        alert(`❌ ${errorMessage}`);
+      }
+      
       setSubmitting(false);
     }
   };
@@ -285,14 +606,14 @@ export default function GrammarExercisePage() {
 
     if (!blankPattern.test(text)) {
       // إذا ما في فراغ، نعرض النص عادي
-      return <span>{text}</span>;
+      return <span style={{ fontSize: '1.125rem', fontWeight: '600' }}>{text}</span>;
     }
 
     // تقسيم النص عند الفراغ
     const parts = text.split(blankPattern);
 
     return (
-      <span className="inline-flex items-baseline gap-0" style={{ display: 'inline' }}>
+      <span style={{ display: 'inline', fontSize: '1.125rem', fontWeight: '600' }}>
         <span>{parts[0]}</span>
         <input
           type="text"
@@ -306,10 +627,11 @@ export default function GrammarExercisePage() {
             padding: '2px 8px',
             margin: '0 4px',
             fontSize: 'inherit',
+            fontWeight: '600',
             lineHeight: 'inherit',
-            minWidth: '60px',
+            minWidth: '80px',
             maxWidth: '200px',
-            width: `${Math.max(60, (value.length + 1) * 12)}px`,
+            width: `${Math.max(80, (value.length + 1) * 14)}px`,
             backgroundColor: 'transparent',
             outline: 'none',
             textAlign: 'center',
@@ -348,7 +670,7 @@ export default function GrammarExercisePage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl p-4 mb-4 max-w-md">
+          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-4 mb-4 max-w-md">
             ⚠️ لم يتم تحميل التمرين بشكل صحيح. يرجى المحاولة مرة أخرى.
           </div>
           <button
@@ -366,7 +688,7 @@ export default function GrammarExercisePage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="max-w-md mx-auto text-center">
-          <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl p-4 mb-4">
+          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-4 mb-4">
             {error}
           </div>
           <button
@@ -406,13 +728,27 @@ export default function GrammarExercisePage() {
             <div className="space-y-4 mb-6">
               {attemptItems.map((attemptItem, idx) => {
                 const resultItem = results.items?.find(r => r.questionId === attemptItem.questionId);
+                
+                // حساب isCorrect بناءً على autoScore و points (المنطق الصحيح)
+                const autoScore = resultItem?.autoScore ?? attemptItem?.autoScore ?? 0;
+                const points = resultItem?.points ?? attemptItem?.points ?? 1;
+                const isCorrect = autoScore >= points;
+                
+                console.log(`📊 Question ${idx + 1} result:`, {
+                  questionId: attemptItem.questionId,
+                  autoScore,
+                  points,
+                  isCorrect,
+                  resultItem: resultItem
+                });
+                
                 return (
                   <div
                     key={idx}
                     className={`p-4 rounded-xl border ${
-                      resultItem?.isCorrect
+                      isCorrect
                         ? 'bg-emerald-50 border-emerald-200'
-                        : 'bg-rose-50 border-rose-200'
+                        : 'bg-red-50 border-red-200'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-2">
@@ -420,11 +756,14 @@ export default function GrammarExercisePage() {
                         سؤال {idx + 1}
                       </span>
                       <span className="text-xs">
-                        {resultItem?.isCorrect ? '✅ صحيح' : '❌ خطأ'}
+                        {isCorrect ? '✅ صحيح' : '❌ خطأ'}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        ({autoScore} / {points} نقطة)
                       </span>
                     </div>
                     <div className="text-sm text-slate-700">
-                      {attemptItem.text || attemptItem.prompt || 'سؤال'}
+                      {attemptItem.prompt || attemptItem.text || 'سؤال'}
                     </div>
                   </div>
                 );
@@ -440,7 +779,7 @@ export default function GrammarExercisePage() {
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-colors"
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 إعادة التمرين
               </button>
@@ -477,7 +816,7 @@ export default function GrammarExercisePage() {
           >
             ← رجوع
           </button>
-          <span className="text-xs font-semibold text-rose-500">
+          <span className="text-xs font-semibold text-red-600">
             {topic?.title}
           </span>
         </div>
@@ -498,10 +837,10 @@ export default function GrammarExercisePage() {
             console.log(`📝 Item ${itemIndex}:`, item);
 
             return (
-              <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+              <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 text-left">
                 {/* رقم السؤال */}
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
+                  <span className="text-xs font-semibold px-2 py-1 bg-red-600 text-white rounded">
                     سؤال {itemIndex + 1}
                   </span>
                   {item.qType && (
@@ -516,32 +855,54 @@ export default function GrammarExercisePage() {
                 {/* MCQ */}
                 {item.qType === 'mcq' && (
                   <>
-                    <h3 className="text-base font-semibold text-slate-900 mb-3">
-                      {item.text || item.prompt || item.question?.text || 'نص السؤال'}
+                    <h3 className="text-lg font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                      {item.prompt || item.text || 'نص السؤال'}
                     </h3>
                     <div className="space-y-2">
-                      {item.options?.map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleAnswer(itemIndex, optIdx)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
-                            answers[itemIndex] === optIdx
-                              ? 'bg-rose-50 border-rose-400'
-                              : 'bg-slate-50 border-slate-200 hover:border-rose-400'
-                          }`}
-                        >
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                            answers[itemIndex] === optIdx
-                              ? 'border-rose-500'
-                              : 'border-slate-300'
-                          }`}>
-                            {answers[itemIndex] === optIdx && (
-                              <div className="w-3 h-3 rounded-full bg-rose-500"></div>
-                            )}
-                          </div>
-                          <span>{opt.text || opt}</span>
-                        </button>
-                      ))}
+                      {item.options && item.options.length > 0 ? (
+                        item.options.map((opt, optIndex) => {
+                          // opt الآن string مباشرة
+                          const optionText = typeof opt === 'string' ? opt : (opt?.text || opt?.label || opt || '');
+                          const questionId = item.questionId || item.id;
+                          
+                          // البحث عن الإجابة باستخدام questionId
+                          const answer = answers.find((a) => a.questionId === questionId);
+                          const isSelected = answer?.selectedOptionIndex === optIndex;
+                          
+                          return (
+                            <label
+                              key={optIndex}
+                              className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition cursor-pointer ${
+                                isSelected
+                                  ? 'bg-red-50 border-red-500'
+                                  : 'bg-slate-50 border-slate-200 hover:border-red-500'
+                              }`}
+                              style={{ direction: 'ltr', textAlign: 'left' }}
+                            >
+                              <input
+                                type="radio"
+                                name={questionId}
+                                value={optIndex}
+                                checked={isSelected}
+                                onChange={() => setOptionAnswer(questionId, optIndex)}
+                                className="hidden"
+                              />
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                isSelected
+                                  ? 'border-red-600'
+                                  : 'border-slate-300'
+                              }`}>
+                                {isSelected && (
+                                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                                )}
+                              </div>
+                              <span style={{ textAlign: 'left' }}>{optionText}</span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-400">لا توجد خيارات متاحة</p>
+                      )}
                     </div>
                   </>
                 )}
@@ -549,48 +910,68 @@ export default function GrammarExercisePage() {
                 {/* True/False */}
                 {item.qType === 'true_false' && (
                   <>
-                    <h3 className="text-base font-semibold text-slate-900 mb-3">
-                      {item.text || item.prompt || 'نص السؤال'}
+                    <h3 className="text-lg font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                      {item.prompt || item.text || 'نص السؤال'}
                     </h3>
                     <div className="space-y-2">
+                      {(() => {
+                        // البحث عن الإجابة باستخدام questionId
+                        const questionId = item.questionId || item.id;
+                        const answer = answers.find((a) => a.questionId === questionId);
+                        
+                        // استخدام index مباشرة: 0 لـ true (صح), 1 لـ false (خطأ)
+                        const isTrueSelected = answer?.selectedOptionIndex === 0;
+                        const isFalseSelected = answer?.selectedOptionIndex === 1;
+                        
+                        console.log('🔍 Selection state:', { isTrueSelected, isFalseSelected, selectedOptionIndex: answer?.selectedOptionIndex });
+                        
+                        return (
+                          <>
                       <button
-                        onClick={() => handleAnswer(itemIndex, true)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
-                          answers[itemIndex] === true
-                            ? 'bg-rose-50 border-rose-400'
-                            : 'bg-slate-50 border-slate-200 hover:border-rose-400'
+                              type="button"
+                              onClick={() => handleTrueFalseClick(questionId, 'true')}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition ${
+                                isTrueSelected
+                            ? 'bg-red-50 border-red-500'
+                            : 'bg-slate-50 border-slate-200 hover:border-red-500'
                         }`}
+                        style={{ direction: 'ltr', textAlign: 'left' }}
                       >
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          answers[itemIndex] === true
-                            ? 'border-rose-500'
+                                isTrueSelected
+                            ? 'border-red-600'
                             : 'border-slate-300'
                         }`}>
-                          {answers[itemIndex] === true && (
-                            <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                                {isTrueSelected && (
+                            <div className="w-3 h-3 rounded-full bg-red-600"></div>
                           )}
                         </div>
-                        <span>صح</span>
+                        <span style={{ textAlign: 'left' }}>صح</span>
                       </button>
                       <button
-                        onClick={() => handleAnswer(itemIndex, false)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition text-right ${
-                          answers[itemIndex] === false
-                            ? 'bg-rose-50 border-rose-400'
-                            : 'bg-slate-50 border-slate-200 hover:border-rose-400'
+                              type="button"
+                              onClick={() => handleTrueFalseClick(questionId, 'false')}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-sm transition ${
+                                isFalseSelected
+                            ? 'bg-red-50 border-red-500'
+                            : 'bg-slate-50 border-slate-200 hover:border-red-500'
                         }`}
+                        style={{ direction: 'ltr', textAlign: 'left' }}
                       >
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          answers[itemIndex] === false
-                            ? 'border-rose-500'
+                                isFalseSelected
+                            ? 'border-red-600'
                             : 'border-slate-300'
                         }`}>
-                          {answers[itemIndex] === false && (
-                            <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                                {isFalseSelected && (
+                            <div className="w-3 h-3 rounded-full bg-red-600"></div>
                           )}
                         </div>
-                        <span>خطأ</span>
+                        <span style={{ textAlign: 'left' }}>خطأ</span>
                       </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </>
                 )}
@@ -598,19 +979,20 @@ export default function GrammarExercisePage() {
                 {/* Fill */}
                 {item.qType === 'fill' && (
                   <div>
-                    <div className="text-base text-slate-900 mb-4">
-                      {renderFillQuestion(
-                        item.text || item.prompt || 'نص السؤال',
-                        answers[itemIndex] || '',
+                    <div className="text-lg font-semibold text-slate-900 mb-4" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                      {(() => {
+                        // البحث عن الإجابة باستخدام questionId
+                        const answer = answers.find((a) => a.questionId === item.questionId);
+                        const fillValue = answer?.textAnswer || '';
+                        return renderFillQuestion(
+                        item.prompt || item.text || 'نص السؤال',
+                          fillValue,
                         (value) => {
-                          setAnswers((prev) => ({
-                            ...prev,
-                            [itemIndex]: value,
-                          }));
                           // حفظ تلقائي عند الكتابة
                           handleAnswer(itemIndex, value);
                         }
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -623,7 +1005,7 @@ export default function GrammarExercisePage() {
         <div className="flex justify-end mt-8">
           <button
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !attemptId}
             className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
           >
             {submitting ? 'جاري الإرسال…' : '✅ إرسال الإجابات'}

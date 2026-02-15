@@ -1,7 +1,7 @@
 // src/pages/WortschatzTopicPage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../services/api";
+import { getVocabularyTopics, getVocabularyWords } from "../services/api";
 
 // إعداد بسيط لعناوين التوبيكات حسب الـ slug
 const TOPIC_CONFIG = {
@@ -79,6 +79,7 @@ export default function WortschatzTopicPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [topic, setTopic] = useState(null);
 
   const topicConfig = TOPIC_CONFIG[topicSlug] || {
     icon: "📝",
@@ -92,19 +93,51 @@ export default function WortschatzTopicPage() {
         setLoading(true);
         setError("");
 
-        // بناء الـ URL يدوياً لتجنب مشاكل axios في تحويل params
-        let url = '/questions/vocab?';
-        const params = [];
-        if (level) params.push(`level=${encodeURIComponent(level)}`);
-        if (topicSlug) params.push(`tags=${encodeURIComponent(topicSlug)}`);
-        url += params.join('&');
+        // 1. جلب المواضيع حسب المستوى
+        const topicsData = await getVocabularyTopics(level);
+        const topicsList = Array.isArray(topicsData) ? topicsData : (topicsData?.items || topicsData?.topics || []);
+        
+        // 2. البحث عن الموضوع الذي slug = topicSlug
+        const foundTopic = topicsList.find(t => 
+          t.slug === topicSlug || 
+          t._id === topicSlug || 
+          t.id === topicSlug
+        );
 
-        const response = await api.get(url);
+        if (!foundTopic) {
+          setError("الموضوع غير موجود");
+          setLoading(false);
+          return;
+        }
 
-        // البيانات موجودة في response.data.items حسب الـ API response
-        setItems(response.data.items || response.data || []);
+        // حفظ معلومات الموضوع
+        setTopic(foundTopic);
+
+        // 3. جلب الكلمات باستخدام topicId
+        const topicId = foundTopic._id || foundTopic.id;
+        const wordsData = await getVocabularyWords(topicId);
+        // الباك يرجع array مباشر
+        const wordsList = Array.isArray(wordsData) ? wordsData : [];
+
+        // ترتيب الكلمات حسب order إذا كان موجوداً، وإلا حسب createdAt
+        // هذا يضمن أن الكلمات تظهر بنفس الترتيب الذي أضافه المدرس
+        const sortedWords = [...wordsList].sort((a, b) => {
+          // إذا كان order موجوداً، استخدمه للترتيب
+          if (a.order !== undefined && b.order !== undefined) {
+            return a.order - b.order;
+          }
+          // إذا كان order موجوداً في واحدة فقط، ضعها أولاً
+          if (a.order !== undefined) return -1;
+          if (b.order !== undefined) return 1;
+          // إذا لم يكن order موجوداً، استخدم createdAt كترتيب احتياطي
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateA - dateB; // ASC - الكلمات القديمة أولاً
+        });
+
+        setItems(sortedWords);
       } catch (err) {
-        console.error(err);
+        console.error('Error loading vocabulary:', err);
         setError("حدث خطأ أثناء تحميل الكلمات. جرّبي مرة أخرى.");
       } finally {
         setLoading(false);
@@ -118,16 +151,8 @@ export default function WortschatzTopicPage() {
 
   const displayLevel = level?.toUpperCase();
 
-  // دالة صغيرة لاختيار الترجمة من جسم السؤال
-  const getArabicMeaning = (q) => {
-    const fromTranslationField = q.translationAr || q.meaningAr;
-    const fromCorrectOption =
-      q.correctAnswerText ||
-      q.options?.find((opt) => opt.isCorrect)?.text ||
-      q.options?.[0];
-
-    return fromTranslationField || fromCorrectOption || "";
-  };
+  // استخدام معلومات الموضوع من الباك إذا كانت متوفرة
+  const displayTopic = topic || topicConfig;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -140,7 +165,7 @@ export default function WortschatzTopicPage() {
           >
             ← رجوع لقائمة المواضيع
           </button>
-          <span className="text-xs font-semibold text-rose-500">
+          <span className="text-xs font-semibold text-red-600">
             Deutsch Learning App
           </span>
         </div>
@@ -148,11 +173,11 @@ export default function WortschatzTopicPage() {
         {/* الهيدر */}
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">
-            {topicConfig.icon} {topicConfig.title}{" "}
-            <span className="text-rose-500">– مستوى {displayLevel}</span>
+            {displayTopic.icon || topicConfig.icon} {displayTopic.title || topicConfig.title}{" "}
+            <span className="text-red-600">– مستوى {displayLevel}</span>
           </h1>
           <p className="text-sm text-slate-600 max-w-xl">
-            {topicConfig.description ||
+            {displayTopic.description || displayTopic.shortDescription || topicConfig.description ||
               "تدرّبي على الكلمات الأساسية لهذا الموضوع، ثم جرّبي حلّ تمارين قصيرة لتثبيت المفردات في الذاكرة."}
           </p>
         </div>
@@ -166,7 +191,7 @@ export default function WortschatzTopicPage() {
 
         {/* حالة الخطأ */}
         {error && !loading && (
-          <div className="py-4 mb-4 text-center text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl">
+          <div className="py-4 mb-4 text-center text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl">
             {error}
           </div>
         )}
@@ -181,31 +206,87 @@ export default function WortschatzTopicPage() {
         {/* قائمة الكلمات */}
         {!loading && !error && items.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-3">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">
               قائمة الكلمات ({items.length})
             </h2>
 
             <div className="divide-y divide-slate-100">
-              {items.map((q) => {
-                const meaning = getArabicMeaning(q);
+              {items.map((word) => {
+                // دعم meanings array أو meaning string (للتوافق مع البيانات القديمة)
+                const meaningsArray = word.meanings || (word.meaning ? [{ text: word.meaning }] : []);
+
+                // بناء قائمة المعاني جاهزة للعرض
+                const meaningParts = [];
+
+                // أولوية: meanings array إن وجد
+                if (Array.isArray(meaningsArray) && meaningsArray.length > 0) {
+                  meaningsArray.forEach((meaning) => {
+                    const raw = meaning.text || meaning;
+                    if (!raw) return;
+                    const text = String(raw).trim();
+                    if (!text) return;
+
+                    // لو النص نفسه يحتوي على / أو | نقسمه أيضاً (لأن بعض البيانات القديمة مخزنة هكذا)
+                    if (text.includes('/')) {
+                      meaningParts.push(
+                        ...text.split(/\s*\/\s*/).map(m => m.trim()).filter(Boolean)
+                      );
+                    } else if (text.includes('|')) {
+                      meaningParts.push(
+                        ...text.split(/\s*\|\s*/).map(m => m.trim()).filter(Boolean)
+                      );
+                    } else {
+                      meaningParts.push(text);
+                    }
+                  });
+                }
+
+                // إذا لم تكن هناك meanings array، نستخدم meaning string ونقسمها
+                if (meaningParts.length === 0 && word.meaning) {
+                  const meaningStr = String(word.meaning);
+                  if (meaningStr.includes('/')) {
+                    meaningParts.push(
+                      ...meaningStr.split(/\s*\/\s*/).map(m => m.trim()).filter(Boolean)
+                    );
+                  } else if (meaningStr.includes('|')) {
+                    meaningParts.push(
+                      ...meaningStr.split(/\s*\|\s*/).map(m => m.trim()).filter(Boolean)
+                    );
+                  } else if (meaningStr.trim()) {
+                    meaningParts.push(meaningStr.trim());
+                  }
+                }
 
                 return (
                   <div
-                    key={q._id}
-                    className="py-3"
+                    key={word._id || word.id}
+                    className="py-4"
                   >
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-slate-900">
-                        {q.prompt || q.text || q.question}
+                    <div className="flex flex-col space-y-2">
+                      <div className="text-xl font-semibold text-slate-900" dir="ltr">
+                        {word.word || word.germanWord}
                       </div>
-                      {meaning && (
-                        <div className="text-xs text-slate-600 mt-0.5">
-                          {meaning}
+                      
+                      {/* عرض المعاني بنفس الترتيب وبفاصل | */}
+                      {meaningParts.length > 0 && (
+                        <div className="flex flex-wrap gap-2 items-center" dir="ltr">
+                          {meaningParts.map((text, index) => (
+                            <span 
+                              key={index} 
+                              className="inline-block text-base text-slate-700"
+                            >
+                              {text}
+                              {index < meaningParts.length - 1 && <span className="mx-2 text-slate-400">|</span>}
+                            </span>
+                          ))}
                         </div>
                       )}
-                      {q.exampleDe && (
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          مثال: {q.exampleDe}
+                      
+                      {/* عرض المثال - Beispiel في الجهة اليسرى */}
+                      {word.exampleSentence && (
+                        <div className="text-base text-slate-500 flex items-center gap-2" dir="ltr">
+                          <span className="font-medium">Beispiel:</span>
+                          <span>{word.exampleSentence}</span>
                         </div>
                       )}
                     </div>

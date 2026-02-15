@@ -3,6 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import './CreateExam.css';
 
+// المستويات حسب المزود
+const getLevelsForProvider = (provider) => {
+  const p = (provider || '').toLowerCase();
+  if (p === 'dtz') return [{ value: 'B1', label: 'B1 - المتوسط' }];
+  if (p === 'dtb') return [
+    { value: 'A2', label: 'A2 - المبتدئ المتقدم' },
+    { value: 'B1', label: 'B1 - المتوسط' },
+    { value: 'B2', label: 'B2 - المتوسط المتقدم' },
+    { value: 'C1', label: 'C1 - المتقدم' },
+  ];
+  return [
+    { value: 'A1', label: 'A1 - المبتدئ' },
+    { value: 'A2', label: 'A2 - المبتدئ المتقدم' },
+    { value: 'B1', label: 'B1 - المتوسط' },
+    { value: 'B2', label: 'B2 - المتوسط المتقدم' },
+    { value: 'C1', label: 'C1 - المتقدم' },
+  ];
+};
+
 function CreateExam() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -20,6 +39,8 @@ function CreateExam() {
     title: '',
     provider: 'LiD', // استخدام LiD بدلاً من Deutschland-in-Leben
     level: 'B1',
+    mainSkill: 'leben_test', // ✅ المهارة الرئيسية
+    examCategory: 'leben_exam', // ✅ نوع الامتحان (مشتق من provider)
     state: 'Bayern', // إضافة state
     sections: [
       {
@@ -104,16 +125,45 @@ function CreateExam() {
       if (name === 'provider' && value === 'Deutschland-in-Leben') {
         updated.provider = 'LiD';
       }
-      
-      // إذا تم تغيير provider إلى LiD، التأكد من وجود state
-      if (name === 'provider' && value === 'LiD' && !updated.state) {
-        updated.state = 'Bayern';
-        // تحديث tags القسم الأول
-        if (updated.sections && updated.sections.length > 0) {
-          updated.sections[0].tags = ['Bayern'];
+
+      // إذا تم تغيير provider إلى LiD، التأكد من وجود state وأقسام
+      if (name === 'provider' && (value === 'LiD' || value === 'Deutschland-in-Leben')) {
+        updated.mainSkill = 'leben_test';
+        updated.examCategory = 'leben_exam';
+        if (!updated.state) updated.state = 'Bayern';
+        // إعادة تعيين الأقسام الافتراضية لـ LiD
+        updated.sections = [
+          {
+            section: 'أسئلة الولاية',
+            quota: 3,
+            tags: [updated.state || 'Bayern'],
+            difficultyDistribution: { easy: 0, med: 0, hard: 0 },
+          },
+          {
+            section: '300 Fragen Pool',
+            quota: 30,
+            tags: ['300-Fragen'],
+            difficultyDistribution: { easy: 0, med: 0, hard: 0 },
+          },
+        ];
+      }
+
+      // ✅ إذا تم تغيير provider إلى غير LiD
+      if (name === 'provider' && value !== 'LiD' && value !== 'Deutschland-in-Leben') {
+        updated.sections = [];
+        // ✅ تعيين examCategory تلقائياً
+        if (value === 'Grammatik') {
+          updated.examCategory = 'grammar_exam';
+          updated.mainSkill = 'mixed';
+        } else {
+          updated.examCategory = 'provider_exam';
+          // الاحتفاظ بـ mainSkill الحالي أو 'mixed' كافتراضي
+          if (updated.mainSkill === 'leben_test') {
+            updated.mainSkill = 'mixed';
+          }
         }
       }
-      
+
       return updated;
     });
   };
@@ -204,19 +254,21 @@ function CreateExam() {
       return;
     }
 
-    if (formData.sections.length === 0) {
-      setError('يجب إضافة قسم واحد على الأقل');
+    // ✅ للـ LiD: يجب أن يكون هناك قسم واحد على الأقل
+    // للمزودين الآخرين: يمكن إنشاء امتحان بدون أقسام (sections: [])
+    if (formData.provider === 'LiD' && formData.sections.length === 0) {
+      setError('يجب إضافة قسم واحد على الأقل لامتحانات LiD');
       return;
     }
 
-    // التحقق من أن كل قسم له tags
+    // التحقق من أن كل قسم له tags (فقط إذا كان هناك أقسام)
     for (let i = 0; i < formData.sections.length; i++) {
       const section = formData.sections[i];
       if (!section.tags || section.tags.length === 0) {
         setError(`القسم "${section.section || section.name}" يجب أن يحتوي على tags`);
         return;
       }
-      
+
       // التحقق من أن مجموع difficultyDistribution يساوي quota
       if (!validateDifficultyDistribution(section)) {
         const { easy = 0, med = 0, hard = 0 } = section.difficultyDistribution || {};
@@ -232,20 +284,30 @@ function CreateExam() {
 
     try {
       // تنظيف البيانات قبل الإرسال حسب DTO
-      const cleanedFormData = {
+      const payload = {
         title: formData.title.trim(),
         provider: formData.provider === 'Deutschland-in-Leben' ? 'LiD' : formData.provider,
         level: formData.level,
-        timeLimitMin: Number(formData.timeLimitMin) || 0,
+        mainSkill: formData.mainSkill || 'mixed',
+        examCategory: formData.examCategory || 'provider_exam',
+        timeLimitMin: Math.max(1, parseInt(String(formData.timeLimitMin), 10) || 1),
         attemptLimit: Number(formData.attemptLimit) || 0,
         randomizeQuestions: !!formData.randomizeQuestions,
         status: formData.status.toLowerCase(),
-        sections: formData.sections.map((section) => {
+        // ✅ إرسال sections: [] إذا لم تكن هناك أقسام (للمزودين غير LiD)
+        sections: formData.sections.length === 0 ? [] : formData.sections.map((section, index) => {
+          const sectionTitle = section.section || section.title || section.name || '';
           const cleanedSection = {
-            name: section.section || section.name, // استخدام name كما في Api.md
-            tags: section.tags,
-            quota: Number(section.quota) || 0,
+            name: section.name || sectionTitle, // ✅ name مطلوب إجباريًا (مش title)
+            skill: section.skill || formData.mainSkill || 'hoeren', // ✅ skill مطلوب
+            teilNumber: Number(section.teil ?? section.teilNumber ?? index + 1), // ✅ teilNumber مطلوب
+            quota: Number(section.quota) || 0, // ✅ quota مطلوب
           };
+          
+          // إضافة tags إذا كانت موجودة
+          if (section.tags && section.tags.length > 0) {
+            cleanedSection.tags = section.tags;
+          }
           
           // إضافة difficultyDistribution - جرب medium بدلاً من med
           if (section.difficultyDistribution) {
@@ -267,9 +329,9 @@ function CreateExam() {
       // لا نرسل state في الـ payload - الـ API لا يقبله
       // state يتم استخدامه فقط في tags للقسم الأول
 
-      console.log('Sending exam data:', JSON.stringify(cleanedFormData, null, 2));
+      console.log('Sending exam data:', JSON.stringify(payload, null, 2));
 
-      await examsAPI.create(cleanedFormData);
+      await examsAPI.create(payload);
       setSuccess('تم إنشاء الامتحان بنجاح!');
       
       // Reset form after 2 seconds
@@ -279,6 +341,8 @@ function CreateExam() {
           title: '',
           provider: 'LiD',
           level: 'B1',
+          mainSkill: 'leben_test',
+          examCategory: 'leben_exam',
           state: 'Bayern',
           sections: [
             {
@@ -451,17 +515,41 @@ function CreateExam() {
               onChange={handleInputChange}
               required
             >
-              <option value="A1">A1 - المبتدئ</option>
-              <option value="A2">A2 - المبتدئ المتقدم</option>
-              <option value="B1">B1 - المتوسط</option>
-              <option value="B2">B2 - المتوسط المتقدم</option>
-              <option value="C1">C1 - المتقدم</option>
+              {getLevelsForProvider(formData.provider).map(lvl => (
+                <option key={lvl.value} value={lvl.value}>{lvl.label}</option>
+              ))}
             </select>
           </div>
 
+          {/* Main Skill - فقط لغير LiD */}
+          {formData.provider !== 'LiD' && (
+            <div className="form-group">
+              <label htmlFor="mainSkill">المهارة الرئيسية (Main Skill) *</label>
+              <select
+                id="mainSkill"
+                name="mainSkill"
+                value={formData.mainSkill}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="mixed">مختلط (Mixed)</option>
+                <option value="hoeren">Hören (استماع)</option>
+                <option value="lesen">Lesen (قراءة)</option>
+                <option value="schreiben">Schreiben (كتابة)</option>
+                <option value="sprechen">Sprechen (محادثة)</option>
+                <option value="sprachbausteine">Sprachbausteine (قواعد لغوية)</option>
+              </select>
+            </div>
+          )}
+
           {/* Sections */}
           <div className="form-group">
-            <label>الأقسام *</label>
+            <label>الأقسام {formData.provider === 'LiD' ? '*' : '(اختياري)'}</label>
+            {formData.sections.length === 0 && formData.provider !== 'LiD' && (
+              <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>
+                لا توجد أقسام. يمكنك إضافة أقسام لاحقاً من صفحة إدارة الأقسام، أو أضف قسم يدوياً أدناه.
+              </p>
+            )}
             {formData.sections.map((section, index) => (
               <div key={index} className="section-item">
                 <div className="section-header">
@@ -691,11 +779,12 @@ function CreateExam() {
               type="number"
               id="timeLimitMin"
               name="timeLimitMin"
-              min="0"
+              min="1"
+              step="1"
               value={formData.timeLimitMin}
               onChange={handleInputChange}
             />
-            <small>0 = غير محدود</small>
+            <small>الحد الأدنى: 1 دقيقة</small>
           </div>
 
           {/* Status */}

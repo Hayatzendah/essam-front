@@ -10,7 +10,9 @@ import CreateExam from './pages/admin/CreateExam';
 import EditExam from './pages/admin/EditExam';
 import QuestionsList from './pages/admin/QuestionsList';
 import ExamsList from './pages/admin/ExamsList';
+import ExamSections from './pages/admin/ExamSections';
 import LebenInDeutschland from './pages/student/LebenInDeutschland';
+import LebenLearningMode from './pages/student/LebenLearningMode';
 import ExamPage from './pages/student/ExamPage';
 import ExamResults from './pages/student/ExamResults';
 import Wortschatz from './pages/Wortschatz';
@@ -21,6 +23,16 @@ import GrammarExercisePage from './pages/grammar/GrammarExercisePage';
 import PruefungenPage from './pages/PruefungenPage';
 import ExamDetailsPage from './pages/ExamDetailsPage';
 import CreateQuestionWithExam from './pages/admin/CreateQuestionWithExam';
+import BulkCreateQuestions from './pages/admin/BulkCreateQuestions';
+import AnalyticsDashboard from './pages/admin/AnalyticsDashboard';
+import StudentsManagement from './pages/admin/StudentsManagement';
+import StudentProfile from './pages/admin/StudentProfile';
+import GrammarTopicsContent from './pages/admin/GrammarTopicsContent';
+import VocabularyTopicsContent from './pages/admin/VocabularyTopicsContent';
+import VocabularyWordsContent from './pages/admin/VocabularyWordsContent';
+import SchreibenTasksManagement from './pages/admin/SchreibenTasksManagement';
+import SchreibenTaskEditor from './pages/admin/SchreibenTaskEditor';
+import SchreibenPage from './pages/student/SchreibenPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -89,6 +101,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/questions/bulk-create"
+          element={
+            <AdminRoute>
+              <BulkCreateQuestions />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/admin/questions/:id/edit"
           element={
             <AdminRoute>
@@ -129,10 +149,106 @@ function App() {
           }
         />
         <Route
+          path="/admin/exams/:examId/sections"
+          element={
+            <AdminRoute>
+              <ExamSections />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <AdminRoute>
+              <AnalyticsDashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/students"
+          element={
+            <AdminRoute>
+              <StudentsManagement />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/students/:id"
+          element={
+            <AdminRoute>
+              <StudentProfile />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/grammar-topics"
+          element={
+            <AdminRoute>
+              <GrammarTopicsContent />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/vocabulary/topics"
+          element={
+            <AdminRoute>
+              <VocabularyTopicsContent />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/vocabulary/topics/:topicId/words"
+          element={
+            <AdminRoute>
+              <VocabularyWordsContent />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/schreiben"
+          element={
+            <AdminRoute>
+              <SchreibenTasksManagement />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/schreiben/new"
+          element={
+            <AdminRoute>
+              <SchreibenTaskEditor />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/schreiben/:taskId"
+          element={
+            <AdminRoute>
+              <SchreibenTaskEditor />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/student/liden"
           element={
             <PrivateRoute>
               <LebenInDeutschland />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/leben"
+          element={
+            <PrivateRoute>
+              <LebenInDeutschland />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/leben/learn"
+          element={
+            <PrivateRoute>
+              <LebenLearningMode />
             </PrivateRoute>
           }
         />
@@ -149,6 +265,22 @@ function App() {
           element={
             <PrivateRoute>
               <ExamResults />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/schreiben"
+          element={
+            <PrivateRoute>
+              <SchreibenPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/schreiben/:taskId"
+          element={
+            <PrivateRoute>
+              <SchreibenPage />
             </PrivateRoute>
           }
         />

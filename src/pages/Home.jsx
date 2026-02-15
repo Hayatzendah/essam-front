@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logoImage from "../images/logo.png";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function Home() {
           <div className="flex items-center justify-between h-24">
             <div className="flex items-center">
               <img
-                src="/src/images/logo.png"
+                src={logoImage}
                 alt="Deutsch Learning"
                 className="h-40 w-auto"
               />
@@ -22,7 +23,7 @@ export default function Home() {
 
             <button
               onClick={() => setShowLoginModal(true)}
-              className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg transition-colors"
+              className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
             >
               تسجيل الدخول
             </button>
@@ -52,7 +53,7 @@ export default function Home() {
 
               {/* Title */}
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-3xl">🎓</span>
                 </div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
@@ -69,7 +70,7 @@ export default function Home() {
                   setShowLoginModal(false);
                   navigate("/login");
                 }}
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white rounded-lg p-4 transition-colors font-medium"
+                className="w-full bg-red-600 hover:bg-red-700 text-white rounded-lg p-4 transition-colors font-medium"
               >
                 دخول الطالب
               </button>
@@ -83,7 +84,7 @@ export default function Home() {
                       setShowLoginModal(false);
                       navigate("/register");
                     }}
-                    className="text-rose-600 hover:text-rose-700 font-medium"
+                    className="text-red-600 hover:text-red-700 font-medium"
                   >
                     سجل الآن
                   </button>
@@ -168,7 +169,7 @@ export default function Home() {
             onClick={() => navigate("/wortschatz")}
             className="group cursor-pointer bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md border border-slate-200 dark:border-slate-700 p-6 transition-all hover:-translate-y-1 flex flex-col items-center text-center"
           >
-            <div className="w-16 h-16 bg-pink-100 dark:bg-pink-900/30 rounded-lg flex items-center justify-center mb-4 text-3xl">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4 text-3xl">
               💬
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">

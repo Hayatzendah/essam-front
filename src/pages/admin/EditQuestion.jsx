@@ -1,7 +1,160 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { questionsAPI } from '../../services/questionsAPI';
+import axios from 'axios';
 import './CreateQuestion.css';
+
+// API Base URL
+const API_BASE_URL = 'https://api.deutsch-tests.com';
+
+// ✅ دالة لبناء URL من key مع encoding صحيح
+const buildImageUrlFromKey = (key) => {
+  if (!key) {
+    console.warn('⚠️ buildImageUrlFromKey: key is empty');
+    return '';
+  }
+  
+  try {
+    // إذا كان key يبدأ بـ http، نعيده كما هو
+    if (key.startsWith('http://') || key.startsWith('https://')) {
+      console.log('✅ Key is already a full URL:', key);
+      return key;
+    }
+    
+    // إذا كان key يبدأ بـ /uploads/ أو /images/، نضيف base URL فقط
+    if (key.startsWith('/uploads/') || key.startsWith('/images/')) {
+      const fullUrl = `${API_BASE_URL}${key}`;
+      console.log('✅ Building URL from absolute path:', { key, fullUrl });
+      return fullUrl;
+    }
+    
+    // إذا كان key يبدأ بـ uploads/ أو images/ بدون /، نضيف / و base URL
+    if (key.startsWith('uploads/') || key.startsWith('images/')) {
+      const fullUrl = `${API_BASE_URL}/${key}`;
+      console.log('✅ Building URL from relative path:', { key, fullUrl });
+      return fullUrl;
+    }
+    
+    // غير ذلك، نقسم key على / ونعمل encoding على كل جزء
+    const segments = key.split('/');
+    const encodedSegments = segments.map(segment => {
+      return encodeURIComponent(segment);
+    });
+    const encodedPath = encodedSegments.join('/');
+    const fullUrl = `${API_BASE_URL}/uploads/${encodedPath}`;
+    console.log('✅ Building URL from key with encoding:', { key, encodedPath, fullUrl });
+    return fullUrl;
+  } catch (error) {
+    console.error('❌ Error building URL from key:', key, error);
+    return `${API_BASE_URL}/uploads/${key}`;
+  }
+};
+
+// ✅ دالة لبناء URL الصورة بشكل صحيح مع encoding للأحرف الخاصة
+const getImageUrl = (image) => {
+  if (!image) {
+    console.warn('⚠️ getImageUrl: image is null or undefined');
+    return null;
+  }
+  
+  // إذا كان URL كامل موجود ويبدأ بـ http، نستخدمه لكن نصلح encoding
+  if (image.url && (image.url.startsWith('http://') || image.url.startsWith('https://'))) {
+    try {
+      const urlObj = new URL(image.url);
+      // إذا كان pathname يحتوي على أحرف غير encoded (مثل العربية أو الألمانية)
+      // نحتاج لإعادة بناء المسار مع encoding صحيح
+      const pathSegments = urlObj.pathname.split('/').filter(s => s);
+      const encodedSegments = pathSegments.map(segment => {
+        // إذا كان Segment يحتوي على أحرف غير ASCII، نعمل encoding
+        try {
+          // نحاول decode أولاً لنرى إذا كان encoded بالفعل
+          const decoded = decodeURIComponent(segment);
+          // إذا كان decode نجح ونتيجته مختلفة، يعني كان encoded
+          // لكن قد يحتاج re-encoding بشكل صحيح
+          return encodeURIComponent(decoded);
+        } catch (e) {
+          // إذا decode فشل، يعني Segment غير encoded، نعمل encoding
+          return encodeURIComponent(segment);
+        }
+      });
+      
+      const encodedPath = '/' + encodedSegments.join('/');
+      const newUrl = `${urlObj.origin}${encodedPath}${urlObj.search}${urlObj.hash}`;
+      
+      console.log('✅ Fixed URL encoding:', {
+        original: image.url,
+        fixed: newUrl,
+        pathname: urlObj.pathname,
+        encodedPath: encodedPath
+      });
+      
+      return newUrl;
+    } catch (e) {
+      // إذا فشل parsing، نستخدم URL كما هو
+      console.log('⚠️ URL parsing failed, using as-is:', image.url);
+      return image.url;
+    }
+  }
+  
+  // إذا كان key موجود، نبني URL منه
+  if (image.key) {
+    const builtUrl = buildImageUrlFromKey(image.key);
+    console.log('✅ Built URL from key:', builtUrl);
+    return builtUrl;
+  }
+  
+  // إذا كان url موجود لكن غير كامل
+  if (image.url) {
+    // إذا كان يبدأ بـ /uploads/ أو images/
+    if (image.url.startsWith('/uploads/') || image.url.startsWith('/images/')) {
+      // نعمل encoding على المسار
+      const pathSegments = image.url.split('/').filter(s => s);
+      const encodedSegments = pathSegments.map(segment => encodeURIComponent(segment));
+      const encodedPath = '/' + encodedSegments.join('/');
+      const fullUrl = `${API_BASE_URL}${encodedPath}`;
+      console.log('✅ Built URL from absolute path:', fullUrl);
+      return fullUrl;
+    }
+    // إذا كان يبدأ بـ uploads/ أو images/ بدون /
+    if (image.url.startsWith('uploads/') || image.url.startsWith('images/')) {
+      const pathSegments = image.url.split('/');
+      const encodedSegments = pathSegments.map(segment => encodeURIComponent(segment));
+      const encodedPath = encodedSegments.join('/');
+      const fullUrl = `${API_BASE_URL}/${encodedPath}`;
+      console.log('✅ Built URL from relative path:', fullUrl);
+      return fullUrl;
+    }
+    // غير ذلك، نضيف /uploads/
+    const encodedUrl = encodeURIComponent(image.url);
+    const fullUrl = `${API_BASE_URL}/uploads/${encodedUrl}`;
+    console.log('✅ Built URL with /uploads/ prefix:', fullUrl);
+    return fullUrl;
+  }
+  
+  console.warn('⚠️ No URL or key found for image:', image);
+  return null;
+};
+
+// Providers constant - lowercase values for backend, capitalized labels for display
+const PROVIDERS = [
+  { value: 'goethe', label: 'Goethe' },
+  { value: 'telc', label: 'TELC' },
+  { value: 'osd', label: 'ÖSD' },
+  { value: 'ecl', label: 'ECL' },
+  { value: 'dtb', label: 'DTB' },
+  { value: 'dtz', label: 'DTZ' },
+  { value: 'deutschland-in-leben', label: 'Deutschland-in-Leben' },
+  { value: 'grammatik', label: 'Grammatik' },
+  { value: 'wortschatz', label: 'Wortschatz' },
+];
+
+// المستويات حسب المزود
+const getLevelsForProvider = (provider) => {
+  const p = (provider || '').toLowerCase();
+  if (p === 'dtz') return ['B1'];
+  if (p === 'dtb') return ['A2', 'B1', 'B2', 'C1'];
+  return ['A1', 'A2', 'B1', 'B2', 'C1'];
+};
 
 function EditQuestion() {
   const navigate = useNavigate();
@@ -21,19 +174,24 @@ function EditQuestion() {
     answerKeyBoolean: true,
     answerKeyMatch: [{ left: '', right: '' }],
     answerKeyReorder: [],
-    provider: 'Deutschland-in-Leben',
+    provider: 'deutschland-in-leben',
     section: '',
     level: 'B1',
     tags: [],
     status: 'draft',
     questionType: 'general',
     selectedState: '',
+    // Leben in Deutschland fields
+    usageCategory: '',
+    mainSkill: '',
+    images: [],
   });
 
   const [newTag, setNewTag] = useState('');
   const [audioFile, setAudioFile] = useState(null);
   const [audioPreview, setAudioPreview] = useState(null);
   const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   // قائمة الولايات الألمانية
   const germanStates = [
@@ -66,15 +224,24 @@ function EditQuestion() {
     try {
       setLoadingQuestion(true);
       setError('');
+      console.log('🔄 Loading question with ID:', id);
       const question = await questionsAPI.getById(id);
+      console.log('✅ Question loaded successfully:', question);
       
-      // استخراج الولاية من tags (إذا كان LiD)
+      // استخراج usageCategory و state من السؤال
+      let usageCategory = '';
       let selectedState = '';
-      if (question.provider === 'Deutschland-in-Leben' || question.provider === 'LiD') {
-        const stateTag = question.tags?.find(tag => germanStates.includes(tag));
-        if (stateTag) {
-          selectedState = stateTag;
+      let mainSkill = '';
+      
+      // تحديد usageCategory من provider و tags
+      if (question.provider === 'leben_in_deutschland' || question.provider === 'Deutschland-in-Leben' || question.provider === 'LiD') {
+        if (question.usageCategory === 'common' || question.tags?.includes('300-Fragen')) {
+          usageCategory = 'common';
+        } else if (question.usageCategory === 'state_specific' || question.state) {
+          usageCategory = 'state_specific';
+          selectedState = question.state || question.tags?.find(tag => germanStates.includes(tag)) || '';
         }
+        mainSkill = question.mainSkill || 'leben_test';
       }
 
       // تحويل البيانات من API format إلى form format
@@ -120,6 +287,85 @@ function EditQuestion() {
         answerKeyMatch = [{ left: '', right: '' }];
       }
 
+      // Normalize provider to lowercase for backend compatibility
+      const normalizeProvider = (provider) => {
+        if (!provider) return 'deutschland-in-leben';
+        const providerLower = provider.toLowerCase();
+        // Map old values to new lowercase values
+        const providerMap = {
+          'goethe': 'goethe',
+          'telc': 'telc',
+          'télc': 'telc',
+          'ösd': 'osd',
+          'osd': 'osd',
+          'ecl': 'ecl',
+          'dtb': 'dtb',
+          'dtz': 'dtz',
+          'deutschland-in-leben': 'deutschland-in-leben',
+          'leben in deutschland': 'deutschland-in-leben',
+          'lid': 'deutschland-in-leben',
+          'grammatik': 'grammatik',
+          'wortschatz': 'wortschatz',
+        };
+        return providerMap[providerLower] || providerLower;
+      };
+
+      const normalizedProvider = normalizeProvider(question.provider);
+
+      // 🔥 معالجة الصور بشكل صحيح
+      let images = [];
+      console.log('🖼️ Raw question data:', {
+        hasImages: !!question.images,
+        imagesLength: question.images?.length,
+        images: question.images,
+        hasMedia: !!question.media,
+        media: question.media
+      });
+
+      if (Array.isArray(question.images) && question.images.length > 0) {
+        // إذا كان هناك images array
+        images = question.images.map((img, idx) => {
+          const imageUrl = getImageUrl(img);
+          console.log(`🖼️ Processing image ${idx + 1}:`, {
+            original: img,
+            key: img.key,
+            url: img.url,
+            builtUrl: imageUrl,
+            description: img.description
+          });
+          
+          return {
+            type: img.type || 'image',
+            key: img.key || '',
+            url: imageUrl || '',
+            mime: img.mime || 'image/jpeg',
+            provider: img.provider || 's3',
+            description: img.description || ''
+          };
+        });
+      } else if (question.media && question.media.type === 'image') {
+        // إذا كان هناك media واحد من نوع image
+        const imageUrl = getImageUrl(question.media);
+        console.log('🖼️ Processing media image:', {
+          original: question.media,
+          key: question.media.key,
+          url: question.media.url,
+          builtUrl: imageUrl,
+          description: question.media.description
+        });
+        
+        images = [{
+          type: question.media.type || 'image',
+          key: question.media.key || '',
+          url: imageUrl || '',
+          mime: question.media.mime || 'image/jpeg',
+          provider: question.media.provider || 's3',
+          description: question.media.description || ''
+        }];
+      }
+
+      console.log('🖼️ Final processed images:', images);
+
       setFormData({
         prompt: question.prompt || '',
         qType: question.qType || 'mcq',
@@ -129,26 +375,55 @@ function EditQuestion() {
         answerKeyBoolean: question.answerKeyBoolean !== undefined ? question.answerKeyBoolean : true,
         answerKeyMatch: answerKeyMatch,
         answerKeyReorder: Array.isArray(question.answerKeyReorder) ? question.answerKeyReorder : [],
-        provider: question.provider || 'Deutschland-in-Leben',
+        provider: normalizedProvider,
         section: question.section || '',
         level: question.level || 'B1',
         tags: Array.isArray(question.tags) ? question.tags : [],
         status: question.status || 'draft',
         questionType: selectedState ? 'state' : 'general',
         selectedState: selectedState,
+        usageCategory: usageCategory,
+        mainSkill: mainSkill,
+        images: images,
       });
 
-      // إذا كان هناك media
-      if (question.media) {
+      // إذا كان هناك media (صوت)
+      if (question.media && question.media.type === 'audio') {
         setAudioPreview(question.media.url || question.mediaUrl);
       }
     } catch (err) {
-      console.error('Error loading question:', err);
-      setError(
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'حدث خطأ أثناء تحميل السؤال'
-      );
+      console.error('❌ Error loading question:', err);
+      console.error('Error details:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message,
+        questionId: id,
+      });
+      
+      let errorMessage = 'حدث خطأ أثناء تحميل السؤال';
+      
+      if (err.response?.status === 404) {
+        errorMessage = 'السؤال غير موجود. قد يكون تم حذفه أو الـ ID غير صحيح.';
+      } else if (err.response?.status === 403) {
+        errorMessage = 'ليس لديك صلاحية لعرض هذا السؤال.';
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : JSON.stringify(err.response.data.error);
+      }
+      
+      setError(errorMessage);
+      
+      // إذا كان السؤال غير موجود (404)، عرض رسالة واضحة
+      if (err.response?.status === 404) {
+        setTimeout(() => {
+          if (window.confirm('السؤال غير موجود. هل تريد العودة إلى قائمة الأسئلة؟')) {
+            navigate('/admin/questions');
+          }
+        }, 2000);
+      }
     } finally {
       setLoadingQuestion(false);
     }
@@ -315,6 +590,116 @@ function EditQuestion() {
     }
   };
 
+  // رفع الصور لأسئلة Leben in Deutschland
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    if (formData.usageCategory !== 'state_specific' && formData.usageCategory !== 'common') {
+      setError('يمكن رفع الصور فقط لأسئلة Leben in Deutschland (Common أو State Specific)');
+      return;
+    }
+
+    try {
+      setUploadingImages(true);
+      setError('');
+
+      const uploadedImages = [];
+      
+      // رفع كل صورة على حدة
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          setError(`الملف ${file.name} ليس صورة`);
+          continue;
+        }
+
+        const response = await questionsAPI.uploadMedia(file);
+        console.log('📤 Upload response (FULL):', JSON.stringify(response, null, 2));
+        console.log('📤 response.url:', response.url);
+        console.log('📤 response.key:', response.key);
+        console.log('📤 response.location:', response.location);
+        console.log('📤 response.fileUrl:', response.fileUrl);
+
+        // استخدام URL من الـ response مباشرة إذا كان موجوداً
+        let imageUrl = '';
+
+        // جرب كل الحقول الممكنة للـ URL
+        const possibleUrlFields = [response.url, response.location, response.fileUrl, response.imageUrl, response.path];
+        const foundUrl = possibleUrlFields.find(u => u && typeof u === 'string');
+
+        if (foundUrl) {
+          if (foundUrl.startsWith('http://') || foundUrl.startsWith('https://')) {
+            imageUrl = foundUrl;
+          } else if (foundUrl.startsWith('/')) {
+            imageUrl = `${API_BASE_URL}${foundUrl}`;
+          } else {
+            imageUrl = `${API_BASE_URL}/${foundUrl}`;
+          }
+        } else if (response.key) {
+          // بناء URL من key - جرب مسارات مختلفة
+          // أولاً جرب /media/ بدلاً من /uploads/
+          imageUrl = `${API_BASE_URL}/media/${response.key}`;
+        }
+
+        console.log('🖼️ Built image URL:', imageUrl);
+
+        // تجربة تحميل الصورة للتأكد من صحة الـ URL
+        console.log('🔍 Testing image URL accessibility...');
+
+        // بناء كائن الصورة حسب بنية API
+        const imageObject = {
+          type: 'image',
+          key: response.key,
+          mime: response.mime || file.type,
+          provider: 's3',
+          url: imageUrl,
+          description: '' // حقل الوصف - يمكن إضافته لاحقاً
+        };
+
+        uploadedImages.push(imageObject);
+      }
+
+      // إضافة الصور المرفوعة إلى formData
+      setFormData(prev => ({
+        ...prev,
+        images: [...(prev.images || []), ...uploadedImages]
+      }));
+
+      setSuccess(`تم رفع ${uploadedImages.length} صورة بنجاح ✅`);
+      
+      // إعادة تعيين input
+      e.target.value = '';
+    } catch (err) {
+      console.error('Error uploading images:', err);
+      setError(
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'حدث خطأ أثناء رفع الصور'
+      );
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  // حذف صورة من القائمة
+  const handleRemoveImage = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+    setSuccess('تم حذف الصورة');
+  };
+
+  // تحديث وصف الصورة
+  const handleUpdateImageDescription = (index, description) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.map((img, i) => 
+        i === index ? { ...img, description } : img
+      )
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -339,10 +724,56 @@ function EditQuestion() {
     setLoading(true);
 
     try {
+      // ✅ ALLOWED_QTYPES - القيم المسموحة
+      const ALLOWED_QTYPES = new Set([
+        'mcq',
+        'fill',
+        'true_false',
+        'match',
+        'reorder',
+        'listen',
+        'free_text',
+        'speaking',
+      ]);
+
+      // ✅ Normalize qType - يجب أن يكون lowercase وواحد من القيم المسموحة
+      const normalizeQType = (qType) => {
+        if (!qType) return 'mcq';
+        const normalized = String(qType).trim().toLowerCase();
+        if (ALLOWED_QTYPES.has(normalized)) {
+          return normalized;
+        }
+        // إذا لم يكن من القيم المسموحة، نعيد mcq كقيمة افتراضية
+        console.warn(`Invalid qType: "${qType}", using "mcq" as default`);
+        return 'mcq';
+      };
+
+      // Normalize provider to lowercase before sending to backend
+      const normalizeProvider = (provider) => {
+        if (!provider) return 'deutschland-in-leben';
+        const providerLower = provider.toLowerCase();
+        const providerMap = {
+          'goethe': 'goethe',
+          'telc': 'telc',
+          'télc': 'telc',
+          'ösd': 'osd',
+          'osd': 'osd',
+          'ecl': 'ecl',
+          'dtb': 'dtb',
+          'dtz': 'dtz',
+          'deutschland-in-leben': 'deutschland-in-leben',
+          'leben in deutschland': 'deutschland-in-leben',
+          'lid': 'deutschland-in-leben',
+          'grammatik': 'grammatik',
+          'wortschatz': 'wortschatz',
+        };
+        return providerMap[providerLower] || providerLower;
+      };
+
       const questionData = {
         prompt: formData.prompt.trim(),
-        qType: formData.qType,
-        provider: formData.provider,
+        qType: normalizeQType(formData.qType), // ✅ Normalize qType
+        provider: normalizeProvider(formData.provider),
         level: formData.level,
         tags: formData.tags,
         status: formData.status,
@@ -352,28 +783,31 @@ function EditQuestion() {
         questionData.section = formData.section;
       }
 
+      // ✅ استخدام qType بعد normalize
+      const normalizedQType = normalizeQType(formData.qType);
+      
       // حسب نوع السؤال
-      if (formData.qType === 'mcq') {
+      if (normalizedQType === 'mcq') {
         questionData.options = formData.options.map((opt) => ({
           text: opt.text.trim(),
           isCorrect: opt.isCorrect,
         }));
-      } else if (formData.qType === 'fill') {
+      } else if (normalizedQType === 'fill') {
         if (formData.fillExact) {
           questionData.fillExact = formData.fillExact;
         }
         if (formData.regexList.length > 0) {
           questionData.regexList = formData.regexList;
         }
-      } else if (formData.qType === 'true_false') {
+      } else if (normalizedQType === 'true_false') {
         questionData.answerKeyBoolean = formData.answerKeyBoolean;
-      } else if (formData.qType === 'match') {
+      } else if (normalizedQType === 'match') {
         questionData.answerKeyMatch = formData.answerKeyMatch;
-      } else if (formData.qType === 'reorder') {
+      } else if (normalizedQType === 'reorder') {
         questionData.answerKeyReorder = formData.answerKeyReorder;
       }
 
-      // إضافة media إذا كان موجود
+      // إضافة media إذا كان موجود (صوت)
       if (audioFile) {
         questionData.media = {
           type: 'audio',
@@ -382,14 +816,49 @@ function EditQuestion() {
         };
       }
 
+      // إضافة بيانات Leben in Deutschland
+      if (formData.usageCategory === 'common' || formData.usageCategory === 'state_specific') {
+        questionData.provider = 'leben_in_deutschland';
+        questionData.mainSkill = 'leben_test';
+        questionData.usageCategory = formData.usageCategory;
+        questionData.level = formData.level || 'A1';
+        
+        if (formData.usageCategory === 'common') {
+          questionData.tags = ['300-Fragen'];
+        } else if (formData.usageCategory === 'state_specific') {
+          questionData.state = formData.selectedState;
+          questionData.tags = [formData.selectedState];
+        }
+        
+        // إضافة الصور إذا كانت موجودة
+        if (formData.images && formData.images.length > 0) {
+          questionData.images = formData.images;
+          // إذا كانت هناك صورة واحدة، نضيفها كـ media أيضاً
+          if (formData.images.length === 1) {
+            questionData.media = formData.images[0];
+          }
+        }
+      }
+
       console.log('Updating question data:', JSON.stringify(questionData, null, 2));
 
-      await questionsAPI.update(id, questionData);
+      const updatedQuestion = await questionsAPI.update(id, questionData);
+      console.log('✅ Question updated successfully:', updatedQuestion);
       setSuccess('تم تحديث السؤال بنجاح!');
       
-      setTimeout(() => {
-        navigate('/admin/questions');
-      }, 1500);
+      // Reload the question to get the latest data from the backend
+      // This ensures the form shows the updated data
+      try {
+        await loadQuestion();
+        console.log('✅ Question reloaded after update');
+      } catch (reloadError) {
+        console.error('❌ Error reloading question after update:', reloadError);
+        // Don't show error to user if update was successful
+        // Just log it for debugging
+      }
+      
+      // Don't navigate away automatically - let user decide when to go back
+      // This prevents issues where the question might not appear in the filtered list
     } catch (err) {
       console.error('Update question error:', err);
       
@@ -487,7 +956,6 @@ function EditQuestion() {
               <option value="true_false">صحيح/خطأ (True/False)</option>
               <option value="fill">ملء الفراغ (Fill)</option>
               <option value="match">مطابقة (Match)</option>
-              <option value="reorder">إعادة ترتيب (Reorder)</option>
             </select>
           </div>
 
@@ -675,123 +1143,549 @@ function EditQuestion() {
             </div>
           )}
 
-          {/* Provider */}
-          <div className="form-group">
-            <label htmlFor="provider">المزود</label>
+          {/* Usage Category */}
+          <div className="form-group" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+            <label htmlFor="usageCategory">🔧 نوع الاستخدام / Question Usage *</label>
             <select
-              id="provider"
-              name="provider"
-              value={formData.provider}
+              id="usageCategory"
+              name="usageCategory"
+              value={formData.usageCategory}
               onChange={handleInputChange}
+              required
             >
-              <option value="Deutschland-in-Leben">Deutschland-in-Leben</option>
-              <option value="telc">telc</option>
-              <option value="Goethe">Goethe</option>
-              <option value="ÖSD">ÖSD</option>
-              <option value="ECL">ECL</option>
-              <option value="DTB">DTB</option>
-              <option value="DTZ">DTZ</option>
-              <option value="Grammatik">Grammatik</option>
-              <option value="Wortschatz">Wortschatz</option>
+              <option value="">-- اختر نوع الاستخدام --</option>
+              <option value="grammar">Grammar question (قواعد)</option>
+              <option value="provider">Provider exam question (Prüfungen)</option>
+              <option value="common">Leben in Deutschland - Common (300-Fragen)</option>
+              <option value="state_specific">Leben in Deutschland - State Specific (أسئلة الولاية)</option>
             </select>
           </div>
 
-          {/* Section */}
-          <div className="form-group">
-            <label htmlFor="section">القسم</label>
-            <select
-              id="section"
-              name="section"
-              value={formData.section}
-              onChange={handleInputChange}
-            >
-              <option value="">-- اختر القسم --</option>
-              <option value="Hören">Hören</option>
-              <option value="Lesen">Lesen</option>
-              <option value="Schreiben">Schreiben</option>
-              <option value="Sprechen">Sprechen</option>
-            </select>
-          </div>
-
-          {/* Level */}
-          <div className="form-group">
-            <label htmlFor="level">المستوى</label>
-            <select
-              id="level"
-              name="level"
-              value={formData.level}
-              onChange={handleInputChange}
-            >
-              <option value="A1">A1</option>
-              <option value="A2">A2</option>
-              <option value="B1">B1</option>
-              <option value="B2">B2</option>
-              <option value="C1">C1</option>
-            </select>
-          </div>
-
-          {/* Tags */}
-          <div className="form-group">
-            <label>Tags</label>
-            <div className="tags-input">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-                placeholder="أدخل tag واضغط Enter"
-              />
-              <button type="button" onClick={handleAddTag} className="add-btn">
-                إضافة
-              </button>
-            </div>
-            <div className="tags-list">
-              {formData.tags.map((tag, index) => (
-                <span key={index} className="tag">
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    className="tag-remove"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Audio Upload */}
-          <div className="form-group">
-            <label>ملف صوتي (اختياري)</label>
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={handleAudioUpload}
-              disabled={uploadingAudio}
-            />
-            {audioPreview && (
-              <div className="audio-preview">
-                <audio controls src={audioPreview} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAudioFile(null);
-                    setAudioPreview(null);
-                  }}
-                  className="remove-btn"
+          {/* Grammar Metadata */}
+          {formData.usageCategory === 'grammar' && (
+            <div className="form-group" style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold' }}>
+                إعدادات سؤال القواعد
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="level">المستوى / Level *</label>
+                <select
+                  id="level"
+                  name="level"
+                  value={formData.level}
+                  onChange={handleInputChange}
+                  required
                 >
-                  إزالة الملف
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C1">C1</option>
+                  <option value="C2">C2</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Provider Metadata */}
+          {formData.usageCategory === 'provider' && (
+            <div className="form-group" style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold' }}>
+                🔹 Provider metadata
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="provider">المعهد / Provider *</label>
+                <select
+                  id="provider"
+                  name="provider"
+                  value={formData.provider}
+                  onChange={handleInputChange}
+                  required
+                >
+                  {PROVIDERS.filter(p => ['goethe', 'telc', 'osd', 'ecl', 'dtb', 'dtz'].includes(p.value)).map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="level">المستوى / Level *</label>
+                <select
+                  id="level"
+                  name="level"
+                  value={formData.level}
+                  onChange={handleInputChange}
+                  required
+                >
+                  {getLevelsForProvider(formData.provider).map(lvl => (
+                    <option key={lvl} value={lvl}>{lvl}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="section">القسم / Section</label>
+                <select
+                  id="section"
+                  name="section"
+                  value={formData.section}
+                  onChange={handleInputChange}
+                >
+                  <option value="">-- اختر القسم --</option>
+                  <option value="Hören">Hören</option>
+                  <option value="Lesen">Lesen</option>
+                  <option value="Schreiben">Schreiben</option>
+                  <option value="Sprechen">Sprechen</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Leben Metadata */}
+          {(formData.usageCategory === 'common' || formData.usageCategory === 'state_specific') && (
+            <div className="form-group" style={{ backgroundColor: '#fef3c7', padding: '20px', borderRadius: '8px', border: '2px solid #fbbf24' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold', color: '#92400e' }}>
+                إعدادات سؤال Leben in Deutschland
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="level">المستوى / Level *</label>
+                <select
+                  id="level"
+                  name="level"
+                  value={formData.level}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="A1">A1</option>
+                  <option value="A2">A2</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C1">C1</option>
+                  <option value="C2">C2</option>
+                </select>
+              </div>
+              
+              {formData.usageCategory === 'state_specific' && (
+                <div className="form-group">
+                  <label htmlFor="selectedState">الولاية / State *</label>
+                  <select
+                    id="selectedState"
+                    name="selectedState"
+                    value={formData.selectedState}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="">-- اختر الولاية --</option>
+                    {germanStates.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* رفع الصور لأسئلة Leben in Deutschland (Common و State Specific) */}
+              <div className="form-group" style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                <label htmlFor="images" style={{ display: 'block', marginBottom: '12px', fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                  📷 الصور / Images {formData.usageCategory === 'state_specific' ? '(لأسئلة الولاية)' : '(للأسئلة العامة)'}
+                </label>
+                
+                <div style={{ marginBottom: '12px' }}>
+                  <input
+                    type="file"
+                    id="images"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    disabled={uploadingImages}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      cursor: uploadingImages ? 'not-allowed' : 'pointer',
+                      backgroundColor: uploadingImages ? '#f3f4f6' : '#fff'
+                    }}
+                  />
+                </div>
+                
+                {uploadingImages && (
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: '#fef3c7', 
+                    borderRadius: '6px', 
+                    color: '#92400e', 
+                    fontSize: '14px',
+                    marginBottom: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>⏳</span>
+                    <span>جاري رفع الصور...</span>
+                  </div>
+                )}
+                
+                {formData.images && formData.images.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '600', 
+                      marginBottom: '12px',
+                      color: '#374151'
+                    }}>
+                      ✅ الصور المرفوعة ({formData.images.length}):
+                    </div>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                      gap: '20px' 
+                    }}>
+                      {formData.images.map((img, idx) => (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            border: '2px solid #e5e7eb', 
+                            borderRadius: '8px', 
+                            overflow: 'hidden',
+                            backgroundColor: '#fff',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}
+                        >
+                          {/* معاينة الصورة */}
+                          <div style={{ position: 'relative', width: '100%', height: '200px', backgroundColor: '#f9fafb' }}>
+                            {(() => {
+                              const imageUrl = getImageUrl(img);
+                              console.log(`🖼️ Rendering image ${idx + 1}:`, {
+                                image: img,
+                                imageUrl: imageUrl,
+                                hasUrl: !!imageUrl,
+                                hasKey: !!img.key,
+                                hasOriginalUrl: !!img.url
+                              });
+                              
+                              if (!imageUrl) {
+                                console.warn(`⚠️ No URL for image ${idx + 1}:`, img);
+                                return (
+                                  <div style={{ 
+                                    width: '100%', 
+                                    height: '100%', 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                    backgroundColor: '#f3f4f6'
+                                  }}>
+                                    <span style={{ fontSize: '24px' }}>⚠️</span>
+                                    <span style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '0 8px' }}>
+                                      لا يوجد URL للصورة
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: '#9ca3af', textAlign: 'center', padding: '0 8px' }}>
+                                      Key: {img.key || 'N/A'}, URL: {img.url || 'N/A'}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <img
+                                  key={`img-${idx}-${imageUrl}`}
+                                  src={imageUrl}
+                                  alt={`صورة ${idx + 1}`}
+                                  style={{ 
+                                    width: '100%', 
+                                    height: '100%', 
+                                    objectFit: 'cover',
+                                    display: 'block'
+                                  }}
+                                  onError={(e) => {
+                                    console.error('❌ Image failed to load:', {
+                                      image: img,
+                                      imageUrl: imageUrl,
+                                      key: img.key,
+                                      originalUrl: img.url,
+                                      error: e,
+                                      targetSrc: e.target.src
+                                    });
+                                    e.target.style.display = 'none';
+                                    const errorDiv = e.target.nextElementSibling;
+                                    if (errorDiv) errorDiv.style.display = 'flex';
+                                  }}
+                                  onLoad={() => {
+                                    console.log('✅ Image loaded successfully:', {
+                                      image: img,
+                                      imageUrl: imageUrl
+                                    });
+                                  }}
+                                />
+                              );
+                            })()}
+                            <div 
+                              style={{ 
+                                display: 'none', 
+                                width: '100%', 
+                                height: '100%', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                backgroundColor: '#f3f4f6',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}
+                            >
+                              <span style={{ fontSize: '24px' }}>⚠️</span>
+                              <span style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '0 8px' }}>
+                                خطأ في تحميل الصورة
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                backgroundColor: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '28px',
+                                height: '28px',
+                                cursor: 'pointer',
+                                fontSize: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                transition: 'all 0.2s',
+                                zIndex: 10
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#dc2626';
+                                e.target.style.transform = 'scale(1.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#ef4444';
+                                e.target.style.transform = 'scale(1)';
+                              }}
+                              title="حذف الصورة"
+                            >
+                              ×
+                            </button>
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '0',
+                              left: '0',
+                              right: '0',
+                              backgroundColor: 'rgba(0,0,0,0.6)',
+                              color: 'white',
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              textAlign: 'center',
+                              fontWeight: '500'
+                            }}>
+                              Bild {idx + 1}
+                            </div>
+                          </div>
+                          
+                          {/* حقل الوصف */}
+                          <div style={{ padding: '12px', backgroundColor: '#fafafa' }}>
+                            <label 
+                              htmlFor={`image-description-${idx}`}
+                              style={{ 
+                                display: 'block', 
+                                marginBottom: '6px', 
+                                fontSize: '12px', 
+                                fontWeight: '600',
+                                color: '#374151'
+                              }}
+                            >
+                              📝 وصف الصورة (اختياري):
+                            </label>
+                            <textarea
+                              id={`image-description-${idx}`}
+                              value={img.description || ''}
+                              onChange={(e) => handleUpdateImageDescription(idx, e.target.value)}
+                              placeholder={`مثال: Bild ${idx + 1}: Das offizielle Wappen von Baden-Württemberg zeigt drei schwarze Löwen auf goldenem Grund.`}
+                              rows={3}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                fontFamily: 'inherit',
+                                resize: 'vertical',
+                                minHeight: '60px'
+                              }}
+                            />
+                            {img.description && (
+                              <div style={{ 
+                                marginTop: '6px', 
+                                fontSize: '11px', 
+                                color: '#6b7280',
+                                fontStyle: 'italic'
+                              }}>
+                                💡 سيظهر هذا الوصف تحت الصورة عند عرض السؤال
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <small style={{ 
+                  display: 'block', 
+                  marginTop: '12px', 
+                  color: '#6b7280', 
+                  fontSize: '13px',
+                  lineHeight: '1.5'
+                }}>
+                  💡 يمكنك رفع عدة صور {formData.usageCategory === 'state_specific' ? 'لأسئلة الولاية (مثل الأعلام، الشعارات، أو أي صور أخرى متعلقة بالولاية)' : 'للأسئلة العامة (300-Fragen)'}
+                </small>
+              </div>
+            </div>
+          )}
+
+          {/* Tags - حسب نوع الاستخدام */}
+          {formData.usageCategory === 'grammar' && (
+            <div className="form-group">
+              <label>Tags</label>
+              <div className="tags-input">
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  placeholder="أدخل tag واضغط Enter"
+                />
+                <button type="button" onClick={handleAddTag} className="add-btn">
+                  إضافة
                 </button>
               </div>
-            )}
-            {uploadingAudio && <p>جاري رفع الملف...</p>}
-          </div>
+              <div className="tags-list">
+                {formData.tags.map((tag, index) => (
+                  <span key={index} className="tag">
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="tag-remove"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {formData.usageCategory === 'provider' && (
+            <div className="form-group">
+              <label>Tags</label>
+              <div className="tags-input">
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  placeholder="أدخل tag واضغط Enter"
+                />
+                <button type="button" onClick={handleAddTag} className="add-btn">
+                  إضافة
+                </button>
+              </div>
+              <div className="tags-list">
+                {formData.tags.map((tag, index) => (
+                  <span key={index} className="tag">
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="tag-remove"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tags Display فقط لأسئلة Leben in Deutschland (للعرض فقط) */}
+          {(formData.usageCategory === 'common' || formData.usageCategory === 'state_specific') && (
+            <div className="form-group" style={{ backgroundColor: '#f0f9ff', padding: '12px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600', color: '#0369a1' }}>
+                📋 Tags (يتم تحديدها تلقائياً)
+              </label>
+              <div className="tags-list">
+                {formData.tags.length > 0 ? (
+                  formData.tags.map((tag, index) => (
+                    <span key={index} className="tag" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                      {tag}
+                    </span>
+                  ))
+                ) : (
+                  <span style={{ color: '#64748b', fontSize: '13px' }}>
+                    {formData.usageCategory === 'common' ? '300-Fragen' : formData.selectedState || 'سيتم إضافة tag تلقائياً عند الحفظ'}
+                  </span>
+                )}
+              </div>
+              <small style={{ display: 'block', marginTop: '8px', color: '#64748b', fontSize: '12px' }}>
+                💡 Tags يتم تحديدها تلقائياً: {formData.usageCategory === 'common' ? '["300-Fragen"]' : `["${formData.selectedState || 'اسم الولاية'}"]`}
+              </small>
+            </div>
+          )}
+
+          {/* Audio Upload - فقط لأسئلة Provider */}
+          {formData.usageCategory === 'provider' && (
+            <div className="form-group">
+              <label>ملف صوتي (اختياري)</label>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleAudioUpload}
+                disabled={uploadingAudio}
+              />
+              {audioPreview && (
+                <div className="audio-preview">
+                  <audio controls src={audioPreview} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudioFile(null);
+                      setAudioPreview(null);
+                    }}
+                    className="remove-btn"
+                  >
+                    إزالة الملف
+                  </button>
+                </div>
+              )}
+              {uploadingAudio && <p>جاري رفع الملف...</p>}
+            </div>
+          )}
 
           {/* Status */}
           <div className="form-group">

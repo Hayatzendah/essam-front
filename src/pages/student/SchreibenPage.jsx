@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { getSchreibenTasks, getSchreibenTask } from '../../services/api';
+import { getSchreibenTasks, getSchreibenTask, checkSchreibenField } from '../../services/api';
 
 // Provider labels mapping
 const providerLabels = {
@@ -12,26 +12,115 @@ const providerLabels = {
   dtz: 'DTZ',
 };
 
-// Task Detail View - Modern Design
-const TaskDetailView = ({ task, onBack, attemptId }) => {
+// Inline result badge shown under a field after check/grading
+const FieldResultBadge = ({ result }) => {
+  if (!result) return null;
+  // For submit results: skip non-student fields
+  if (result.isStudentField === false) return null;
+  // For submit results: skip unanswered
+  if (result.wasAnswered === false) return null;
+
+  if (result.isCorrect) {
+    return (
+      <div className="mt-2 flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <span className="text-emerald-600 font-bold text-sm">✓</span>
+        <span className="text-emerald-700 text-sm font-medium">صحيح</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-rose-600 font-bold text-sm">✗</span>
+        <span className="text-rose-700 text-sm font-medium">خطأ</span>
+      </div>
+      <div className="text-sm">
+        <span className="text-slate-500">الإجابة الصحيحة: </span>
+        <span className="text-emerald-700 font-semibold">
+          {Array.isArray(result.correctAnswer)
+            ? result.correctAnswer.join(', ')
+            : result.correctAnswer}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// Task Detail View
+const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({});
-  const [submitting, setSubmitting] = useState(false);
+
+  // Per-field check results
+  const [fieldChecks, setFieldChecks] = useState({}); // fieldId -> check result
+  const [checkingField, setCheckingField] = useState(null); // fieldId currently being checked
 
   const handleFieldChange = (blockIndex, fieldIndex, value) => {
     setFormData(prev => ({
       ...prev,
       [`${blockIndex}-${fieldIndex}`]: value
     }));
+    // Clear previous check result for this field when answer changes
+    const field = getFieldFromBlock(blockIndex, fieldIndex);
+    if (field) {
+      const fieldId = field.id || field._id || field.fieldId || `field_${blockIndex}_${fieldIndex}`;
+      setFieldChecks(prev => {
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+    }
   };
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    // TODO: Implement submission logic
-    console.log('Submitting:', { attemptId, formData });
-    setTimeout(() => {
-      setSubmitting(false);
-      alert('تم إرسال الإجابة بنجاح!');
-    }, 1000);
+  // Helper to get field object from block/field indexes
+  const getFieldFromBlock = (blockIndex, fieldIndex) => {
+    const blocks = task.contentBlocks || [];
+    const block = blocks[blockIndex];
+    if (!block || block.type !== 'form') return null;
+    const data = block.data || block;
+    return (data.fields || [])[fieldIndex] || null;
+  };
+
+  // Check a single field using taskId (no attempt needed)
+  const handleCheckField = async (field, blockIndex, fieldIndex) => {
+    if (!taskId) return;
+
+    const fieldId = field.id || field._id || field.fieldId || `field_${blockIndex}_${fieldIndex}`;
+    const fieldKey = `${blockIndex}-${fieldIndex}`;
+    const answer = formData[fieldKey] || '';
+
+    // Don't check empty fields
+    const isEmpty = !answer || (typeof answer === 'string' && !answer.trim()) || (Array.isArray(answer) && answer.length === 0);
+    if (isEmpty) return;
+
+    try {
+      setCheckingField(fieldId);
+      const result = await checkSchreibenField(taskId, fieldId, answer);
+      setFieldChecks(prev => ({ ...prev, [fieldId]: result }));
+    } catch (err) {
+      console.error('Error checking field:', err);
+    } finally {
+      setCheckingField(null);
+    }
+  };
+
+  // Navigate to regular questions in ExamPage
+  const handleStartExercise = () => {
+    if (examAttemptId) {
+      navigate(`/student/exam/${examAttemptId}?showQuestions=true`);
+    }
+  };
+
+  // Get display result for a field
+  const getFieldResult = (field, blockIndex, fieldIndex) => {
+    const fieldId = field.id || field._id || field.fieldId || `field_${blockIndex}_${fieldIndex}`;
+    return fieldChecks[fieldId] || null;
+  };
+
+  // Check if a field is a student-answerable field (not prefilled, not non-student)
+  const isStudentField = (field) => {
+    return field.type !== 'prefilled' && field.isStudentField !== false;
   };
 
   const renderBlock = (block, blockIndex) => {
@@ -42,9 +131,9 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
         return (
           <div
             key={block.id || blockIndex}
-            className="mb-4 p-5 bg-slate-50 rounded-xl border-r-4 border-blue-500"
+            className="mb-4 p-5 bg-slate-50 rounded-xl border-l-4 border-blue-500"
           >
-            <p className="text-base leading-relaxed text-slate-700 whitespace-pre-wrap text-left" dir="ltr">
+            <p className="text-base leading-relaxed text-slate-700 whitespace-pre-wrap text-left">
               {data.content}
             </p>
           </div>
@@ -81,16 +170,50 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
               </h4>
             )}
             <div className="space-y-4">
-              {(data.fields || []).map((field, fieldIndex) => (
-                <div key={fieldIndex}>
-                  {field.label && (
-                    <label className="block mb-2 font-medium text-slate-700 text-sm">
-                      {field.label}
-                    </label>
-                  )}
-                  {renderField(field, blockIndex, fieldIndex)}
-                </div>
-              ))}
+              {(data.fields || []).map((field, fieldIndex) => {
+                const result = getFieldResult(field, blockIndex, fieldIndex);
+                const fieldId = field.id || field._id || field.fieldId || `field_${blockIndex}_${fieldIndex}`;
+                const fieldKey = `${blockIndex}-${fieldIndex}`;
+                const answer = formData[fieldKey] || '';
+                const hasAnswer = answer && (typeof answer === 'string' ? answer.trim() : (Array.isArray(answer) && answer.length > 0));
+                const isChecking = checkingField === fieldId;
+
+                return (
+                  <div key={fieldIndex}>
+                    {field.label && (
+                      <label className="block mb-2 font-medium text-slate-700 text-sm">
+                        {field.label}
+                      </label>
+                    )}
+
+                    {/* Field input + check button row */}
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        {renderField(field, blockIndex, fieldIndex)}
+                      </div>
+                      {/* Check button - only for student fields */}
+                      {isStudentField(field) && taskId && (
+                        <button
+                          type="button"
+                          onClick={() => handleCheckField(field, blockIndex, fieldIndex)}
+                          disabled={isChecking || !hasAnswer}
+                          className={`flex-shrink-0 mt-0.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                            isChecking
+                              ? 'bg-slate-100 text-slate-400 cursor-wait'
+                              : !hasAnswer
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 cursor-pointer'
+                          }`}
+                        >
+                          {isChecking ? '...' : 'تحقق'}
+                        </button>
+                      )}
+                    </div>
+
+                    <FieldResultBadge result={result} />
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -111,7 +234,7 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
             value={value}
             onChange={(e) => handleFieldChange(blockIndex, fieldIndex, e.target.value)}
             placeholder={field.placeholder || 'اكتب هنا...'}
-            className="w-full min-h-[150px] p-4 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:border-blue-500 focus:outline-none transition-colors"
+            className="w-full min-h-[150px] p-4 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:outline-none focus:border-blue-500 transition-colors"
             dir="ltr"
           />
         );
@@ -128,7 +251,7 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
           <select
             value={value}
             onChange={(e) => handleFieldChange(blockIndex, fieldIndex, e.target.value)}
-            className="w-full p-3 border-2 border-slate-200 rounded-lg text-base bg-white focus:border-blue-500 focus:outline-none"
+            className="w-full p-3 border-2 border-slate-200 bg-white rounded-lg text-base focus:outline-none focus:border-blue-500"
           >
             <option value="">اختر...</option>
             {(field.options || []).map((opt, i) => (
@@ -146,8 +269,10 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
               return (
                 <label
                   key={i}
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                    isChecked ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                  className={`flex items-center gap-3 p-3 border-2 rounded-lg transition-all cursor-pointer ${
+                    isChecked
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
                   }`}
                 >
                   <input
@@ -177,16 +302,10 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50" dir="ltr">
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={onBack}
-            className="text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1"
-          >
-            ← رجوع
-          </button>
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
               {task.level}
@@ -195,16 +314,22 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
               {providerLabels[task.provider] || task.provider}
             </span>
           </div>
+          <button
+            onClick={onBack}
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1"
+          >
+            Back →
+          </button>
         </div>
 
         {/* Task Title */}
-        <div className="mb-6">
+        <div className="mb-6 text-left">
           <h1 className="text-xl font-bold text-slate-900 mb-2">
             ✍️ {task.title}
           </h1>
           {task.instructions && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap text-left">
                 {task.instructions}
               </p>
             </div>
@@ -212,7 +337,7 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
         </div>
 
         {/* Content Blocks */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 text-left">
           {(task.contentBlocks || []).map((block, index) => renderBlock(block, index))}
         </div>
 
@@ -222,15 +347,16 @@ const TaskDetailView = ({ task, onBack, attemptId }) => {
             onClick={onBack}
             className="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium"
           >
-            ← العودة
+            ← Back
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'جاري الإرسال...' : 'إرسال الإجابة'}
-          </button>
+          {hasQuestions && examAttemptId && (
+            <button
+              onClick={handleStartExercise}
+              className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-semibold"
+            >
+              ابدأ التمرين →
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -335,6 +461,8 @@ function SchreibenPage() {
   const { taskId } = useParams();
   const [searchParams] = useSearchParams();
   const attemptId = searchParams.get('attemptId');
+  const hasQuestions = searchParams.get('hasQuestions') === 'true';
+  const examAttemptId = searchParams.get('examAttemptId');
 
   const [tasks, setTasks] = useState([]);
   const [currentTask, setCurrentTask] = useState(null);
@@ -344,14 +472,12 @@ function SchreibenPage() {
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('');
 
-  // Load tasks list
   useEffect(() => {
     if (!taskId) {
       loadTasks();
     }
   }, [taskId, selectedLevel, selectedProvider]);
 
-  // Load single task if taskId provided
   useEffect(() => {
     if (taskId) {
       loadTask(taskId);
@@ -398,7 +524,6 @@ function SchreibenPage() {
 
   const handleBack = () => {
     if (attemptId) {
-      // If came from an exam, go back to exams
       navigate('/welcome');
     } else {
       setCurrentTask(null);
@@ -406,7 +531,6 @@ function SchreibenPage() {
     }
   };
 
-  // Loading State
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -418,7 +542,6 @@ function SchreibenPage() {
     );
   }
 
-  // Error State
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -437,12 +560,18 @@ function SchreibenPage() {
     );
   }
 
-  // Task Detail View
   if (taskId && currentTask) {
-    return <TaskDetailView task={currentTask} onBack={handleBack} attemptId={attemptId} />;
+    return (
+      <TaskDetailView
+        task={currentTask}
+        taskId={taskId}
+        onBack={handleBack}
+        hasQuestions={hasQuestions}
+        examAttemptId={examAttemptId}
+      />
+    );
   }
 
-  // Tasks List View
   return (
     <TasksListView
       tasks={tasks}

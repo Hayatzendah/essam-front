@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import registerImage from '../images/47163.jpg';
 
 function Register() {
   const [email, setEmail] = useState('');
@@ -54,8 +55,10 @@ function Register() {
         await authAPI.login(email, password);
 
         // إذا في redirect parameter، روح عليه
-        // وإلا روح على /welcome
-        const redirectTo = searchParams.get('redirect') || '/welcome';
+        // وإلا حسب دور المستخدم: طالب -> /، أدمن/معلم -> /welcome
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const defaultRedirect = (user.role === 'student') ? '/' : '/welcome';
+        const redirectTo = searchParams.get('redirect') || defaultRedirect;
         navigate(redirectTo);
       } catch (loginError) {
         console.error('Auto-login failed after registration:', loginError);
@@ -135,7 +138,7 @@ function Register() {
       <div className="w-full px-6 py-4">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-slate-600 hover:text-rose-600 transition-colors group"
+          className="inline-flex items-center gap-2 text-slate-600 hover:text-red-600 transition-colors group"
         >
           <svg
             className="w-5 h-5 transform group-hover:-translate-x-1 transition-transform"
@@ -153,7 +156,7 @@ function Register() {
         {/* العمود اليسار: صورة + نص تعريفي */}
         <div className="hidden lg:flex flex-1 items-center justify-center bg-white">
         <div className="max-w-lg px-8 pr-8">
-          <div className="mb-6 text-sm font-semibold text-rose-600">
+          <div className="mb-6 text-sm font-semibold text-red-600">
             Deutsch Learning App
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-4 leading-snug">
@@ -165,7 +168,7 @@ function Register() {
           </p>
           <div className="relative rounded-2xl overflow-hidden">
             <img
-              src="/src/images/47163.jpg"
+              src={registerImage}
               alt="تعلم الألمانية"
               className="w-full h-auto object-cover"
             />
@@ -177,7 +180,7 @@ function Register() {
       <div className="w-full lg:max-w-md flex items-center justify-center px-4 py-8 lg:mr-8">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-md border border-slate-100 px-6 py-7">
           <div className="flex flex-col items-center mb-6">
-            <div className="h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center mb-3">
+            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
               <span className="text-2xl">📝</span>
             </div>
             <h2 className="text-lg font-semibold text-slate-900">
@@ -198,7 +201,7 @@ function Register() {
                 type="email"
                 required
                 dir="ltr"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-50"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -213,7 +216,7 @@ function Register() {
               <input
                 type="password"
                 required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-50"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -231,7 +234,7 @@ function Register() {
               <input
                 type="password"
                 required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-slate-50"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-50"
                 placeholder="أعد كتابة كلمة المرور"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -245,7 +248,7 @@ function Register() {
             )}
 
             {success && (
-              <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
                 {success}
               </p>
             )}
@@ -253,7 +256,7 @@ function Register() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-rose-500 text-white text-sm font-semibold py-2.5 mt-2 hover:bg-rose-600 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+              className="w-full rounded-md bg-red-600 text-white text-sm font-semibold py-2.5 mt-2 hover:bg-red-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? "جارٍ إنشاء الحساب..." : "إنشاء حساب كطالب"}
             </button>
@@ -262,7 +265,7 @@ function Register() {
               لديك حساب بالفعل؟{" "}
               <Link
                 to={searchParams.get('redirect') ? `/login?redirect=${searchParams.get('redirect')}` : '/login'}
-                className="text-rose-600 font-medium hover:text-rose-700"
+                className="text-red-600 font-medium hover:text-red-700"
               >
                 سجّل الدخول
               </Link>

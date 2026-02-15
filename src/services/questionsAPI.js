@@ -64,5 +64,22 @@ export const questionsAPI = {
     const response = await api.post('/questions/with-exam', questionData);
     return response.data;
   },
+
+  // إنشاء ListeningClip
+  createListeningClip: async (file, provider, level, teil) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // provider يجب أن يكون lowercase حسب enum
+    formData.append('provider', provider.toLowerCase());
+    formData.append('level', level);
+    formData.append('teil', teil.toString());
+    
+    const response = await api.post('/listening-clips', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };
 

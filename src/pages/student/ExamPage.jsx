@@ -53,6 +53,41 @@ const safeOptionsArray = (item) => {
   return [];
 };
 
+// ✅ ألوان بطاقات القراءة (Lesen cards) - mapped by key
+const CARD_COLORS_MAP = {
+  teal:    { bg: 'bg-teal-50',    border: 'border-teal-200',    title: 'text-teal-900',    content: 'text-teal-800'    },
+  sky:     { bg: 'bg-sky-50',     border: 'border-sky-200',     title: 'text-sky-900',     content: 'text-sky-800'     },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', title: 'text-emerald-900', content: 'text-emerald-800' },
+  violet:  { bg: 'bg-violet-50',  border: 'border-violet-200',  title: 'text-violet-900',  content: 'text-violet-800'  },
+  rose:    { bg: 'bg-rose-50',    border: 'border-rose-200',    title: 'text-rose-900',    content: 'text-rose-800'    },
+  amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   title: 'text-amber-900',   content: 'text-amber-800'   },
+  orange:  { bg: 'bg-orange-50',  border: 'border-orange-200',  title: 'text-orange-900',  content: 'text-orange-800'  },
+  indigo:  { bg: 'bg-indigo-50',  border: 'border-indigo-200',  title: 'text-indigo-900',  content: 'text-indigo-800'  },
+};
+const CARD_COLORS_LIST = Object.values(CARD_COLORS_MAP);
+
+function ReadingCardsGrid({ cards }) {
+  if (!cards || cards.length === 0) return null;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3 sm:mb-4" dir="ltr">
+      {cards.map((card, idx) => {
+        const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
+        return (
+          <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left`}>
+            <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5`}>
+              {card.title}
+            </h5>
+            <p className={`text-xs sm:text-sm ${color.content} leading-relaxed`}
+               style={{ whiteSpace: 'pre-line' }}>
+              {card.content}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ✅ Component منفصل لـ Reorder Task
 function ReorderTask({ parts, prompt, itemIndex, answers, setAnswers, saveAnswer, isSubmitted, questionId }) {
   // ✅ استخدام state محلي للترتيب (مع shuffle عند التحميل)
@@ -580,6 +615,7 @@ function ExamPage() {
             map.set(q.questionId, {
               audioUrl: exercise.audioUrl,
               readingPassage: exercise.readingPassage,
+              readingCards: exercise.readingCards,
               title: exercise.title,
               exerciseIndex: exercise.exerciseIndex ?? exercise.exerciseNumber,
               exerciseId: `ex-${exercise.exerciseIndex ?? exercise.exerciseNumber}-${exercise.title || ''}`,
@@ -1374,7 +1410,7 @@ function ExamPage() {
     return { answered, total };
   };
 
-  const SKILL_ICONS = { hoeren: '🎧', lesen: '📖', schreiben: '✍️', sprechen: '🗣️' };
+  const SKILL_ICONS = { hoeren: '🎧', lesen: '📖', schreiben: '✍️', sprechen: '🗣️', sprachbausteine: '🧩' };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1662,6 +1698,9 @@ function ExamPage() {
                     </div>
                   </div>
                 )}
+                {selectedExercise.readingCards && selectedExercise.readingCards.length > 0 && (
+                  <ReadingCardsGrid cards={selectedExercise.readingCards} />
+                )}
               </div>
             )}
 
@@ -1690,7 +1729,7 @@ function ExamPage() {
             const isAllQuestionsMode = !selectedSectionKey && !selectedExercise;
             let showExerciseHeader = false;
             if (isAllQuestionsMode && exerciseInfo?.exerciseId && !shownExerciseIds.has(exerciseInfo.exerciseId)) {
-              if (exerciseInfo.audioUrl || exerciseInfo.readingPassage) {
+              if (exerciseInfo.audioUrl || exerciseInfo.readingPassage || (exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0)) {
                 showExerciseHeader = true;
                 shownExerciseIds.add(exerciseInfo.exerciseId);
               }
@@ -1750,6 +1789,9 @@ function ExamPage() {
                           {exerciseInfo.readingPassage}
                         </div>
                       </div>
+                    )}
+                    {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
+                      <ReadingCardsGrid cards={exerciseInfo.readingCards} />
                     )}
                   </div>
                 )}

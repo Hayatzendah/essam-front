@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import './ExamsList.css';
@@ -16,12 +16,10 @@ function ExamsList() {
     status: '',
   });
 
-  useEffect(() => {
-    loadExams();
-  }, [filters.provider, filters.level, filters.status]);
-
-  const loadExams = async () => {
+  // Load exams function - memoized with useCallback
+  const loadExams = useCallback(async () => {
     try {
+      console.log('📥 ExamsList: Starting to load exams...');
       setLoading(true);
       setError('');
       
@@ -31,22 +29,50 @@ function ExamsList() {
       if (filters.level) params.level = filters.level;
       if (filters.status) params.status = filters.status;
       
+      console.log('📤 ExamsList: Sending request with params:', params);
       const response = await examsAPI.getAll(params);
+      console.log('✅ ExamsList: Received response:', response);
       
       // Response format: { items: [...], count: ... }
       const examsData = response.items || response || [];
+      console.log('📊 ExamsList: Setting exams data, count:', examsData.length);
       setExams(examsData);
     } catch (err) {
       console.error('Error loading exams:', err);
-      setError(
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'حدث خطأ أثناء تحميل الامتحانات'
-      );
+      console.error('Error details:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message,
+      });
+      
+      // Don't redirect on error - just show error message
+      // The page should remain visible
+      let errorMessage = 'حدث خطأ أثناء تحميل الامتحانات';
+      
+      if (err.response?.status === 401) {
+        errorMessage = 'انتهت صلاحية جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.';
+      } else if (err.response?.status === 403) {
+        errorMessage = 'ليس لديك صلاحية لعرض الامتحانات.';
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : JSON.stringify(err.response.data.error);
+      }
+      
+      setError(errorMessage);
+      setExams([]); // Set empty array on error to show empty state
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.provider, filters.level, filters.status]);
+
+  // Always fetch exams when component mounts or filters change
+  useEffect(() => {
+    console.log('🔄 ExamsList: useEffect triggered, loading exams...');
+    loadExams();
+  }, [loadExams]);
 
   const handleArchive = async (examId) => {
     if (!window.confirm('هل أنت متأكد من أرشفة هذا الامتحان؟ سيتم إخفاؤه من قائمة الامتحانات المتاحة للطلاب.')) {
@@ -58,8 +84,8 @@ function ExamsList() {
       setError('');
       setSuccess('');
       
-      // تغيير حالة الامتحان إلى archived
-      await examsAPI.update(examId, { status: 'archived' });
+      // أرشفة الامتحان باستخدام endpoint مخصص
+      await examsAPI.archive(examId);
       setSuccess('تم أرشفة الامتحان بنجاح');
       setError(''); // إزالة أي أخطاء سابقة
       
@@ -180,8 +206,17 @@ function ExamsList() {
   return (
     <div className="exams-list-page">
       <div className="page-header">
-        <button onClick={() => navigate('/admin')} className="back-btn">
-          ← العودة للوحة التحكم
+        <button onClick={() => navigate('/welcome')} className="back-btn" title="العودة للوحة التحكم">
+          <svg fill="none" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={3}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              stroke="#000000"
+              fill="none"
+            />
+          </svg>
         </button>
         <h1>جميع الامتحانات</h1>
       </div>
@@ -286,59 +321,68 @@ function ExamsList() {
             </div>
 
             <div className="exams-grid">
-              {exams.map((exam) => (
+              {exams
+                ?.filter(Boolean) // Remove any null/undefined exams
+                .map((exam) => (
                 <div key={exam.id || exam._id} className="exam-card">
                   <div className="exam-header">
                     <div className="exam-title-section">
-                      <h3>{exam.title}</h3>
-                      <span className={`exam-status status-${exam.status}`}>
-                        {getStatusLabel(exam.status)}
+                      <h3>{exam?.title || 'بدون عنوان'}</h3>
+                      <span className={`exam-status status-${exam?.status || 'draft'}`}>
+                        {getStatusLabel(exam?.status || 'draft')}
                       </span>
                     </div>
                     <div className="exam-actions">
                       <button
-                        onClick={() => navigate(`/admin/exams/${exam.id || exam._id}/edit`)}
+                        onClick={() => navigate(`/admin/exams/${exam?.id || exam?._id}/sections`)}
+                        className="sections-btn"
+                        title="إدارة الأقسام"
+                      >
+                        📋
+                      </button>
+                      <button
+                        onClick={() => navigate(`/admin/exams/${exam?.id || exam?._id}/edit`)}
                         className="edit-btn"
                         title="تعديل"
                       >
                         ✏️
                       </button>
-                      {exam.status !== 'archived' && (
+                      {exam?.status !== 'archived' && (
                         <button
-                          onClick={() => handleArchive(exam.id || exam._id)}
+                          onClick={() => handleArchive(exam?.id || exam?._id)}
                           className="archive-btn"
-                          disabled={deletingId === (exam.id || exam._id)}
+                          disabled={deletingId === (exam?.id || exam?._id)}
                           title="أرشفة (إخفاء من قائمة الطلاب)"
                         >
-                          {deletingId === (exam.id || exam._id) ? '⏳' : '📦'}
+                          {deletingId === (exam?.id || exam?._id) ? '⏳' : '📦'}
                         </button>
                       )}
                       <button
-                        onClick={() => handleDelete(exam.id || exam._id)}
+                        onClick={() => handleDelete(exam?.id || exam?._id)}
                         className="delete-btn"
-                        disabled={deletingId === (exam.id || exam._id)}
+                        disabled={deletingId === (exam?.id || exam?._id)}
                         title="حذف نهائي"
                       >
-                        {deletingId === (exam.id || exam._id) ? '⏳' : '🗑️'}
+                        {deletingId === (exam?.id || exam?._id) ? '⏳' : '🗑️'}
                       </button>
                     </div>
                   </div>
 
                   <div className="exam-body">
                     <div className="exam-details">
-                      {exam.provider && (
+                      {exam?.provider && (
                         <span className="detail-badge">📦 {exam.provider}</span>
                       )}
-                      {exam.level && (
+                      {exam?.level && (
                         <span className="detail-badge">📊 {exam.level}</span>
                       )}
-                      {exam.timeLimitMin > 0 && (
+                      {exam?.timeLimitMin > 0 && (
                         <span className="detail-badge">⏱️ {exam.timeLimitMin} دقيقة</span>
                       )}
-                      {exam.attemptLimit > 0 && (
+                      {exam?.attemptLimit > 0 && (
                         <span className="detail-badge">🔄 {exam.attemptLimit} محاولة</span>
                       )}
-                      {exam.attemptLimit === 0 && (
+                      {(exam?.attemptLimit === 0 || exam?.attemptLimit === undefined) && (
                         <span className="detail-badge">🔄 محاولات غير محدودة</span>
                       )}
                     </div>
@@ -347,17 +391,19 @@ function ExamsList() {
                       <div className="exam-sections">
                         <p className="sections-title">الأقسام:</p>
                         <div className="sections-list">
-                          {exam.sections.map((section, index) => (
-                            <div key={index} className="section-item">
-                              <span className="section-name">{section.name || section.section}</span>
-                              <span className="section-quota">{section.quota} سؤال</span>
-                            </div>
-                          ))}
+                          {exam.sections
+                            .filter(Boolean) // Remove any null/undefined sections
+                            .map((section, index) => (
+                              <div key={index} className="section-item">
+                                <span className="section-name">{section?.name || section?.section || '-'}</span>
+                                <span className="section-quota">{section?.quota ?? 0} سؤال</span>
+                              </div>
+                            ))}
                         </div>
                       </div>
                     )}
 
-                    {exam.randomizeQuestions && (
+                    {exam?.randomizeQuestions && (
                       <div className="exam-feature">
                         <span>🔀 ترتيب عشوائي للأسئلة</span>
                       </div>

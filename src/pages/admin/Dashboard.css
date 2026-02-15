@@ -1,6 +1,6 @@
 .admin-dashboard {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
   padding: 20px;
 }
 
@@ -16,7 +16,7 @@
 }
 
 .dashboard-header h1 {
-  color: #667eea;
+  color: #dc2626;
   margin: 0;
   font-size: 28px;
 }
@@ -33,7 +33,7 @@
 }
 
 .logout-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
   color: white;
   border: none;
   padding: 10px 20px;
@@ -45,7 +45,7 @@
 
 .logout-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 5px 20px rgba(220, 38, 38, 0.4);
 }
 
 .dashboard-content {
@@ -90,6 +90,7 @@
   margin: 0;
   font-size: 14px;
 }
+
 
 
 

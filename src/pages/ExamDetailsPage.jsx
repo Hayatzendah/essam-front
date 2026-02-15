@@ -68,9 +68,21 @@ export default function ExamDetailsPage() {
 
     try {
       setStarting(true);
+      
+      // ✅ التحقق من وجود قسم Schreiben في الامتحان
+      const hasSchreibenSection = exam?.sections?.some(
+        section => section.skill === 'schreiben' || section.skill === 'Schreiben'
+      );
+      
+      // ✅ Log للمساعدة في debugging
+      if (hasSchreibenSection) {
+        console.log('📝 Exam contains Schreiben section - ensuring fresh attempt creation');
+        console.log('📝 Exam attemptLimit:', exam?.attemptLimit);
+      }
+      
       const data = await createAttempt(examId, "exam");
-      // الانتقال لصفحة حل الامتحان
-      navigate(`/student/exam/${data.attemptId}`);
+      // ✅ الانتقال لصفحة حل الامتحان مع إضافة examId في query string
+      navigate(`/student/exam/${data.attemptId}?examId=${examId}`);
     } catch (err) {
       console.error("Error starting exam:", err);
       console.error("Error response:", err.response?.data);
@@ -88,6 +100,29 @@ export default function ExamDetailsPage() {
         );
         if (shouldFix) {
           await handleFixExam();
+        }
+      } else if (err.response?.status === 400 || err.response?.status === 403) {
+        // ✅ معالجة خاصة لأخطاء المحاولات (خاصة لقسم Schreiben)
+        const errorCode = err.response?.data?.code;
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || "حدث خطأ أثناء بدء الامتحان";
+        
+        // ✅ إذا كان الخطأ متعلق بمحاولة مقدمه مسبقاً
+        if (errorMessage.toLowerCase().includes('already submitted') || 
+            errorMessage.toLowerCase().includes('submitted') ||
+            errorCode === 'ATTEMPT_ALREADY_SUBMITTED') {
+          console.error('⚠️ Attempt already submitted error - this may indicate a caching issue');
+          console.error('⚠️ Please check: getOrCreateAttempt logic, cached attemptId, or user token');
+          
+          alert(
+            '⚠️ يبدو أن المحاولة مقدمه مسبقاً.\n\n' +
+            'إذا كنت طالب جديد أو لم تقدم هذا الامتحان من قبل، يرجى:\n' +
+            '1. تسجيل الخروج والدخول مرة أخرى\n' +
+            '2. مسح الـ cache والـ cookies\n' +
+            '3. المحاولة مرة أخرى\n\n' +
+            'إذا استمرت المشكلة، يرجى التواصل مع الدعم الفني.'
+          );
+        } else {
+          alert(errorMessage);
         }
       } else {
         const errorMsg = err.response?.data?.message || "حدث خطأ أثناء بدء الامتحان. حاول مرة أخرى.";
@@ -113,10 +148,10 @@ export default function ExamDetailsPage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center max-w-md px-4">
           <div className="text-4xl mb-4">⚠️</div>
-          <p className="text-rose-600 mb-4">{error || "لم يتم العثور على الامتحان"}</p>
+          <p className="text-red-600 mb-4">{error || "لم يتم العثور على الامتحان"}</p>
           <button
             onClick={() => navigate("/pruefungen")}
-            className="px-6 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition"
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
           >
             العودة للامتحانات
           </button>
@@ -136,7 +171,7 @@ export default function ExamDetailsPage() {
           >
             ← العودة للامتحانات
           </button>
-          <span className="text-xs font-semibold text-rose-500">
+          <span className="text-xs font-semibold text-red-600">
             Deutsch Learning App
           </span>
         </div>
@@ -144,7 +179,7 @@ export default function ExamDetailsPage() {
         {/* تفاصيل الامتحان */}
         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-8 text-white">
+          <div className="bg-gradient-to-br from-red-600 to-red-700 p-8 text-white">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-16 w-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center text-3xl">
                 📝
@@ -153,7 +188,7 @@ export default function ExamDetailsPage() {
                 <h1 className="text-2xl md:text-3xl font-bold mb-1">
                   {exam.title}
                 </h1>
-                <p className="text-rose-100 text-sm">
+                <p className="text-red-100 text-sm">
                   {exam.provider} • {exam.level}
                 </p>
               </div>
@@ -214,7 +249,7 @@ export default function ExamDetailsPage() {
                       className="flex items-center justify-between p-4 bg-slate-50 rounded-xl"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 bg-rose-100 rounded-lg flex items-center justify-center text-xl">
+                        <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center text-xl">
                           {section.skill === "hoeren" && "🎧"}
                           {section.skill === "lesen" && "📖"}
                           {section.skill === "schreiben" && "✍️"}
@@ -266,12 +301,12 @@ export default function ExamDetailsPage() {
               </ul>
             </div>
 
-            {/* أزرار البدء والإصلاح */}
+            {/* زر البدء */}
             <div className="space-y-3">
               <button
                 onClick={handleStartExam}
                 disabled={starting}
-                className="w-full py-4 bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {starting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -284,18 +319,6 @@ export default function ExamDetailsPage() {
                     ابدأ الامتحان الآن
                   </span>
                 )}
-              </button>
-
-              {/* زر الإصلاح للـ admin */}
-              <button
-                onClick={handleFixExam}
-                disabled={starting}
-                className="w-full py-3 bg-blue-500 text-white rounded-xl font-semibold text-sm shadow hover:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <span>🔧</span>
-                  إصلاح الامتحان (admin)
-                </span>
               </button>
             </div>
           </div>

@@ -19,6 +19,7 @@ const MAIN_SKILL_OPTIONS = [
   { label: 'Lesen (القراءة)', value: 'lesen' },
   { label: 'Schreiben (الكتابة)', value: 'schreiben' },
   { label: 'Sprechen (التحدث)', value: 'sprechen' },
+  { label: 'Sprachbausteine (قواعد لغوية)', value: 'sprachbausteine' },
   { label: 'Life Test / Leben in Deutschland', value: 'leben_test' },
 ];
 
@@ -28,6 +29,7 @@ const SKILLS = [
   { value: 'lesen', label: 'Lesen' },
   { value: 'schreiben', label: 'Schreiben' },
   { value: 'sprechen', label: 'Sprechen' },
+  { value: 'sprachbausteine', label: 'Sprachbausteine' },
   { value: 'misc', label: 'Sonstiges' },
 ];
 
@@ -95,7 +97,7 @@ interface ExamFormState {
 
   // Provider Exam specific
   provider: string;
-  mainSkill: 'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen' | 'leben_test';
+  mainSkill: 'mixed' | 'hoeren' | 'lesen' | 'schreiben' | 'sprechen' | 'sprachbausteine' | 'leben_test';
   sections: Section[];
   hasSections: boolean; // toggle لإلغاء sections لامتحان Leben
 }
