@@ -268,6 +268,11 @@ function EditQuestion() {
         usageCategory = question.usageCategory;
       }
 
+      // إذا السؤال تابع لامتحان ولم نحدد usageCategory، نعتبره provider
+      if (!usageCategory && question.examId) {
+        usageCategory = 'provider';
+      }
+
       // تحويل البيانات من API format إلى form format
       // معالجة options - قد تكون array من objects أو strings
       let options = [];
@@ -1062,6 +1067,11 @@ function EditQuestion() {
           key: audioFile,
           mime: 'audio/mpeg',
         };
+      }
+
+      // حفظ usageCategory دائماً
+      if (formData.usageCategory) {
+        questionData.usageCategory = formData.usageCategory;
       }
 
       // إضافة بيانات Leben in Deutschland
