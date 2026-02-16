@@ -90,7 +90,7 @@ function ExamSections() {
   // Load questions when section is selected
   useEffect(() => {
     if (selectedSection) {
-      const questions = selectedSection.questions || [];
+      const questions = selectedSection.questions || selectedSection.items || [];
       setSectionQuestions(questions);
     } else {
       setSectionQuestions([]);
@@ -348,7 +348,7 @@ function ExamSections() {
               {sections.map((section) => {
                 const skillInfo = getSkillInfo(section.skill);
                 const isSelected = selectedSection?.key === section.key;
-                const questionsCount = section.questions?.length || 0;
+                const questionsCount = section.questionCount ?? section.questions?.length ?? section.items?.length ?? 0;
 
                 return (
                   <div
