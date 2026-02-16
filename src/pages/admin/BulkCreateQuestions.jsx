@@ -249,6 +249,7 @@ function BulkCreateQuestions() {
 
   // --- Submit ---
   const handleSubmit = async () => {
+    if (loading) return;
     setError('');
     setSuccess('');
     setResults(null);

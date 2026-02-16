@@ -1609,6 +1609,7 @@ function CreateQuestion() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setSuccess('');
 
