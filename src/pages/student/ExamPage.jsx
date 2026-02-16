@@ -1286,6 +1286,18 @@ function ExamPage() {
     }
   };
 
+  // استخدام عدد الأسئلة المنشورة من بيانات الأقسام إذا متوفرة (يجب أن يكون قبل أي return)
+  const publishedTotal = useMemo(() => {
+    if (!sectionExercises || Object.keys(sectionExercises).length === 0) return null;
+    let count = 0;
+    Object.values(sectionExercises).forEach((sectionData) => {
+      (sectionData.exercises || []).forEach((ex) => {
+        count += (ex.questions || []).length;
+      });
+    });
+    return count > 0 ? count : null;
+  }, [sectionExercises]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -1329,17 +1341,6 @@ function ExamPage() {
   }
 
   const currentQuestion = attempt.items[currentQuestionIndex];
-  // استخدام عدد الأسئلة المنشورة من بيانات الأقسام إذا متوفرة
-  const publishedTotal = useMemo(() => {
-    if (!sectionExercises || Object.keys(sectionExercises).length === 0) return null;
-    let count = 0;
-    Object.values(sectionExercises).forEach((sectionData) => {
-      (sectionData.exercises || []).forEach((ex) => {
-        count += (ex.questions || []).length;
-      });
-    });
-    return count > 0 ? count : null;
-  }, [sectionExercises]);
   const totalQuestions = publishedTotal || attempt.items.length;
   const answeredCount = Object.keys(answers).length;
 
