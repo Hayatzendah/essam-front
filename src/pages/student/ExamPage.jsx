@@ -73,16 +73,16 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
     ? 'grid grid-cols-1 gap-3 mb-3 sm:mb-4'
     : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3 sm:mb-4';
   return (
-    <div className={gridClass} dir="ltr">
+    <div className={gridClass} dir="ltr" style={{ maxWidth: '100%', overflow: 'hidden' }}>
       {cards.map((card, idx) => {
         const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
         return (
-          <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left`}>
-            <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5`}>
+          <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left overflow-hidden`} style={{ minWidth: 0 }}>
+            <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words`}>
               {card.title}
             </h5>
-            <p className={`text-xs sm:text-sm ${color.content} leading-relaxed`}
-               style={{ whiteSpace: 'pre-line' }}>
+            <p className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words`}
+               style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               {card.content}
             </p>
           </div>
