@@ -565,11 +565,12 @@ function ExamPage() {
       if (sectionExercises[section.key]) return;
       examsAPI.getSectionQuestions(examId, section.key)
         .then((data) => {
-          if (data?.exercises && data.exercises.length > 0) {
-            setSectionExercises(prev => ({ ...prev, [section.key]: data }));
-          }
+          setSectionExercises(prev => ({ ...prev, [section.key]: data || { exercises: [] } }));
         })
-        .catch(() => {});
+        .catch(() => {
+          // حفظ القسم حتى لو فشل التحميل عشان allLoaded يشتغل
+          setSectionExercises(prev => ({ ...prev, [section.key]: { exercises: [] } }));
+        });
     });
   }, [sectionsOverview, attempt]);
 
@@ -586,11 +587,11 @@ function ExamPage() {
 
     examsAPI.getSectionQuestions(examId, selectedSectionKey)
       .then((data) => {
-        if (data?.exercises && data.exercises.length > 0) {
-          setSectionExercises(prev => ({ ...prev, [selectedSectionKey]: data }));
-        }
+        setSectionExercises(prev => ({ ...prev, [selectedSectionKey]: data || { exercises: [] } }));
       })
-      .catch(() => {})
+      .catch(() => {
+        setSectionExercises(prev => ({ ...prev, [selectedSectionKey]: { exercises: [] } }));
+      })
       .finally(() => {
         setLoadingExercises(false);
       });
