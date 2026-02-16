@@ -596,6 +596,38 @@ function ExamPage() {
       });
   }, [selectedSectionKey, attempt]);
 
+  // ✅ تصفية attempt.items لإزالة الأسئلة المحذوفة التي لم تعد في أقسام الامتحان
+  useEffect(() => {
+    if (!attempt?.items || !sectionsOverview || sectionsOverview.length === 0) return;
+    // انتظر حتى تحميل بيانات جميع الأقسام
+    const allLoaded = sectionsOverview.every((s) => sectionExercises[s.key]);
+    if (!allLoaded) return;
+
+    // بناء set بكل questionIds المنشورة من بيانات الأقسام
+    const publishedIds = new Set();
+    Object.values(sectionExercises).forEach((sectionData) => {
+      (sectionData.exercises || []).forEach((ex) => {
+        (ex.questions || []).forEach((q) => {
+          if (q.questionId) publishedIds.add(q.questionId);
+        });
+      });
+    });
+
+    if (publishedIds.size === 0) return;
+
+    const filtered = attempt.items.filter((item) => {
+      const qid = item.questionId || item.id || item._id ||
+        item.question?.id || item.question?._id ||
+        item.questionSnapshot?.id || item.questionSnapshot?._id;
+      return qid && publishedIds.has(qid);
+    });
+
+    if (filtered.length < attempt.items.length) {
+      console.log(`✅ Filtered out ${attempt.items.length - filtered.length} deleted questions from attempt.items`);
+      setAttempt({ ...attempt, items: filtered });
+    }
+  }, [sectionExercises, sectionsOverview]);
+
   // ✅ يجب استدعاء جميع الـ Hooks قبل أي early return (قواعد React)
   const currentSectionData = selectedSectionKey ? sectionExercises[selectedSectionKey] : null;
   const sectionQuestionIds = useMemo(() => {
