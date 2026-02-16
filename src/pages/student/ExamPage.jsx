@@ -1668,7 +1668,7 @@ function ExamPage() {
                 </button>
                 <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4">
                   <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                    Übung {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}{selectedExercise.title ? `: ${selectedExercise.title}` : ''}
+                    Übung {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}
                   </h2>
                   <p className="text-[10px] sm:text-xs text-slate-500 mt-1">
                     {selectedExercise.questionCount || selectedExercise.questions?.length || 0} سؤال
@@ -1777,7 +1777,7 @@ function ExamPage() {
                 {showExerciseHeader && (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
                     <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
-                      Übung {exerciseInfo.exerciseIndex}{exerciseInfo.title ? `: ${exerciseInfo.title}` : ''}
+                      Übung {exerciseInfo.exerciseIndex}
                     </h3>
                     {exerciseInfo.audioUrl && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
