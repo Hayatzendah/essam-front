@@ -1328,7 +1328,18 @@ function ExamPage() {
   }
 
   const currentQuestion = attempt.items[currentQuestionIndex];
-  const totalQuestions = attempt.items.length;
+  // استخدام عدد الأسئلة المنشورة من بيانات الأقسام إذا متوفرة
+  const publishedTotal = useMemo(() => {
+    if (!sectionExercises || Object.keys(sectionExercises).length === 0) return null;
+    let count = 0;
+    Object.values(sectionExercises).forEach((sectionData) => {
+      (sectionData.exercises || []).forEach((ex) => {
+        count += (ex.questions || []).length;
+      });
+    });
+    return count > 0 ? count : null;
+  }, [sectionExercises]);
+  const totalQuestions = publishedTotal || attempt.items.length;
   const answeredCount = Object.keys(answers).length;
 
   // التحقق من أن المحاولة لم يتم تسليمها
@@ -1420,20 +1431,21 @@ function ExamPage() {
     const idsFromSection = sectionData?.exercises
       ? new Set(sectionData.exercises.flatMap((ex) => (ex.questions || []).map((q) => q.questionId)))
       : null;
+    // تصفية attempt.items حسب الأسئلة المنشورة فقط (من بيانات القسم)
     const sectionItems = (attempt?.items || []).filter((item) => {
-      const itemSectionKey = item.sectionKey || item.section?.key;
-      if (itemSectionKey === sectionKey) return true;
+      const qid = item.questionId || item.id || item._id ||
+        item.question?.id || item.question?._id ||
+        item.questionSnapshot?.id || item.questionSnapshot?._id;
+      // إذا عندنا بيانات القسم، نستخدمها للفلترة (تتضمن فقط الأسئلة المنشورة)
       if (idsFromSection?.size) {
-        const qid = item.questionId || item.id || item._id ||
-          item.question?.id || item.question?._id ||
-          item.questionSnapshot?.id || item.questionSnapshot?._id;
         return qid && idsFromSection.has(qid);
       }
-      return false;
+      // fallback: فلترة حسب sectionKey
+      const itemSectionKey = item.sectionKey || item.section?.key;
+      return itemSectionKey === sectionKey;
     });
-    const total = sectionItems.length > 0
-      ? sectionItems.length
-      : (idsFromSection ? idsFromSection.size : 0);
+    // استخدام عدد الأسئلة المنشورة من بيانات القسم كأولوية
+    const total = idsFromSection?.size || sectionItems.length;
     let answered = 0;
     sectionItems.forEach((item) => {
       const idx = item._fromSection ? `q-${item.questionId}` : attempt.items.indexOf(item);
