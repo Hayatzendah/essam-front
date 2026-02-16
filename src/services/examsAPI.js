@@ -233,7 +233,7 @@ export const examsAPI = {
   },
 
   // إنشاء أسئلة متعددة (مع أو بدون تسجيل صوتي / فقرة قراءة)
-  bulkCreateQuestions: async (examId, sectionKey, listeningClipId, questions, readingPassage, readingCards) => {
+  bulkCreateQuestions: async (examId, sectionKey, listeningClipId, questions, readingPassage, readingCards, cardsLayout) => {
     const payload = { questions };
     if (listeningClipId) {
       payload.listeningClipId = listeningClipId;
@@ -243,6 +243,9 @@ export const examsAPI = {
     }
     if (readingCards && readingCards.length > 0) {
       payload.readingCards = readingCards;
+    }
+    if (cardsLayout) {
+      payload.cardsLayout = cardsLayout;
     }
     const response = await api.post(`/exams/${examId}/sections/${sectionKey}/questions/bulk-create`, payload);
     return response.data;

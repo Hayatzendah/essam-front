@@ -267,7 +267,8 @@ function BulkCreateQuestions() {
       const result = await examsAPI.bulkCreateQuestions(
         examId, sectionKey, useAudio ? listeningClipId : null, payload,
         !useAudio ? readingPassage.trim() || null : null,
-        validCards.length > 0 ? validCards : null
+        validCards.length > 0 ? validCards : null,
+        validCards.length > 0 ? cardsLayout : null
       );
       setResults(result);
       setSuccess(`تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`);
@@ -408,19 +409,19 @@ function BulkCreateQuestions() {
                         <button
                           type="button"
                           onClick={() => setCardsLayout('horizontal')}
-                          title="جنب بعض"
+                          title="بطاقة بعرض كامل - تحت بعض"
                           style={{
                             padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
                             backgroundColor: cardsLayout === 'horizontal' ? '#f59e0b' : '#fef3c7',
                             color: cardsLayout === 'horizontal' ? '#fff' : '#92400e',
                           }}
                         >
-                          ▦ أفقي
+                          ▤ أفقي
                         </button>
                         <button
                           type="button"
                           onClick={() => setCardsLayout('vertical')}
-                          title="تحت بعض"
+                          title="بطاقات جنب بعض - أعمدة"
                           style={{
                             padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
                             borderRight: '1px solid #f59e0b',
@@ -428,7 +429,7 @@ function BulkCreateQuestions() {
                             color: cardsLayout === 'vertical' ? '#fff' : '#92400e',
                           }}
                         >
-                          ▤ عمودي
+                          ▦ عمودي
                         </button>
                       </div>
                     )}
@@ -452,7 +453,7 @@ function BulkCreateQuestions() {
                   </p>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'vertical' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
                   {readingCards.map((card, idx) => {
                     const ADMIN_CARD_COLORS = [
                       { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },

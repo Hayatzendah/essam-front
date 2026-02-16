@@ -66,10 +66,14 @@ const CARD_COLORS_MAP = {
 };
 const CARD_COLORS_LIST = Object.values(CARD_COLORS_MAP);
 
-function ReadingCardsGrid({ cards }) {
+function ReadingCardsGrid({ cards, cardsLayout }) {
   if (!cards || cards.length === 0) return null;
+  // أفقي (horizontal) = بطاقة بعرض كامل تحت بعض، عمودي (vertical) = بطاقات جنب بعض
+  const gridClass = cardsLayout === 'horizontal'
+    ? 'grid grid-cols-1 gap-3 mb-3 sm:mb-4'
+    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3 sm:mb-4';
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3 sm:mb-4" dir="ltr">
+    <div className={gridClass} dir="ltr">
       {cards.map((card, idx) => {
         const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
         return (
@@ -616,6 +620,7 @@ function ExamPage() {
               audioUrl: exercise.audioUrl,
               readingPassage: exercise.readingPassage,
               readingCards: exercise.readingCards,
+              cardsLayout: exercise.cardsLayout,
               title: exercise.title,
               exerciseIndex: exercise.exerciseIndex ?? exercise.exerciseNumber,
               exerciseId: `ex-${exercise.exerciseIndex ?? exercise.exerciseNumber}-${exercise.title || ''}`,
@@ -1699,7 +1704,7 @@ function ExamPage() {
                   </div>
                 )}
                 {selectedExercise.readingCards && selectedExercise.readingCards.length > 0 && (
-                  <ReadingCardsGrid cards={selectedExercise.readingCards} />
+                  <ReadingCardsGrid cards={selectedExercise.readingCards} cardsLayout={selectedExercise.cardsLayout} />
                 )}
               </div>
             )}
@@ -1791,7 +1796,7 @@ function ExamPage() {
                       </div>
                     )}
                     {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
-                      <ReadingCardsGrid cards={exerciseInfo.readingCards} />
+                      <ReadingCardsGrid cards={exerciseInfo.readingCards} cardsLayout={exerciseInfo.cardsLayout} />
                     )}
                   </div>
                 )}
