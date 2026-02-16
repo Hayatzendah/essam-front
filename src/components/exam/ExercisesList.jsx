@@ -61,7 +61,7 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
               {/* معلومات التمرين */}
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
-                  Übung {exercise.exerciseIndex ?? exercise.exerciseNumber}{exercise.title ? `: ${exercise.title}` : ''}
+                  Übung {exercise.exerciseIndex ?? exercise.exerciseNumber}
                 </h3>
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-xs text-slate-500">
