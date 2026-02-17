@@ -792,10 +792,24 @@ function ExamPage() {
       // معالجة items - قد تكون في attemptData.items أو attemptData.data.items
       let items = attemptData.items || attemptData.data?.items || [];
 
-      // إذا كان items مصفوفة فارغة أو غير موجودة
+      // إذا كان items مصفوفة فارغة أو غير موجودة - حاول تسليم المحاولة الفاضية وابدأ وحدة جديدة
       if (!Array.isArray(items) || items.length === 0) {
-        console.warn('⚠️ لا توجد items في الـ response');
-        console.warn('   Response structure:', JSON.stringify(attemptData, null, 2));
+        console.warn('⚠️ لا توجد items في الـ response - محاولة تسليم وإعادة بدء');
+        const examId = searchParams.get('examId') || attemptData.examId;
+        if (examId && attemptData.attemptId && attemptData.status === 'in_progress') {
+          try {
+            await examsAPI.submitAttempt(attemptData.attemptId, []);
+            console.log('✅ تم تسليم المحاولة الفاضية، جاري بدء محاولة جديدة...');
+            const newAttempt = await examsAPI.startAttempt(examId);
+            const newAttemptId = newAttempt.attemptId || newAttempt._id || newAttempt.id;
+            if (newAttemptId && newAttempt.items?.length > 0) {
+              window.location.href = `/student/exam/${newAttemptId}?examId=${examId}`;
+              return;
+            }
+          } catch (retryErr) {
+            console.error('❌ فشل إعادة البدء:', retryErr);
+          }
+        }
         setError('لا توجد أسئلة في هذا الامتحان. تأكد من أن الامتحان يحتوي على أسئلة.');
         setAttempt({ ...attemptData, items: [] });
         return;
