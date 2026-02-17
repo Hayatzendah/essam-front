@@ -113,8 +113,11 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
         }
         if (block.type === 'paragraph') {
           const hasHtml = block.text && /<[a-z][\s\S]*>/i.test(block.text);
+          const bgColor = block.bgColor || '#fefce8';
+          const borderColor = block.bgColor ? `${block.bgColor}cc` : '#fde68a';
           return (
-            <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 text-left">
+            <div key={idx} className="rounded-xl p-3 sm:p-4 text-left"
+                 style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
               {hasHtml ? (
                 <div className="text-xs sm:text-sm text-slate-700 leading-relaxed rich-text-content"
                      style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
