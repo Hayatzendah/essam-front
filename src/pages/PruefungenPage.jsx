@@ -129,7 +129,7 @@ export default function PruefungenPage() {
       setLoadingSkills(true);
       setError("");
       const data = await getProviderSkills(selectedProvider, activeLevel);
-      const allowedSkills = ["hoeren", "lesen", "schreiben", "sprachbausteine"];
+      const allowedSkills = ["hoeren", "lesen", "schreiben", "sprechen", "sprachbausteine"];
       setSkills((data.skills || []).filter(s => allowedSkills.includes(s.skill)));
     } catch (err) {
       console.error("Error loading skills:", err);
