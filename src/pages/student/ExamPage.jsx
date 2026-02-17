@@ -1971,6 +1971,8 @@ function ExamPage() {
                   </div>
                 )}
 
+                {/* تخطي عرض السؤال إذا كان محتوى فقط (contentOnly) */}
+                {(item.contentOnly || item.question?.contentOnly || item.questionSnapshot?.contentOnly || (prompt === '—' && item.points === 0)) ? null : <>
                 {/* ✅ Audio Player - فقط إذا كان السؤال له صوت خاص به (مختلف عن صوت الـ Section) */}
                 {shouldShowQuestionAudio && (() => {
                   // ✅ استخدام questionAudio (من question.media.url مباشرة)
@@ -3347,6 +3349,7 @@ function ExamPage() {
                         </div>
                       )}
                 </div>
+                </>}
               </div>
             );
           });

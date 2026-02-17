@@ -390,12 +390,15 @@ function BulkCreateQuestions() {
     if (!sectionKey) { setError('اختر القسم أولاً'); return; }
     if (exerciseMode === 'audio' && !listeningClipId) { setError('اختر أو ارفع ملف الاستماع أولاً'); return; }
 
+    // الأسئلة الفعلية (تجاهل الأسئلة الفارغة تماماً)
+    const actualQuestions = questions.filter(q => q.prompt.trim());
     const emptyPrompts = questions.filter(q => !q.prompt.trim());
-    if (emptyPrompts.length > 0) { setError('جميع الأسئلة يجب أن تحتوي على نص'); return; }
+    // إذا كان هناك أسئلة مكتوبة جزئياً (بعضها فارغ وبعضها لا) — تنبيه
+    if (emptyPrompts.length > 0 && actualQuestions.length > 0) { setError('جميع الأسئلة يجب أن تحتوي على نص'); return; }
 
     setLoading(true);
     try {
-      const payload = questions.map(buildQuestionPayload);
+      const payload = actualQuestions.map(buildQuestionPayload);
       const validCards = exerciseMode === 'reading' ? readingCards.filter(c => c.title.trim() && c.content.trim()) : [];
       const sendClipId = (exerciseMode === 'audio' || exerciseMode === 'speaking') ? listeningClipId : null;
       const validContentBlocks = exerciseMode === 'speaking' ? contentBlocks.filter(b => {
@@ -405,6 +408,12 @@ function BulkCreateQuestions() {
         if (b.type === 'questions') return (b.questionCount || 0) > 0;
         return false;
       }) : [];
+
+      // التحقق من وجود محتوى أو أسئلة
+      if (payload.length === 0 && validContentBlocks.length === 0 && !sendClipId && !readingPassage.trim() && validCards.length === 0) {
+        setError('أضف أسئلة أو محتوى (فقرات/صور/صوت) على الأقل'); setLoading(false); return;
+      }
+
       const result = await examsAPI.bulkCreateQuestions(
         examId, sectionKey, sendClipId, payload,
         exerciseMode === 'reading' ? readingPassage.trim() || null : null,
@@ -413,7 +422,10 @@ function BulkCreateQuestions() {
         validContentBlocks.length > 0 ? validContentBlocks : null
       );
       setResults(result);
-      setSuccess(`تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`);
+      const msg = payload.length > 0
+        ? `تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`
+        : 'تم حفظ المحتوى التعليمي بنجاح';
+      setSuccess(msg);
     } catch (err) {
       setError('فشل إنشاء الأسئلة: ' + (err.response?.data?.message || err.message));
     } finally {
@@ -1228,7 +1240,7 @@ function BulkCreateQuestions() {
       )}
 
       {/* Submit button */}
-      {(listeningClipId || (!useAudio && examId && sectionKey)) && questions.length > 0 && (
+      {(listeningClipId || (!useAudio && examId && sectionKey)) && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <button
             onClick={handleSubmit}
@@ -1239,7 +1251,7 @@ function BulkCreateQuestions() {
               fontSize: 16, fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
             }}
           >
-            {loading ? 'جاري الحفظ...' : `حفظ ${questions.length} سؤال`}
+            {loading ? 'جاري الحفظ...' : questions.some(q => q.prompt.trim()) ? `حفظ ${questions.filter(q => q.prompt.trim()).length} سؤال` : 'حفظ المحتوى'}
           </button>
         </div>
       )}
