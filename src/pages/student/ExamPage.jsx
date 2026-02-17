@@ -1450,7 +1450,7 @@ function ExamPage() {
           if (idx !== undefined && attempt.items[idx]) {
             // ✅ إذا العنصر موجود بـ attempt.items لكن بدون options، نضيف options من بيانات القسم
             const attemptItem = attempt.items[idx];
-            const merged = { ...attemptItem, ...(q.contentOnly && { contentOnly: true }) };
+            const merged = { ...attemptItem, _attemptIndex: idx, ...(q.contentOnly && { contentOnly: true }) };
             const existingOptions = safeOptionsArray(attemptItem);
             if (existingOptions.length === 0 && Array.isArray(q.options) && q.options.length > 0) {
               return { ...merged, options: q.options };
@@ -1888,7 +1888,7 @@ function ExamPage() {
 
             const items = displayedItems.map((item, displayIndex) => {
             // Get the global index for this item (for answers tracking); للعناصر من القسم (_fromSection) نستخدم مفتاحاً بالـ questionId
-            const rawItemIndex = attempt.items.indexOf(item);
+            const rawItemIndex = item._attemptIndex !== undefined ? item._attemptIndex : attempt.items.indexOf(item);
             const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
             const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? displayIndex + 1 : rawItemIndex + 1;
             const itemOverride = item._fromSection ? item : undefined;
