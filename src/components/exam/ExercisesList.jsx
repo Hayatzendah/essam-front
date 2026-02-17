@@ -77,6 +77,11 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
                       📖 فقرة
                     </span>
                   )}
+                  {exercise.contentBlocks && exercise.contentBlocks.length > 0 && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      🗣 محتوى
+                    </span>
+                  )}
                 </div>
               </div>
 

@@ -92,6 +92,83 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
   );
 }
 
+// ✅ عرض بلوكات المحتوى المرنة (Sprechen وغيرها)
+function ContentBlocksRenderer({ blocks }) {
+  if (!blocks || blocks.length === 0) return null;
+  const sorted = [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return (
+    <div className="space-y-3 mb-3 sm:mb-4">
+      {sorted.map((block, idx) => {
+        if (block.type === 'paragraph') {
+          return (
+            <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4">
+              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed"
+                   style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+                {block.text}
+              </div>
+            </div>
+          );
+        }
+        if (block.type === 'image') {
+          const imgs = block.images || [];
+          if (imgs.length === 0) return null;
+          return (
+            <div key={idx} className={imgs.length > 1 ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
+              {imgs.map((img, imgIdx) => (
+                <div key={imgIdx} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <img
+                    src={img.url?.startsWith('http') ? img.url : toApiUrl(img.url)}
+                    alt={img.description || `Image ${imgIdx + 1}`}
+                    className="w-full h-auto"
+                    style={{ maxHeight: 400, objectFit: 'contain' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  {img.description && (
+                    <p className="text-xs text-slate-500 p-2 text-center">{img.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        }
+        if (block.type === 'cards') {
+          const cards = block.cards || [];
+          if (cards.length === 0) return null;
+          const gridClass = block.cardsLayout === 'horizontal'
+            ? 'grid grid-cols-1 gap-3'
+            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3';
+          return (
+            <div key={idx} className={gridClass} dir="ltr" style={{ maxWidth: '100%', overflow: 'hidden' }}>
+              {cards.map((card, cardIdx) => {
+                const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[cardIdx % CARD_COLORS_LIST.length];
+                return (
+                  <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left overflow-hidden`} style={{ minWidth: 0 }}>
+                    <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words`}>
+                      {card.title}
+                    </h5>
+                    {(card.texts || []).map((entry, ti) => (
+                      <div key={ti} className="mb-1">
+                        {entry.label && (
+                          <span className={`text-xs font-semibold ${color.title}`}>{entry.label}: </span>
+                        )}
+                        <span className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words`}
+                              style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word' }}>
+                          {entry.content}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
 // ✅ Component منفصل لـ Reorder Task
 function ReorderTask({ parts, prompt, itemIndex, answers, setAnswers, saveAnswer, isSubmitted, questionId }) {
   // ✅ استخدام state محلي للترتيب (مع shuffle عند التحميل)
@@ -654,6 +731,7 @@ function ExamPage() {
               readingPassage: exercise.readingPassage,
               readingCards: exercise.readingCards,
               cardsLayout: exercise.cardsLayout,
+              contentBlocks: exercise.contentBlocks,
               title: exercise.title,
               exerciseIndex: exercise.exerciseIndex ?? exercise.exerciseNumber,
               exerciseId: `ex-${exercise.exerciseIndex ?? exercise.exerciseNumber}-${exercise.title || ''}`,
@@ -1752,6 +1830,9 @@ function ExamPage() {
                 {selectedExercise.readingCards && selectedExercise.readingCards.length > 0 && (
                   <ReadingCardsGrid cards={selectedExercise.readingCards} cardsLayout={selectedExercise.cardsLayout} />
                 )}
+                {selectedExercise.contentBlocks && selectedExercise.contentBlocks.length > 0 && (
+                  <ContentBlocksRenderer blocks={selectedExercise.contentBlocks} />
+                )}
               </div>
             )}
 
@@ -1780,7 +1861,7 @@ function ExamPage() {
             const isAllQuestionsMode = !selectedSectionKey && !selectedExercise;
             let showExerciseHeader = false;
             if (isAllQuestionsMode && exerciseInfo?.exerciseId && !shownExerciseIds.has(exerciseInfo.exerciseId)) {
-              if (exerciseInfo.audioUrl || exerciseInfo.readingPassage || (exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0)) {
+              if (exerciseInfo.audioUrl || exerciseInfo.readingPassage || (exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0) || (exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0)) {
                 showExerciseHeader = true;
                 shownExerciseIds.add(exerciseInfo.exerciseId);
               }
@@ -1843,6 +1924,9 @@ function ExamPage() {
                     )}
                     {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
                       <ReadingCardsGrid cards={exerciseInfo.readingCards} cardsLayout={exerciseInfo.cardsLayout} />
+                    )}
+                    {exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (
+                      <ContentBlocksRenderer blocks={exerciseInfo.contentBlocks} />
                     )}
                   </div>
                 )}
