@@ -1450,11 +1450,12 @@ function ExamPage() {
           if (idx !== undefined && attempt.items[idx]) {
             // ✅ إذا العنصر موجود بـ attempt.items لكن بدون options، نضيف options من بيانات القسم
             const attemptItem = attempt.items[idx];
+            const merged = { ...attemptItem, ...(q.contentOnly && { contentOnly: true }) };
             const existingOptions = safeOptionsArray(attemptItem);
             if (existingOptions.length === 0 && Array.isArray(q.options) && q.options.length > 0) {
-              return { ...attemptItem, options: q.options };
+              return { ...merged, options: q.options };
             }
-            return attemptItem;
+            return merged;
           }
           // عنصر غير موجود في attempt.items → استخدام بيانات السؤال من القسم للعرض
           const sectionKey = selectedSectionKey || selectedExercise.sectionKey;
@@ -1468,6 +1469,7 @@ function ExamPage() {
             options: q.options || [],
             images: q.images || [],
             points: q.points,
+            ...(q.contentOnly && { contentOnly: true }),
             sectionKey,
             section: sectionKey ? { key: sectionKey } : undefined,
             _fromSection: true,
