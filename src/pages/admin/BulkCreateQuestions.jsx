@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import axios from 'axios';
+
+const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
 
 const API_BASE_URL = 'https://api.deutsch-tests.com';
 
@@ -772,13 +774,13 @@ function BulkCreateQuestions() {
 
                     {/* Paragraph Block */}
                     {block.type === 'paragraph' && (
-                      <textarea
-                        value={block.text || ''}
-                        onChange={(e) => updateContentBlock(bIdx, { text: e.target.value })}
-                        placeholder="اكتب الفقرة هنا..."
-                        rows={4}
-                        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 13, resize: 'vertical', minHeight: 60, boxSizing: 'border-box' }}
-                      />
+                      <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                        <RichTextEditor
+                          value={block.text || ''}
+                          onChange={(html) => updateContentBlock(bIdx, { text: html })}
+                          placeholder="اكتب الفقرة هنا..."
+                        />
+                      </Suspense>
                     )}
 
                     {/* Image Block */}

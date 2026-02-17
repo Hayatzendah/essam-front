@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import { authAPI } from '../../services/api';
 import ExercisesList from '../../components/exam/ExercisesList';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import './ExamPage.css';
 
 // ✅ دالة لـ shuffle array (ترتيب عشوائي)
@@ -111,12 +112,19 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
           );
         }
         if (block.type === 'paragraph') {
+          const hasHtml = block.text && /<[a-z][\s\S]*>/i.test(block.text);
           return (
             <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 text-left">
-              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed"
-                   style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
-                {block.text}
-              </div>
+              {hasHtml ? (
+                <div className="text-xs sm:text-sm text-slate-700 leading-relaxed rich-text-content"
+                     style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.text) }} />
+              ) : (
+                <div className="text-xs sm:text-sm text-slate-700 leading-relaxed"
+                     style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+                  {block.text}
+                </div>
+              )}
             </div>
           );
         }

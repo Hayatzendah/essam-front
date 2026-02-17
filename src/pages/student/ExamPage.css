@@ -353,6 +353,23 @@ input[type="text"].inline-block {
   display: none;
 }
 
+/* Rich text content from Quill editor */
+.rich-text-content p {
+  margin: 0 0 0.5em 0;
+}
+.rich-text-content p:last-child {
+  margin-bottom: 0;
+}
+.rich-text-content .ql-size-small {
+  font-size: 0.75em;
+}
+.rich-text-content .ql-size-large {
+  font-size: 1.5em;
+}
+.rich-text-content .ql-size-huge {
+  font-size: 2em;
+}
+
 /* ========== Mobile Responsive ========== */
 @media (max-width: 767px) {
   .exam-page {
