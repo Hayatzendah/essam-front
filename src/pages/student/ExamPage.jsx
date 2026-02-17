@@ -97,11 +97,11 @@ function ContentBlocksRenderer({ blocks }) {
   if (!blocks || blocks.length === 0) return null;
   const sorted = [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   return (
-    <div className="space-y-3 mb-3 sm:mb-4">
+    <div className="space-y-3 mb-3 sm:mb-4" dir="ltr">
       {sorted.map((block, idx) => {
         if (block.type === 'paragraph') {
           return (
-            <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4">
+            <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 text-left">
               <div className="text-xs sm:text-sm text-slate-700 leading-relaxed"
                    style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 {block.text}
