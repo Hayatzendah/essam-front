@@ -273,6 +273,7 @@ function BulkCreateQuestions() {
       ...(type === 'paragraph' && { text: '' }),
       ...(type === 'image' && { images: [] }),
       ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'horizontal' }),
+      ...(type === 'questions' && { questionCount: 1 }),
     };
     setContentBlocks(prev => [...prev, newBlock]);
   };
@@ -401,6 +402,7 @@ function BulkCreateQuestions() {
         if (b.type === 'paragraph') return b.text?.trim();
         if (b.type === 'image') return b.images?.length > 0;
         if (b.type === 'cards') return b.cards?.some(c => c.title?.trim() && c.texts?.some(t => t.content?.trim()));
+        if (b.type === 'questions') return (b.questionCount || 0) > 0;
         return false;
       }) : [];
       const result = await examsAPI.bulkCreateQuestions(
@@ -724,6 +726,10 @@ function BulkCreateQuestions() {
                     style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #99f6e4', backgroundColor: '#f0fdfa', color: '#134e4a', cursor: 'pointer' }}>
                     + بطاقات
                   </button>
+                  <button type="button" onClick={() => addContentBlock('questions')}
+                    style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1e40af', cursor: 'pointer' }}>
+                    + أسئلة
+                  </button>
                 </div>
               </div>
 
@@ -739,7 +745,7 @@ function BulkCreateQuestions() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
-                          {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : '📋 بطاقات'} #{bIdx + 1}
+                          {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : block.type === 'cards' ? '📋 بطاقات' : '❓ أسئلة'} #{bIdx + 1}
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -790,6 +796,32 @@ function BulkCreateQuestions() {
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Questions Slot Block */}
+                    {block.type === 'questions' && (
+                      <div style={{ padding: 12, backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: '#1e40af' }}>عدد الأسئلة في هذا الموضع:</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={block.questionCount || 1}
+                            onChange={(e) => updateContentBlock(bIdx, { questionCount: Math.max(1, parseInt(e.target.value) || 1) })}
+                            style={{ width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid #93c5fd', fontSize: 13, textAlign: 'center' }}
+                          />
+                          <span style={{ fontSize: 11, color: '#3b82f6' }}>
+                            (الأسئلة {(() => {
+                              let start = 1;
+                              for (let i = 0; i < bIdx; i++) {
+                                if (contentBlocks[i].type === 'questions') start += (contentBlocks[i].questionCount || 1);
+                              }
+                              const end = start + (block.questionCount || 1) - 1;
+                              return start === end ? `#${start}` : `#${start} - #${end}`;
+                            })()})
+                          </span>
+                        </div>
                       </div>
                     )}
 
@@ -866,11 +898,24 @@ function BulkCreateQuestions() {
                 ))}
               </div>
 
-              {contentBlocks.length > 0 && (
-                <p style={{ margin: '8px 0 0', fontSize: 11, color: '#166534' }}>
-                  جميع الأسئلة أدناه ستظهر مع هذا المحتوى كتمرين واحد
-                </p>
-              )}
+              {contentBlocks.length > 0 && (() => {
+                const totalSlotted = contentBlocks.filter(b => b.type === 'questions').reduce((sum, b) => sum + (b.questionCount || 0), 0);
+                const hasQuestionSlots = contentBlocks.some(b => b.type === 'questions');
+                return (
+                  <div style={{ margin: '8px 0 0' }}>
+                    {hasQuestionSlots && totalSlotted !== questions.length && (
+                      <p style={{ fontSize: 12, color: '#dc2626', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '6px 10px', marginBottom: 4 }}>
+                        تنبيه: مجموع الأسئلة في البلوكات ({totalSlotted}) لا يساوي عدد الأسئلة الفعلية ({questions.length})
+                      </p>
+                    )}
+                    <p style={{ fontSize: 11, color: '#166534' }}>
+                      {hasQuestionSlots
+                        ? 'الأسئلة ستظهر موزعة بين بلوكات المحتوى حسب الترتيب'
+                        : 'جميع الأسئلة أدناه ستظهر مع هذا المحتوى كتمرين واحد'}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           ) : listeningClipId ? (
             <div style={{ padding: 12, backgroundColor: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 8 }}>

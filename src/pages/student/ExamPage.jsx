@@ -93,12 +93,23 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
 }
 
 // ✅ عرض بلوكات المحتوى المرنة (Sprechen وغيرها)
-function ContentBlocksRenderer({ blocks }) {
+function ContentBlocksRenderer({ blocks, renderQuestions }) {
   if (!blocks || blocks.length === 0) return null;
   const sorted = [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  let questionOffset = 0;
   return (
     <div className="space-y-3 mb-3 sm:mb-4" dir="ltr">
       {sorted.map((block, idx) => {
+        if (block.type === 'questions' && renderQuestions) {
+          const count = block.questionCount || 1;
+          const start = questionOffset;
+          questionOffset += count;
+          return (
+            <div key={idx} dir="rtl">
+              {renderQuestions(start, count)}
+            </div>
+          );
+        }
         if (block.type === 'paragraph') {
           return (
             <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 text-left">
@@ -1830,7 +1841,8 @@ function ExamPage() {
                 {selectedExercise.readingCards && selectedExercise.readingCards.length > 0 && (
                   <ReadingCardsGrid cards={selectedExercise.readingCards} cardsLayout={selectedExercise.cardsLayout} />
                 )}
-                {selectedExercise.contentBlocks && selectedExercise.contentBlocks.length > 0 && (
+                {selectedExercise.contentBlocks && selectedExercise.contentBlocks.length > 0 &&
+                  !selectedExercise.contentBlocks.some(b => b.type === 'questions') && (
                   <ContentBlocksRenderer blocks={selectedExercise.contentBlocks} />
                 )}
               </div>
@@ -1848,7 +1860,31 @@ function ExamPage() {
           {(() => {
             // تتبع أي تمرين تم عرض صوته بالفعل (لعدم التكرار في "كل الأسئلة")
             const shownExerciseIds = new Set();
-            return displayedItems.map((item, displayIndex) => {
+
+            // حساب توزيع بلوكات المحتوى بين الأسئلة (interleaving)
+            const exBlocks = selectedExercise?.contentBlocks || [];
+            const hasQSlots = exBlocks.some(b => b.type === 'questions');
+            let blockDist = null;
+            if (hasQSlots) {
+              const sorted = [...exBlocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+              const beforeMap = {};
+              let qOffset = 0;
+              let pending = [];
+              for (const block of sorted) {
+                if (block.type === 'questions') {
+                  if (pending.length > 0) {
+                    beforeMap[qOffset] = pending;
+                    pending = [];
+                  }
+                  qOffset += (block.questionCount || 1);
+                } else {
+                  pending.push(block);
+                }
+              }
+              blockDist = { beforeMap, trailing: pending };
+            }
+
+            const items = displayedItems.map((item, displayIndex) => {
             // Get the global index for this item (for answers tracking); للعناصر من القسم (_fromSection) نستخدم مفتاحاً بالـ questionId
             const rawItemIndex = attempt.items.indexOf(item);
             const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
@@ -1900,6 +1936,10 @@ function ExamPage() {
             
             return (
               <div key={uniqueKey} className="space-y-4">
+                {/* بلوكات محتوى مدمجة قبل هذا السؤال (interleaving) */}
+                {blockDist && blockDist.beforeMap[displayIndex] && (
+                  <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
+                )}
                 {/* ✅ عنوان التمرين + صوت/قراءة مشتركة في "كل الأسئلة" */}
                 {showExerciseHeader && (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
@@ -3310,6 +3350,15 @@ function ExamPage() {
               </div>
             );
           });
+
+            // بلوكات محتوى متبقية بعد كل الأسئلة (trailing)
+            if (blockDist && blockDist.trailing && blockDist.trailing.length > 0) {
+              items.push(
+                <ContentBlocksRenderer key="trailing-blocks" blocks={blockDist.trailing} />
+              );
+            }
+
+            return items;
           })()}
             </div>
 
