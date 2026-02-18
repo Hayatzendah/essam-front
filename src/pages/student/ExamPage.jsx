@@ -82,10 +82,9 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
             <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words`}>
               {card.title}
             </h5>
-            <p className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words`}
-               style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
-              {card.content}
-            </p>
+            <div className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words rich-text-content`}
+               style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+               dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.content || '') }} />
           </div>
         );
       })}
@@ -165,10 +164,9 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
                         {entry.label && (
                           <span className={`text-xs font-semibold ${color.title}`}>{entry.label}: </span>
                         )}
-                        <span className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words`}
-                              style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word' }}>
-                          {entry.content}
-                        </span>
+                        <span className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words rich-text-content`}
+                              style={{ overflowWrap: 'break-word' }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(entry.content || '') }} />
                       </div>
                     ))}
                   </div>

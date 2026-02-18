@@ -672,13 +672,13 @@ function BulkCreateQuestions() {
                           placeholder="عنوان البطاقة (مثل: 1. Etage - Technik & Freizeit)"
                           style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1px solid ${selectedColor.border}`, fontSize: 13, marginBottom: 6, boxSizing: 'border-box', backgroundColor: 'white' }}
                         />
-                        <textarea
-                          value={card.content}
-                          onChange={(e) => updateReadingCard(idx, 'content', e.target.value)}
-                          placeholder="محتوى البطاقة..."
-                          rows={3}
-                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1px solid ${selectedColor.border}`, fontSize: 13, resize: 'vertical', minHeight: 50, boxSizing: 'border-box', backgroundColor: 'white' }}
-                        />
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <RichTextEditor
+                            value={card.content || ''}
+                            onChange={(html) => updateReadingCard(idx, 'content', html)}
+                            placeholder="محتوى البطاقة..."
+                          />
+                        </Suspense>
                       </div>
                     );
                   })}
@@ -913,10 +913,13 @@ function BulkCreateQuestions() {
                                       <input type="text" value={entry.label || ''} onChange={(e) => updateCardText(bIdx, cIdx, tIdx, 'label', e.target.value)}
                                         placeholder="عنوان فرعي (اختياري)"
                                         style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: `1px solid ${selColor.border}`, fontSize: 11, marginBottom: 2, boxSizing: 'border-box', backgroundColor: 'white' }} />
-                                      <textarea value={entry.content} onChange={(e) => updateCardText(bIdx, cIdx, tIdx, 'content', e.target.value)}
-                                        placeholder="محتوى..."
-                                        rows={2}
-                                        style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: `1px solid ${selColor.border}`, fontSize: 11, resize: 'vertical', minHeight: 36, boxSizing: 'border-box', backgroundColor: 'white' }} />
+                                      <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                                        <RichTextEditor
+                                          value={entry.content || ''}
+                                          onChange={(html) => updateCardText(bIdx, cIdx, tIdx, 'content', html)}
+                                          placeholder="محتوى..."
+                                        />
+                                      </Suspense>
                                     </div>
                                     {(card.texts || []).length > 1 && (
                                       <button type="button" onClick={() => removeTextFromCard(bIdx, cIdx, tIdx)}
