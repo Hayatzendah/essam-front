@@ -369,6 +369,16 @@ input[type="text"].inline-block {
 .rich-text-content .ql-size-huge {
   font-size: 2em;
 }
+/* Quill alignment classes */
+.rich-text-content .ql-align-center {
+  text-align: center;
+}
+.rich-text-content .ql-align-right {
+  text-align: right;
+}
+.rich-text-content .ql-align-justify {
+  text-align: justify;
+}
 
 /* ========== Mobile Responsive ========== */
 @media (max-width: 767px) {
