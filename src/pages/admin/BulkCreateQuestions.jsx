@@ -65,6 +65,7 @@ function BulkCreateQuestions() {
 
   // Reading passage (optional - for Lesen)
   const [readingPassage, setReadingPassage] = useState('');
+  const [readingPassageBgColor, setReadingPassageBgColor] = useState('');
   const [readingCards, setReadingCards] = useState([]);
   const [cardsLayout, setCardsLayout] = useState('horizontal'); // 'horizontal' | 'vertical'
 
@@ -552,13 +553,37 @@ function BulkCreateQuestions() {
               <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#92400e' }}>
                 فقرة القراءة (اختياري)
               </label>
-              <textarea
-                value={readingPassage}
-                onChange={(e) => setReadingPassage(e.target.value)}
-                placeholder="انسخ نص القراءة هنا... (اختياري - للأسئلة التي تحتاج فقرة مشتركة)"
-                rows={6}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 14, resize: 'vertical', minHeight: 80 }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <label style={{ fontSize: 12, color: '#92400e' }}>لون الخلفية:</label>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {[
+                    { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+                    { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+                    { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+                    { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+                    { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+                    { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+                    { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+                  ].map((c) => (
+                    <button key={c.value} type="button" title={c.label}
+                      onClick={() => setReadingPassageBgColor(c.value)}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', border: `2px solid ${readingPassageBgColor === c.value ? '#3b82f6' : c.border}`,
+                        backgroundColor: c.bg, cursor: 'pointer', boxShadow: readingPassageBgColor === c.value ? '0 0 0 2px #93c5fd' : 'none',
+                      }} />
+                  ))}
+                  <input type="color" value={readingPassageBgColor || '#fefce8'}
+                    onChange={(e) => setReadingPassageBgColor(e.target.value)}
+                    title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+                </div>
+              </div>
+              <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                <RichTextEditor
+                  value={readingPassage}
+                  onChange={(html) => setReadingPassage(html)}
+                  placeholder="انسخ نص القراءة هنا... (اختياري - للأسئلة التي تحتاج فقرة مشتركة)"
+                />
+              </Suspense>
               <p style={{ margin: '6px 0 0', fontSize: 11, color: '#92400e' }}>
                 {readingPassage.trim() || readingCards.length > 0
                   ? 'جميع الأسئلة أدناه ستظهر تحت هذه الفقرة/البطاقات كتمرين واحد'
