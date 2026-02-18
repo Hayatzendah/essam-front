@@ -1785,7 +1785,7 @@ function ExamPage() {
                     <p className="text-[10px] sm:text-xs text-slate-500">
                       {hasExercises
                         ? `${currentSectionData.exercises.length} تمرين`
-                        : `${displayedItems.length} سؤال`}
+                        : `${displayedItems.filter(i => !i.contentOnly).length} سؤال`}
                       {activeSection.timeLimitMin > 0 && ` • ${activeSection.timeLimitMin} دقيقة`}
                     </p>
                   </div>
@@ -1903,11 +1903,14 @@ function ExamPage() {
               blockDist = { beforeMap, trailing: pending };
             }
 
+            let visibleQuestionCounter = 0;
             const items = displayedItems.map((item, displayIndex) => {
             // Get the global index for this item (for answers tracking); للعناصر من القسم (_fromSection) نستخدم مفتاحاً بالـ questionId
             const rawItemIndex = item._attemptIndex !== undefined ? item._attemptIndex : attempt.items.indexOf(item);
             const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
-            const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? displayIndex + 1 : rawItemIndex + 1;
+            // ✅ ترقيم الأسئلة بدون contentOnly
+            if (!item.contentOnly) visibleQuestionCounter++;
+            const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? visibleQuestionCounter : rawItemIndex + 1;
             const itemOverride = item._fromSection ? item : undefined;
 
             // ✅ في "كل الأسئلة": عرض صوت/قراءة التمرين فوق أول سؤال لكل تمرين
@@ -1952,7 +1955,18 @@ function ExamPage() {
             // ✅ إضافة itemIndex للتأكد من التفرد حتى لو كان questionId متكرراً
             const questionId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
             const uniqueKey = questionId ? `${questionId}-${itemIndex}` : `item-${itemIndex}`;
-            
+
+            // ✅ تخطي عرض أسئلة contentOnly كأسئلة (placeholder فقط) - نعرض بس content blocks
+            if (item.contentOnly) {
+              return (
+                <div key={uniqueKey}>
+                  {blockDist && blockDist.beforeMap[displayIndex] && (
+                    <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
+                  )}
+                </div>
+              );
+            }
+
             return (
               <div key={uniqueKey} className="space-y-4">
                 {/* بلوكات محتوى مدمجة قبل هذا السؤال (interleaving) */}
