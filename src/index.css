@@ -114,8 +114,30 @@ html {
   background: #64748b;
 }
 
-
-
-
+/* Rich text content from Quill editor - global styles */
+.rich-text-content p {
+  margin: 0 0 0.5em 0;
+}
+.rich-text-content p:last-child {
+  margin-bottom: 0;
+}
+.rich-text-content .ql-size-small {
+  font-size: 0.75em;
+}
+.rich-text-content .ql-size-large {
+  font-size: 1.5em;
+}
+.rich-text-content .ql-size-huge {
+  font-size: 2em;
+}
+.rich-text-content .ql-align-center {
+  text-align: center;
+}
+.rich-text-content .ql-align-right {
+  text-align: right;
+}
+.rich-text-content .ql-align-justify {
+  text-align: justify;
+}
 
 

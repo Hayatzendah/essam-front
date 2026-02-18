@@ -1,26 +1,50 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
+
+const RichTextEditor = lazy(() => import('./RichTextEditor'));
+
+const BG_PRESETS = [
+  { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+  { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+  { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+  { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+  { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+  { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+  { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+];
 
 // Intro Block Editor
 export const IntroBlockEditor = ({ block, onUpdate }) => {
+  const bgColor = block.data?.bgColor || '';
   return (
     <div style={{ padding: '16px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>لون الخلفية:</label>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {BG_PRESETS.map((c) => (
+            <button key={c.value} type="button" title={c.label}
+              onClick={() => onUpdate({ ...block, data: { ...block.data, bgColor: c.value } })}
+              style={{
+                width: 22, height: 22, borderRadius: '50%',
+                border: `2px solid ${bgColor === c.value ? '#3b82f6' : c.border}`,
+                backgroundColor: c.bg, cursor: 'pointer',
+                boxShadow: bgColor === c.value ? '0 0 0 2px #93c5fd' : 'none',
+              }} />
+          ))}
+          <input type="color" value={bgColor || '#fefce8'}
+            onChange={(e) => onUpdate({ ...block, data: { ...block.data, bgColor: e.target.value } })}
+            title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+        </div>
+      </div>
       <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
         النص / Text *
       </label>
-      <textarea
-        value={block.data?.text || ''}
-        onChange={(e) => onUpdate({ ...block, data: { ...block.data, text: e.target.value } })}
-        rows={4}
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          border: '1px solid #d1d5db',
-          borderRadius: '6px',
-          fontSize: '14px',
-          fontFamily: 'inherit',
-        }}
-        placeholder="اكتب النص هنا..."
-      />
+      <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+        <RichTextEditor
+          value={block.data?.text || ''}
+          onChange={(html) => onUpdate({ ...block, data: { ...block.data, text: html } })}
+          placeholder="اكتب النص هنا..."
+        />
+      </Suspense>
     </div>
   );
 };

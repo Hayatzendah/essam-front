@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getGrammarTopic } from '../../services/api';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 // Exercise Block Component
 const ExerciseBlock = ({ block }) => {
@@ -493,11 +494,14 @@ export default function GrammarTopicPage() {
       case "paragraph": // للتوافق مع البيانات القديمة
         const text = block.data?.text || "";
         if (!text.trim()) return null;
+        const bgColor = block.data?.bgColor || '#fefce8';
+        const borderColor = block.data?.bgColor ? `${block.data.bgColor}cc` : '#fde68a';
         return (
-          <div key={block.id} className="mb-6" dir="ltr">
-            <p className="text-base leading-relaxed text-slate-900 text-left whitespace-pre-wrap">
-              {text}
-            </p>
+          <div key={block.id} className="mb-6 rounded-xl p-3 sm:p-4" dir="ltr"
+               style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
+            <div className="text-base leading-relaxed text-slate-900 text-left rich-text-content"
+                 style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(text) }} />
           </div>
         );
 
