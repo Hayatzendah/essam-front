@@ -277,6 +277,7 @@ function BulkCreateQuestions() {
       ...(type === 'image' && { images: [] }),
       ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'horizontal' }),
       ...(type === 'questions' && { questionCount: 1 }),
+      ...(type === 'audio' && { audioUrl: null, audioFile: null, audioPreview: null }),
     };
     setContentBlocks(prev => [...prev, newBlock]);
   };
@@ -323,6 +324,29 @@ function BulkCreateQuestions() {
       setError('فشل رفع الصورة: ' + (err.response?.data?.message || err.message));
     } finally {
       setUploadingImages(false);
+    }
+  };
+
+  const handleUploadBlockAudio = async (blockIndex) => {
+    const block = contentBlocks[blockIndex];
+    if (!block || !block.audioFile) return;
+    setError('');
+    updateContentBlock(blockIndex, { _uploading: true });
+    try {
+      const token = localStorage.getItem('accessToken');
+      const fd = new FormData();
+      fd.append('file', block.audioFile);
+      if (examId) fd.append('examId', examId);
+      if (sectionKey) fd.append('sectionKey', sectionKey);
+      const res = await axios.post(`${API_BASE_URL}/listeningclips/upload-audio`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data', Authorization: token ? `Bearer ${token}` : '' },
+      });
+      if (block.audioPreview) URL.revokeObjectURL(block.audioPreview);
+      updateContentBlock(blockIndex, { audioUrl: res.data.audioUrl, audioFile: null, audioPreview: null, _uploading: false });
+      setSuccess('تم رفع الملف الصوتي بنجاح');
+    } catch (err) {
+      updateContentBlock(blockIndex, { _uploading: false });
+      setError('فشل رفع الملف الصوتي: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -403,13 +427,20 @@ function BulkCreateQuestions() {
     try {
       const payload = actualQuestions.map(buildQuestionPayload);
       const validCards = exerciseMode === 'reading' ? readingCards.filter(c => c.title.trim() && c.content.trim()) : [];
-      const sendClipId = (exerciseMode === 'audio' || exerciseMode === 'speaking') ? listeningClipId : null;
+      const sendClipId = exerciseMode === 'audio' ? listeningClipId : null;
       const validContentBlocks = exerciseMode === 'speaking' ? contentBlocks.filter(b => {
         if (b.type === 'paragraph') return b.text?.trim();
         if (b.type === 'image') return b.images?.length > 0;
         if (b.type === 'cards') return b.cards?.some(c => c.title?.trim() && c.texts?.some(t => t.content?.trim()));
         if (b.type === 'questions') return (b.questionCount || 0) > 0;
+        if (b.type === 'audio') return !!b.audioUrl;
         return false;
+      }).map(b => {
+        if (b.type === 'audio') {
+          const { audioFile, audioPreview, _uploading, ...rest } = b;
+          return rest;
+        }
+        return b;
       }) : [];
 
       // التحقق من وجود محتوى أو أسئلة
@@ -712,43 +743,6 @@ function BulkCreateQuestions() {
             </div>
           ) : exerciseMode === 'speaking' ? (
             <div style={{ padding: 16, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
-              {/* Audio section (optional for speaking) */}
-              <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8 }}>
-                <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#166534' }}>
-                  ملف صوتي (اختياري)
-                </label>
-                {listeningClipId ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#166534', fontWeight: 600, fontSize: 13 }}>✅ تم اختيار الصوت</span>
-                    <button type="button" onClick={handleRemoveClip}
-                      style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>
-                      ✕ إزالة
-                    </button>
-                  </div>
-                ) : !audioFile ? (
-                  <div>
-                    <input type="file" id="speakingAudioFile" accept="audio/*"
-                      onChange={(e) => { const file = e.target.files[0]; if (file) { setAudioFile(file); setAudioPreview(URL.createObjectURL(file)); } }}
-                      style={{ display: 'none' }} />
-                    <label htmlFor="speakingAudioFile" style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#22c55e', color: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                      🎵 اختر ملف صوتي
-                    </label>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 12 }}>🎵 {audioFile.name}</span>
-                      <button type="button" onClick={() => { setAudioFile(null); setAudioPreview(null); }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
-                    </div>
-                    {audioPreview && <audio controls preload="metadata" src={audioPreview} style={{ width: '100%', marginBottom: 6 }} />}
-                    <button type="button" onClick={handleUploadAudio} disabled={uploading}
-                      style={{ padding: '6px 16px', backgroundColor: uploading ? '#94a3b8' : '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
-                      {uploading ? 'جاري الرفع...' : '⬆️ رفع'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* Content Blocks */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <label style={{ fontWeight: 700, fontSize: 14, color: '#166534' }}>بلوكات المحتوى</label>
@@ -769,6 +763,10 @@ function BulkCreateQuestions() {
                     style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1e40af', cursor: 'pointer' }}>
                     + أسئلة
                   </button>
+                  <button type="button" onClick={() => addContentBlock('audio')}
+                    style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', backgroundColor: '#e0f2fe', color: '#0369a1', cursor: 'pointer' }}>
+                    + صوت
+                  </button>
                 </div>
               </div>
 
@@ -784,7 +782,7 @@ function BulkCreateQuestions() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
-                          {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : block.type === 'cards' ? '📋 بطاقات' : '❓ أسئلة'} #{bIdx + 1}
+                          {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : block.type === 'cards' ? '📋 بطاقات' : block.type === 'audio' ? '🎵 صوت' : '❓ أسئلة'} #{bIdx + 1}
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -964,6 +962,52 @@ function BulkCreateQuestions() {
                             );
                           })}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Audio Block */}
+                    {block.type === 'audio' && (
+                      <div style={{ padding: 12, backgroundColor: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 8 }}>
+                        {block.audioUrl ? (
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                              <span style={{ color: '#0369a1', fontWeight: 600, fontSize: 13 }}>✅ تم رفع الصوت</span>
+                              <button type="button" onClick={() => updateContentBlock(bIdx, { audioUrl: null })}
+                                style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>
+                                ✕ إزالة
+                              </button>
+                            </div>
+                            <audio controls preload="metadata"
+                              src={block.audioUrl.startsWith('http') ? block.audioUrl : `${API_BASE_URL}${block.audioUrl}`}
+                              style={{ width: '100%' }} />
+                          </div>
+                        ) : block.audioFile ? (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                              <span style={{ fontSize: 12 }}>🎵 {block.audioFile.name}</span>
+                              <button type="button" onClick={() => { if (block.audioPreview) URL.revokeObjectURL(block.audioPreview); updateContentBlock(bIdx, { audioFile: null, audioPreview: null }); }}
+                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                            </div>
+                            {block.audioPreview && <audio controls preload="metadata" src={block.audioPreview} style={{ width: '100%', marginBottom: 6 }} />}
+                            <button type="button" onClick={() => handleUploadBlockAudio(bIdx)} disabled={block._uploading}
+                              style={{ padding: '6px 16px', backgroundColor: block._uploading ? '#94a3b8' : '#0284c7', color: 'white', border: 'none', borderRadius: 6, cursor: block._uploading ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                              {block._uploading ? 'جاري الرفع...' : '⬆️ رفع الصوت'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <input type="file" id={`blockAudio-${bIdx}`} accept="audio/*"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) updateContentBlock(bIdx, { audioFile: file, audioPreview: URL.createObjectURL(file) });
+                              }}
+                              style={{ display: 'none' }} />
+                            <label htmlFor={`blockAudio-${bIdx}`}
+                              style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#0284c7', color: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                              🎵 اختر ملف صوتي
+                            </label>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

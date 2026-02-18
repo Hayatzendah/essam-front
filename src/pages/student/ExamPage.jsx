@@ -173,6 +173,22 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             </div>
           );
         }
+        if (block.type === 'audio') {
+          const audioSrc = block.audioUrl
+            ? (block.audioUrl.startsWith('http') ? block.audioUrl : toApiUrl(block.audioUrl))
+            : null;
+          if (!audioSrc) return null;
+          return (
+            <div key={idx} className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
+              <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">
+                🎵 ملف الاستماع
+              </span>
+              <audio controls controlsList="nodownload" preload="metadata" src={audioSrc} className="w-full">
+                المتصفح لا يدعم تشغيل الملفات الصوتية
+              </audio>
+            </div>
+          );
+        }
         return null;
       })}
     </div>
