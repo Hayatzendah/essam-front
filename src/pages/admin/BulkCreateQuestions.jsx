@@ -665,13 +665,13 @@ function BulkCreateQuestions() {
                             />
                           ))}
                         </div>
-                        <input
-                          type="text"
-                          value={card.title}
-                          onChange={(e) => updateReadingCard(idx, 'title', e.target.value)}
-                          placeholder="عنوان البطاقة (مثل: 1. Etage - Technik & Freizeit)"
-                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1px solid ${selectedColor.border}`, fontSize: 13, marginBottom: 6, boxSizing: 'border-box', backgroundColor: 'white' }}
-                        />
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <RichTextEditor
+                            value={card.title || ''}
+                            onChange={(html) => updateReadingCard(idx, 'title', html)}
+                            placeholder="عنوان البطاقة (مثل: 1. Etage - Technik & Freizeit)"
+                          />
+                        </Suspense>
                         <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
                           <RichTextEditor
                             value={card.content || ''}
@@ -903,9 +903,13 @@ function BulkCreateQuestions() {
                                       style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: c.bg, border: `2px solid ${card.color === c.key ? c.text : c.border}`, cursor: 'pointer' }} />
                                   ))}
                                 </div>
-                                <input type="text" value={card.title} onChange={(e) => updateCardInBlock(bIdx, cIdx, 'title', e.target.value)}
-                                  placeholder="عنوان البطاقة"
-                                  style={{ width: '100%', padding: '5px 8px', borderRadius: 4, border: `1px solid ${selColor.border}`, fontSize: 12, marginBottom: 6, boxSizing: 'border-box', backgroundColor: 'white' }} />
+                                <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                                  <RichTextEditor
+                                    value={card.title || ''}
+                                    onChange={(html) => updateCardInBlock(bIdx, cIdx, 'title', html)}
+                                    placeholder="عنوان البطاقة"
+                                  />
+                                </Suspense>
                                 {/* Multiple text entries */}
                                 {(card.texts || []).map((entry, tIdx) => (
                                   <div key={tIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'flex-start' }}>

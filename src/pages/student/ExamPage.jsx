@@ -79,9 +79,8 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
         const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
         return (
           <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left overflow-hidden`} style={{ minWidth: 0 }}>
-            <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words`}>
-              {card.title}
-            </h5>
+            <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words rich-text-content`}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.title || '') }} />
             <div className={`text-xs sm:text-sm ${color.content} leading-relaxed break-words rich-text-content`}
                style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
                dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.content || '') }} />
@@ -156,9 +155,8 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
                 const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[cardIdx % CARD_COLORS_LIST.length];
                 return (
                   <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left overflow-hidden`} style={{ minWidth: 0 }}>
-                    <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words`}>
-                      {card.title}
-                    </h5>
+                    <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 break-words rich-text-content`}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.title || '') }} />
                     {(card.texts || []).map((entry, ti) => (
                       <div key={ti} className="mb-1">
                         {entry.label && (
