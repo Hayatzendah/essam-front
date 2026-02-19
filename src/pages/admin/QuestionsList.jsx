@@ -258,10 +258,14 @@ function QuestionsList() {
 
             <div className="questions-grid">
               {questions.map((question) => (
-                <div key={question.id || question._id} className="question-card">
+                <div key={question.id || question._id} className={`question-card${question.contentOnly ? ' content-only-card' : ''}`}>
                   <div className="question-header">
                     <div className="question-meta">
-                      <span className="question-type">{getQuestionTypeLabel(question.qType)}</span>
+                      {question.contentOnly ? (
+                        <span className="question-type" style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>محتوى تعليمي</span>
+                      ) : (
+                        <span className="question-type">{getQuestionTypeLabel(question.qType)}</span>
+                      )}
                       <span className={`question-status status-${question.status}`}>
                         {getStatusLabel(question.status)}
                       </span>
@@ -295,10 +299,20 @@ function QuestionsList() {
 
                   <div className="question-body">
                     <p className="question-prompt">
-                      {question.prompt?.substring(0, 150)}
-                      {question.prompt?.length > 150 ? '...' : ''}
+                      {question.contentOnly ? (
+                        <span style={{ color: '#1e40af', fontStyle: 'italic' }}>
+                          {question.contentBlocks && question.contentBlocks.length > 0
+                            ? `📋 ${question.contentBlocks.length} بلوك محتوى (${question.contentBlocks.map(b => b.type === 'paragraph' ? 'فقرة' : b.type === 'image' ? 'صورة' : b.type === 'cards' ? 'بطاقات' : b.type === 'audio' ? 'صوت' : b.type).join('، ')})`
+                            : question.readingPassage ? '📖 فقرة قراءة' : '📋 محتوى تعليمي'}
+                        </span>
+                      ) : (
+                        <>
+                          {question.prompt?.substring(0, 150)}
+                          {question.prompt?.length > 150 ? '...' : ''}
+                        </>
+                      )}
                     </p>
-                    
+
                     <div className="question-details">
                       {question.provider && (
                         <span className="detail-badge">📦 {question.provider}</span>

@@ -299,6 +299,15 @@
   transform: scaleX(1);
 }
 
+.question-card.content-only-card {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.question-card.content-only-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+}
+
 .question-header {
   display: flex;
   justify-content: space-between;
