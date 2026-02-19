@@ -116,7 +116,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             <div key={idx} className="rounded-xl p-3 sm:p-4 text-left"
                  style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
               <div className="text-xs sm:text-sm text-slate-700 leading-relaxed rich-text-content"
-                   style={{ whiteSpace: 'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                   style={{ overflowWrap: 'break-word' }}
                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.text || '') }} />
             </div>
           );
