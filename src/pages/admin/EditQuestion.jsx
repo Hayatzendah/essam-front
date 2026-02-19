@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { questionsAPI } from '../../services/questionsAPI';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import axios from 'axios';
 import './CreateQuestion.css';
+
+const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
 
 // API Base URL
 const API_BASE_URL = 'https://api.deutsch-tests.com';
@@ -205,6 +208,11 @@ function EditQuestion() {
   const [audioPreview, setAudioPreview] = useState(null);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+
+  // Content-only question state
+  const [isContentOnly, setIsContentOnly] = useState(false);
+  const [contentBlocks, setContentBlocks] = useState([]);
+  const [savingContent, setSavingContent] = useState(false);
 
   // قائمة الولايات الألمانية
   const germanStates = [
@@ -459,6 +467,12 @@ function EditQuestion() {
         minSeconds: question.minSeconds || '',
         maxSeconds: question.maxSeconds || '',
       });
+
+      // إذا كان السؤال contentOnly (محتوى تعليمي فقط)
+      if (question.contentOnly) {
+        setIsContentOnly(true);
+        setContentBlocks(question.contentBlocks || []);
+      }
 
       // إذا كان هناك media (صوت)
       if (question.media && question.media.type === 'audio') {
@@ -1169,6 +1183,251 @@ function EditQuestion() {
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <div className="loading-spinner" style={{ margin: '0 auto 20px' }}></div>
             <p>جاري تحميل بيانات السؤال...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ محرر المحتوى التعليمي (contentOnly)
+  if (isContentOnly) {
+    const updateBlock = (idx, updates) => {
+      setContentBlocks(prev => prev.map((b, i) => i === idx ? { ...b, ...updates } : b));
+    };
+    const handleSaveContent = async () => {
+      setSavingContent(true);
+      setError('');
+      try {
+        await questionsAPI.update(id, { contentBlocks });
+        setSuccess('تم حفظ المحتوى بنجاح');
+      } catch (err) {
+        setError('فشل حفظ المحتوى: ' + (err.response?.data?.message || err.message));
+      } finally {
+        setSavingContent(false);
+      }
+    };
+    const handleUploadBlockAudio = async (blockIndex) => {
+      const block = contentBlocks[blockIndex];
+      if (!block || !block._audioFile) return;
+      updateBlock(blockIndex, { _uploading: true });
+      try {
+        const token = localStorage.getItem('accessToken');
+        const fd = new FormData();
+        fd.append('file', block._audioFile);
+        const res = await axios.post(`${API_BASE_URL}/listeningclips/upload-audio`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data', Authorization: token ? `Bearer ${token}` : '' },
+        });
+        if (block._audioPreview) URL.revokeObjectURL(block._audioPreview);
+        updateBlock(blockIndex, { audioUrl: res.data.audioUrl, _audioFile: null, _audioPreview: null, _uploading: false });
+        setSuccess('تم رفع الصوت بنجاح');
+      } catch (err) {
+        updateBlock(blockIndex, { _uploading: false });
+        setError('فشل رفع الصوت: ' + (err.response?.data?.message || err.message));
+      }
+    };
+    const addBlock = (type) => {
+      setContentBlocks(prev => [...prev, {
+        type,
+        order: prev.length,
+        ...(type === 'paragraph' && { text: '' }),
+        ...(type === 'image' && { images: [] }),
+        ...(type === 'audio' && { audioUrl: null }),
+        ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'horizontal' }),
+      }]);
+    };
+    const removeBlock = (idx) => {
+      setContentBlocks(prev => prev.filter((_, i) => i !== idx).map((b, i) => ({ ...b, order: i })));
+    };
+    const moveBlock = (idx, dir) => {
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= contentBlocks.length) return;
+      setContentBlocks(prev => {
+        const copy = [...prev];
+        [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
+        return copy.map((b, i) => ({ ...b, order: i }));
+      });
+    };
+
+    const BG_PRESETS = [
+      { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+      { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+      { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+      { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+      { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+      { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+      { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+    ];
+
+    return (
+      <div className="create-question-page">
+        <div className="page-header">
+          <button onClick={() => navigate('/admin/questions')} className="back-btn">← العودة</button>
+          <h1>تعديل المحتوى التعليمي</h1>
+        </div>
+        <div className="create-question-container">
+          {error && <div className="error-message">{error}</div>}
+          {success && <div className="success-message">{success}</div>}
+
+          <div style={{ padding: 16, backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <label style={{ fontWeight: 700, fontSize: 15, color: '#1e40af' }}>بلوكات المحتوى</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => addBlock('paragraph')}
+                  style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #fde68a', backgroundColor: '#fffbeb', color: '#92400e', cursor: 'pointer' }}>+ فقرة</button>
+                <button type="button" onClick={() => addBlock('audio')}
+                  style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', backgroundColor: '#e0f2fe', color: '#0369a1', cursor: 'pointer' }}>+ صوت</button>
+                <button type="button" onClick={() => addBlock('cards')}
+                  style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #99f6e4', backgroundColor: '#f0fdfa', color: '#134e4a', cursor: 'pointer' }}>+ بطاقات</button>
+              </div>
+            </div>
+
+            {contentBlocks.length === 0 && (
+              <p style={{ fontSize: 13, color: '#1e40af', textAlign: 'center', padding: 20, backgroundColor: '#dbeafe', borderRadius: 8 }}>
+                لا يوجد محتوى. أضف فقرات أو صوت أو بطاقات.
+              </p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {contentBlocks.map((block, bIdx) => (
+                <div key={bIdx} style={{ border: '1px solid #d1d5db', borderRadius: 8, padding: 12, backgroundColor: 'white' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
+                      {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : block.type === 'cards' ? '📋 بطاقات' : block.type === 'audio' ? '🎵 صوت' : block.type} #{bIdx + 1}
+                    </span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button type="button" onClick={() => moveBlock(bIdx, -1)} disabled={bIdx === 0}
+                        style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4, cursor: bIdx === 0 ? 'not-allowed' : 'pointer', backgroundColor: 'white', opacity: bIdx === 0 ? 0.4 : 1 }}>▲</button>
+                      <button type="button" onClick={() => moveBlock(bIdx, 1)} disabled={bIdx === contentBlocks.length - 1}
+                        style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4, cursor: bIdx === contentBlocks.length - 1 ? 'not-allowed' : 'pointer', backgroundColor: 'white', opacity: bIdx === contentBlocks.length - 1 ? 0.4 : 1 }}>▼</button>
+                      <button type="button" onClick={() => removeBlock(bIdx)}
+                        style={{ padding: '2px 8px', fontSize: 11, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}>حذف</button>
+                    </div>
+                  </div>
+
+                  {/* Paragraph Block */}
+                  {block.type === 'paragraph' && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <label style={{ fontSize: 12, color: '#555' }}>لون الخلفية:</label>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {BG_PRESETS.map((c) => (
+                            <button key={c.value} type="button" title={c.label}
+                              onClick={() => updateBlock(bIdx, { bgColor: c.value })}
+                              style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${(block.bgColor || '') === c.value ? '#3b82f6' : c.border}`, backgroundColor: c.bg, cursor: 'pointer', boxShadow: (block.bgColor || '') === c.value ? '0 0 0 2px #93c5fd' : 'none' }} />
+                          ))}
+                        </div>
+                      </div>
+                      <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                        <RichTextEditor value={block.text || ''} onChange={(html) => updateBlock(bIdx, { text: html })} placeholder="اكتب الفقرة هنا..." />
+                      </Suspense>
+                    </div>
+                  )}
+
+                  {/* Image Block */}
+                  {block.type === 'image' && (
+                    <div>
+                      {(block.images || []).length > 0 ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                          {block.images.map((img, imgIdx) => (
+                            <img key={imgIdx} src={img.url?.startsWith('http') ? img.url : `${API_BASE_URL}${img.url}`}
+                              alt={img.description || ''} style={{ width: '100%', borderRadius: 6, border: '1px solid #e5e7eb' }} />
+                          ))}
+                        </div>
+                      ) : <p style={{ fontSize: 12, color: '#999' }}>لا توجد صور</p>}
+                    </div>
+                  )}
+
+                  {/* Audio Block */}
+                  {block.type === 'audio' && (
+                    <div style={{ padding: 12, backgroundColor: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 8 }}>
+                      {block.audioUrl ? (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ color: '#0369a1', fontWeight: 600, fontSize: 13 }}>✅ ملف صوتي</span>
+                            <button type="button" onClick={() => updateBlock(bIdx, { audioUrl: null })}
+                              style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>✕ إزالة</button>
+                          </div>
+                          <audio controls preload="metadata" src={block.audioUrl.startsWith('http') ? block.audioUrl : `${API_BASE_URL}${block.audioUrl}`} style={{ width: '100%' }} />
+                        </div>
+                      ) : block._audioFile ? (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 12 }}>🎵 {block._audioFile.name}</span>
+                            <button type="button" onClick={() => { if (block._audioPreview) URL.revokeObjectURL(block._audioPreview); updateBlock(bIdx, { _audioFile: null, _audioPreview: null }); }}
+                              style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                          </div>
+                          {block._audioPreview && <audio controls preload="metadata" src={block._audioPreview} style={{ width: '100%', marginBottom: 6 }} />}
+                          <button type="button" onClick={() => handleUploadBlockAudio(bIdx)} disabled={block._uploading}
+                            style={{ padding: '6px 16px', backgroundColor: block._uploading ? '#94a3b8' : '#0284c7', color: 'white', border: 'none', borderRadius: 6, cursor: block._uploading ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            {block._uploading ? 'جاري الرفع...' : '⬆️ رفع الصوت'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <input type="file" id={`editBlockAudio-${bIdx}`} accept="audio/*"
+                            onChange={(e) => { const file = e.target.files[0]; if (file) updateBlock(bIdx, { _audioFile: file, _audioPreview: URL.createObjectURL(file) }); }}
+                            style={{ display: 'none' }} />
+                          <label htmlFor={`editBlockAudio-${bIdx}`}
+                            style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#0284c7', color: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🎵 اختر ملف صوتي</label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cards Block */}
+                  {block.type === 'cards' && (
+                    <div>
+                      <button type="button" onClick={() => updateBlock(bIdx, { cards: [...(block.cards || []), { title: '', texts: [{ label: '', content: '' }], color: '' }] })}
+                        style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #16a34a', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', marginBottom: 8 }}>+ بطاقة</button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {(block.cards || []).map((card, cIdx) => (
+                          <div key={cIdx} style={{ padding: 10, backgroundColor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#134e4a' }}>بطاقة {cIdx + 1}</span>
+                              <button type="button" onClick={() => updateBlock(bIdx, { cards: (block.cards || []).filter((_, i) => i !== cIdx) })}
+                                style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, padding: '1px 6px', fontSize: 10, cursor: 'pointer' }}>حذف</button>
+                            </div>
+                            <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                              <RichTextEditor value={card.title || ''} onChange={(html) => {
+                                const cards = [...(block.cards || [])]; cards[cIdx] = { ...cards[cIdx], title: html };
+                                updateBlock(bIdx, { cards });
+                              }} placeholder="عنوان البطاقة" />
+                            </Suspense>
+                            {(card.texts || []).map((entry, tIdx) => (
+                              <div key={tIdx} style={{ marginTop: 4 }}>
+                                <input type="text" value={entry.label || ''} onChange={(e) => {
+                                  const cards = [...(block.cards || [])]; const texts = [...(cards[cIdx].texts || [])];
+                                  texts[tIdx] = { ...texts[tIdx], label: e.target.value }; cards[cIdx] = { ...cards[cIdx], texts };
+                                  updateBlock(bIdx, { cards });
+                                }} placeholder="عنوان فرعي (اختياري)" style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid #99f6e4', fontSize: 11, marginBottom: 2, boxSizing: 'border-box' }} />
+                                <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                                  <RichTextEditor value={entry.content || ''} onChange={(html) => {
+                                    const cards = [...(block.cards || [])]; const texts = [...(cards[cIdx].texts || [])];
+                                    texts[tIdx] = { ...texts[tIdx], content: html }; cards[cIdx] = { ...cards[cIdx], texts };
+                                    updateBlock(bIdx, { cards });
+                                  }} placeholder="محتوى..." />
+                                </Suspense>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+              <button type="button" onClick={handleSaveContent} disabled={savingContent}
+                style={{ padding: '10px 24px', backgroundColor: savingContent ? '#94a3b8' : '#3b82f6', color: 'white', border: 'none', borderRadius: 8, cursor: savingContent ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 600 }}>
+                {savingContent ? 'جاري الحفظ...' : '💾 حفظ التعديلات'}
+              </button>
+              <button type="button" onClick={() => navigate('/admin/questions')}
+                style={{ padding: '10px 24px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                إلغاء
+              </button>
+            </div>
           </div>
         </div>
       </div>
