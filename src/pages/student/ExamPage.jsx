@@ -29,6 +29,20 @@ const safePromptString = (val) => {
   }
 };
 
+// ✅ عرض نص القراءة: HTML من Quill أو نص عادي (legacy)
+const ReadingPassageContent = ({ text }) => {
+  if (!text) return null;
+  const isHtml = /<[a-z][\s\S]*?>/i.test(text);
+  if (isHtml) {
+    return (
+      <div className="rich-text-content"
+           style={{ overflowWrap: 'break-word' }}
+           dangerouslySetInnerHTML={{ __html: sanitizeHtml(text) }} />
+    );
+  }
+  return <div style={{ whiteSpace: 'pre-line' }}>{text}</div>;
+};
+
 // ✅ تحويل الخيارات إلى مصفوفة نصوص بأمان
 const safeOptionsArray = (item) => {
   if (!item) return [];
@@ -1776,11 +1790,8 @@ function ExamPage() {
                 <h3 className="text-sm sm:text-base font-bold text-amber-800 mb-2 sm:mb-3 flex items-center gap-2">
                   📖 نص القراءة {attempt.readingText.teil && `(Teil ${attempt.readingText.teil})`}
                 </h3>
-                <div
-                  className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100"
-                  style={{ whiteSpace: 'pre-line' }}
-                >
-                  {attempt.readingText.content}
+                <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100">
+                  <ReadingPassageContent text={attempt.readingText.content} />
                 </div>
               </div>
             )}
@@ -1863,9 +1874,8 @@ function ExamPage() {
                     <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
                       📖 نص القراءة
                     </h4>
-                    <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100"
-                      style={{ whiteSpace: 'pre-line' }}>
-                      {selectedExercise.readingPassage}
+                    <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100">
+                      <ReadingPassageContent text={selectedExercise.readingPassage} />
                     </div>
                   </div>
                 )}
@@ -2002,8 +2012,8 @@ function ExamPage() {
                     {exerciseInfo.readingPassage && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                         <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2">📖 نص القراءة</h4>
-                        <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 border border-amber-100" style={{ whiteSpace: 'pre-line' }}>
-                          {exerciseInfo.readingPassage}
+                        <div className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-white rounded-lg p-3 border border-amber-100">
+                          <ReadingPassageContent text={exerciseInfo.readingPassage} />
                         </div>
                       </div>
                     )}
