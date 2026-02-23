@@ -70,16 +70,17 @@ const safeOptionsArray = (item) => {
   return [];
 };
 
-// ✅ ألوان بطاقات القراءة (Lesen cards) - mapped by key
+// ✅ ألوان بطاقات القراءة (Lesen cards) - الخلفية والحد فقط؛ النص الافتراضي أسود
 const CARD_COLORS_MAP = {
-  teal: { bg: 'bg-teal-50', border: 'border-teal-200', title: 'text-teal-900', content: 'text-teal-800' },
-  sky: { bg: 'bg-sky-50', border: 'border-sky-200', title: 'text-sky-900', content: 'text-sky-800' },
-  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', title: 'text-emerald-900', content: 'text-emerald-800' },
-  violet: { bg: 'bg-violet-50', border: 'border-violet-200', title: 'text-violet-900', content: 'text-violet-800' },
-  rose: { bg: 'bg-rose-50', border: 'border-rose-200', title: 'text-rose-900', content: 'text-rose-800' },
-  amber: { bg: 'bg-amber-50', border: 'border-amber-200', title: 'text-amber-900', content: 'text-amber-800' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-200', title: 'text-orange-900', content: 'text-orange-800' },
-  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', title: 'text-indigo-900', content: 'text-indigo-800' },
+  teal: { bg: 'bg-teal-50', border: 'border-teal-200', title: 'text-black', content: 'text-black' },
+  sky: { bg: 'bg-sky-50', border: 'border-sky-200', title: 'text-black', content: 'text-black' },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', title: 'text-black', content: 'text-black' },
+  violet: { bg: 'bg-violet-50', border: 'border-violet-200', title: 'text-black', content: 'text-black' },
+  rose: { bg: 'bg-rose-50', border: 'border-rose-200', title: 'text-black', content: 'text-black' },
+  amber: { bg: 'bg-amber-50', border: 'border-amber-200', title: 'text-black', content: 'text-black' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-200', title: 'text-black', content: 'text-black' },
+  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', title: 'text-black', content: 'text-black' },
+  gray: { bg: 'bg-gray-100', border: 'border-gray-200', title: 'text-black', content: 'text-black' },
 };
 const CARD_COLORS_LIST = Object.values(CARD_COLORS_MAP);
 

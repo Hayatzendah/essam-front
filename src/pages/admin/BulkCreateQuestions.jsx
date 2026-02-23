@@ -268,6 +268,7 @@ function BulkCreateQuestions() {
     { key: 'amber', label: 'ذهبي', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
     { key: 'orange', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
     { key: 'indigo', label: 'نيلي', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+    { key: 'gray', label: 'رمادي', bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
   ];
 
   const addContentBlock = (type) => {
@@ -691,6 +692,7 @@ function BulkCreateQuestions() {
                       { key: 'amber', label: 'ذهبي', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
                       { key: 'orange', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
                       { key: 'indigo', label: 'نيلي', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+                      { key: 'gray', label: 'رمادي', bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
                     ];
                     const selectedColor = ADMIN_CARD_COLORS.find(c => c.key === card.color) || ADMIN_CARD_COLORS[idx % ADMIN_CARD_COLORS.length];
                     return (
@@ -725,17 +727,19 @@ function BulkCreateQuestions() {
                           ))}
                         </div>
                         <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
-                          <RichTextEditor
+                          <SimpleHtmlEditor
                             value={card.title || ''}
                             onChange={(html) => updateReadingCard(idx, 'title', html)}
                             placeholder="عنوان البطاقة (مثل: 1. Etage - Technik & Freizeit)"
+                            dir="ltr"
                           />
                         </Suspense>
                         <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
-                          <RichTextEditor
+                          <SimpleHtmlEditor
                             value={card.content || ''}
                             onChange={(html) => updateReadingCard(idx, 'content', html)}
                             placeholder="محتوى البطاقة..."
+                            dir="ltr"
                           />
                         </Suspense>
                       </div>
@@ -931,10 +935,11 @@ function BulkCreateQuestions() {
                                   ))}
                                 </div>
                                 <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
-                                  <RichTextEditor
+                                  <SimpleHtmlEditor
                                     value={card.title || ''}
                                     onChange={(html) => updateCardInBlock(bIdx, cIdx, 'title', html)}
                                     placeholder="عنوان البطاقة"
+                                    dir="ltr"
                                   />
                                 </Suspense>
                                 {/* Multiple text entries */}
@@ -945,10 +950,11 @@ function BulkCreateQuestions() {
                                         placeholder="عنوان فرعي (اختياري)"
                                         style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: `1px solid ${selColor.border}`, fontSize: 11, marginBottom: 2, boxSizing: 'border-box', backgroundColor: 'white' }} />
                                       <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
-                                        <RichTextEditor
+                                        <SimpleHtmlEditor
                                           value={entry.content || ''}
                                           onChange={(html) => updateCardText(bIdx, cIdx, tIdx, 'content', html)}
                                           placeholder="محتوى..."
+                                          dir="ltr"
                                         />
                                       </Suspense>
                                     </div>

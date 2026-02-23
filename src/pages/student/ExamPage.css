@@ -523,6 +523,8 @@ input[type="text"].inline-block {
   overflow: visible !important;
   max-width: 100%;
   display: block;
+  /* النص الافتراضي أسود؛ النص اللي له لون في المحرر يبقى بلونه (inline style يتغلّب) */
+  color: #000;
 }
 
 /* إظهار كامل نص البطاقة (Frage/Antwort) — منع أي قص */
