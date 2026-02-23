@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getSchreibenTasks, getSchreibenTask, checkSchreibenField } from '../../services/api';
+import './SchreibenPage.css';
 
 // Provider labels mapping
 const providerLabels = {
@@ -234,7 +235,8 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
             value={value}
             onChange={(e) => handleFieldChange(blockIndex, fieldIndex, e.target.value)}
             placeholder={field.placeholder || 'اكتب هنا...'}
-            className="w-full min-h-[150px] p-4 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:outline-none focus:border-blue-500 transition-colors"
+            rows={1}
+            className="schreiben-form-textinput w-full p-3 py-2.5 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:outline-none focus:border-blue-500 transition-colors"
             dir="ltr"
           />
         );

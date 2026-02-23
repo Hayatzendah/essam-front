@@ -1,0 +1,6 @@
+/* حقول الكتابة في استبيان Schreiben: ارتفاع مضغوط مثل الحقول المملوءة */
+.schreiben-form-textinput {
+  height: 44px !important;
+  min-height: 44px !important;
+  box-sizing: border-box;
+}
