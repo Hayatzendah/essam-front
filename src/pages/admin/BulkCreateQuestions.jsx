@@ -4,6 +4,7 @@ import { examsAPI } from '../../services/examsAPI';
 import axios from 'axios';
 
 const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
+const SimpleHtmlEditor = lazy(() => import('../../components/SimpleHtmlEditor'));
 
 const API_BASE_URL = 'https://api.deutsch-tests.com';
 
@@ -453,7 +454,8 @@ function BulkCreateQuestions() {
         exerciseMode === 'reading' ? readingPassage.trim() || null : null,
         validCards.length > 0 ? validCards : null,
         validCards.length > 0 ? cardsLayout : null,
-        validContentBlocks.length > 0 ? validContentBlocks : null
+        validContentBlocks.length > 0 ? validContentBlocks : null,
+        exerciseMode === 'reading' ? (readingPassageBgColor?.trim() || null) : null
       );
       setResults(result);
       const msg = payload.length > 0
@@ -609,10 +611,11 @@ function BulkCreateQuestions() {
                 </div>
               </div>
               <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
-                <RichTextEditor
+                <SimpleHtmlEditor
                   value={readingPassage}
-                  onChange={(html) => setReadingPassage(html)}
-                  placeholder="انسخ نص القراءة هنا... (اختياري - للأسئلة التي تحتاج فقرة مشتركة)"
+                  onChange={(html) => setReadingPassage(html || '')}
+                  placeholder="انسخ نص القراءة هنا من الوورد... (المحاذاة وحجم الخط ستُحفظ)"
+                  dir="ltr"
                 />
               </Suspense>
               <p style={{ margin: '6px 0 0', fontSize: 11, color: '#92400e' }}>
@@ -823,10 +826,11 @@ function BulkCreateQuestions() {
                           </div>
                         </div>
                         <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
-                          <RichTextEditor
+                          <SimpleHtmlEditor
                             value={block.text || ''}
                             onChange={(html) => updateContentBlock(bIdx, { text: html })}
-                            placeholder="اكتب الفقرة هنا..."
+                            placeholder="اكتب الفقرة أو الصق من الوورد (المحاذاة وحجم الخط تُحفظ)"
+                            dir="ltr"
                           />
                         </Suspense>
                       </div>

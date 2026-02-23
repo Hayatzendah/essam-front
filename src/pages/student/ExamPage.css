@@ -1,8 +1,4 @@
-.exam-page {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
-}
+/* exam-page: صنف للقواعد فقط (منع كسر الكلمات) — لا نغيّر الخلفية أو التخطيط */
 
 .loading-container,
 .error-container {
@@ -349,35 +345,208 @@ input[type="text"].inline-block {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
 
-/* Rich text content from Quill editor */
-.rich-text-content p {
+/* Rich text content from Quill editor and Word (نص القراءة) */
+/* ✅ base styles — inline styles from Word/Quill have higher specificity and will override these */
+.rich-text-content {
+  font-size: 0.875rem;
+  /* 14px base — overridden by inline font-size from Word */
+  color: #334155;
+  /* slate-700 base — overridden by inline color from Word */
+  line-height: 1.625;
+}
+
+.rich-text-content p,
+.rich-text-content div {
   margin: 0 0 0.5em 0;
 }
-.rich-text-content p:last-child {
+
+.rich-text-content p:last-child,
+.rich-text-content div:last-child {
   margin-bottom: 0;
 }
+
+/* ✅ Preserve inline text-align from Word — ensure it's not overridden */
+.rich-text-content [style*="text-align"] {
+  text-align: inherit;
+}
+
+/* ضمان ظهور كتل الوورد (div) وتنسيقات المحاذاة وحجم الخط من style المضمن */
+.exam-reading-content .rich-text-content div,
+.exam-passage-text div {
+  display: block;
+}
+
+/* Quill size classes — ضمان عمل أحجام الخط في كل مكان */
+.ql-size-small {
+  font-size: 0.75em !important;
+}
+
+.ql-size-large {
+  font-size: 1.5em !important;
+}
+
+.ql-size-huge {
+  font-size: 2em !important;
+}
+
 .rich-text-content .ql-size-small {
-  font-size: 0.75em;
+  font-size: 0.75em !important;
 }
+
 .rich-text-content .ql-size-large {
-  font-size: 1.5em;
+  font-size: 1.5em !important;
 }
+
 .rich-text-content .ql-size-huge {
-  font-size: 2em;
+  font-size: 2em !important;
 }
-/* Quill alignment classes */
+
+/* Quill alignment classes — ضمان عمل المحاذاة في كل مكان */
+.ql-align-center {
+  text-align: center !important;
+}
+
+.ql-align-right {
+  text-align: right !important;
+}
+
+.ql-align-left {
+  text-align: left !important;
+}
+
+.ql-align-justify {
+  text-align: justify !important;
+}
+
 .rich-text-content .ql-align-center {
-  text-align: center;
+  text-align: center !important;
 }
+
 .rich-text-content .ql-align-right {
-  text-align: right;
+  text-align: right !important;
 }
+
 .rich-text-content .ql-align-justify {
-  text-align: justify;
+  text-align: justify !important;
+}
+
+/* محاذاة من الوورد: صنف نضيفه من align أو من style — أولوية عالية */
+.rich-text-content [align="center"],
+.exam-passage-text [align="center"],
+.rich-text-content .align-center,
+.exam-passage-text .align-center {
+  text-align: center !important;
+}
+.rich-text-content [align="right"],
+.exam-passage-text [align="right"],
+.rich-text-content .align-right,
+.exam-passage-text .align-right {
+  text-align: right !important;
+}
+.rich-text-content [align="justify"],
+.exam-passage-text [align="justify"],
+.rich-text-content .align-justify,
+.exam-passage-text .align-justify {
+  text-align: justify !important;
+}
+/* عدم فرض محاذاة على الحاوية حتى يتحكم المحتوى */
+.rich-text-content.exam-passage-text {
+  text-align: inherit;
+}
+.rich-text-content.exam-passage-text > * {
+  display: block;
+}
+
+/* منع كسر الكلمات في منتصفها — الكلمة تنتقل كاملةً للسطر التالي */
+/* hyphens: none يمنع كسر: El-Mansouri, Kfz-Mechatroniker, U-Bahn */
+.exam-page .rich-text-content,
+.exam-page .exam-passage-text,
+.exam-page .question-text,
+.exam-page .question-body,
+.exam-page .exam-question-card,
+.exam-page .exam-question-card h3,
+.exam-page .exam-question-card p,
+.exam-page [class*="text-slate"] .rich-text-content,
+.exam-reading-content,
+.exam-reading-content .rich-text-content,
+.exam-reading-content .exam-passage-text,
+.exam-card-content .rich-text-content {
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  white-space: normal !important;
+  hyphens: none !important;
+}
+
+/* حاوية نص القراءة: إظهار النص كاملاً بدون قص */
+.reading-text-card {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+.exam-reading-content {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  max-height: none !important;
+  min-height: 4em;
+  box-sizing: border-box;
+}
+
+/* شبكة البطاقات: عدم قص النص — إظهار كل المحتوى */
+.exam-cards-grid {
+  overflow: visible;
+}
+
+.exam-cards-grid .exam-card-content {
+  overflow: visible;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* بطاقات القراءة والمحتوى: عدم قص النص — إظهار كامل الكلمات */
+.exam-card-content {
+  overflow: visible;
+  min-width: 0;
+}
+
+.exam-card-content .rich-text-content,
+.exam-card-content .exam-card-entry-content {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  hyphens: none !important;
+  overflow: visible !important;
+  max-width: 100%;
+  display: block;
+}
+
+/* إظهار كامل نص البطاقة (Frage/Antwort) — منع أي قص */
+.exam-card-entry,
+.exam-card-entry-content,
+.exam-card-entry-content p {
+  overflow: visible !important;
+  max-height: none !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+/* عمود المحتوى الرئيسي: منع تجاوز الحدود أفقياً */
+.exam-main-content {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+/* إجبار كل العناصر المباشرة داخل العمود على الالتزام بعرض 100% */
+.exam-main-content>* {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ========== Mobile Responsive ========== */

@@ -140,4 +140,29 @@ html {
   text-align: justify;
 }
 
+/* منع كسر الكلمات في منتصفها — عرض الفقرات كما كُتبت (لا وصل تلقائي عند الشرطة) */
+.rich-text-content {
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+}
+
+/* ===== صفحة الامتحان (الطالب): منع قص النص وإظهار كل المحتوى ===== */
+.exam-page .exam-cards-grid,
+.exam-page .exam-card-content,
+.exam-page .exam-card-entry,
+.exam-page .exam-card-entry-content,
+.exam-page .exam-reading-content {
+  overflow: visible !important;
+}
+.exam-page .exam-card-entry-content,
+.exam-page .exam-card-content .rich-text-content {
+  max-height: none !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+.exam-page .rich-text-content p {
+  overflow: visible !important;
+}
+
 

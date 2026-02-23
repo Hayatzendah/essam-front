@@ -6,6 +6,7 @@ import axios from 'axios';
 import './CreateQuestion.css';
 
 const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
+const SimpleHtmlEditor = lazy(() => import('../../components/SimpleHtmlEditor'));
 
 // API Base URL
 const API_BASE_URL = 'https://api.deutsch-tests.com';
@@ -1318,7 +1319,7 @@ function EditQuestion() {
                         </div>
                       </div>
                       <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
-                        <RichTextEditor value={block.text || ''} onChange={(html) => updateBlock(bIdx, { text: html })} placeholder="اكتب الفقرة هنا..." />
+                        <SimpleHtmlEditor value={block.text || ''} onChange={(html) => updateBlock(bIdx, { text: html })} placeholder="اكتب الفقرة أو الصق من الوورد (المحاذاة وحجم الخط تُحفظ)" dir="ltr" />
                       </Suspense>
                     </div>
                   )}
