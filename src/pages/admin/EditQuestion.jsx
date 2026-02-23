@@ -472,7 +472,12 @@ function EditQuestion() {
       // إذا كان السؤال contentOnly (محتوى تعليمي فقط)
       if (question.contentOnly) {
         setIsContentOnly(true);
-        setContentBlocks(question.contentBlocks || []);
+      }
+      // تحميل بلوكات المحتوى (فقرة/صوت/بطاقات) سواء السؤال contentOnly أو سؤال عادي له فقرة قراءة
+      if (question.contentBlocks && Array.isArray(question.contentBlocks) && question.contentBlocks.length > 0) {
+        setContentBlocks(question.contentBlocks);
+      } else {
+        setContentBlocks([]);
       }
 
       // إذا كان هناك media (صوت)
