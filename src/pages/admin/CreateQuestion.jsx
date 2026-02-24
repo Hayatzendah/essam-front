@@ -1504,7 +1504,7 @@ function CreateQuestion() {
     } else if (questionData.qType === 'interactive_text') {
       // Interactive Text: إرسال prompt و interactiveText
       if (questionData.prompt?.trim()) {
-        data.prompt = questionData.prompt.trim();
+        data.prompt = questionData.prompt.trimStart(); /* الاحتفاظ بالأسطر الفارغة تحت السؤال */
       }
 
       // إرسال النوع الفرعي

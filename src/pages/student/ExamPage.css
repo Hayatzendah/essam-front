@@ -537,6 +537,15 @@ input[type="text"].inline-block {
   white-space: normal !important;
 }
 
+/* أسئلة النص التفاعلي (فراغات متعددة): تباعد واضح بين النص والقوائم المنسدلة */
+.interactive-text-blanks .flex-wrap {
+  word-spacing: 0.02em;
+}
+.interactive-text-blanks select,
+.interactive-text-blanks input[type="text"] {
+  vertical-align: middle;
+}
+
 /* عمود المحتوى الرئيسي: منع تجاوز الحدود أفقياً */
 .exam-main-content {
   min-width: 0;

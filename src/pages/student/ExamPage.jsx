@@ -1788,9 +1788,6 @@ function ExamPage() {
                 {/* نص القراءة - يظهر مرة واحدة فوق الأسئلة */}
                 {attempt.readingText && (
                   <div className="reading-text-card bg-amber-50 border border-amber-200 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
-                    <h3 className="text-sm sm:text-base font-bold text-amber-800 mb-2 sm:mb-3 flex items-center gap-2">
-                      📖 نص القراءة {attempt.readingText.teil && `(Teil ${attempt.readingText.teil})`}
-                    </h3>
                     <div className="exam-reading-content leading-relaxed bg-white rounded-lg p-3 sm:p-4 border border-amber-100" dir="ltr">
                       <ReadingPassageContent text={attempt.readingText.content} />
                     </div>
@@ -1878,9 +1875,6 @@ function ExamPage() {
                           borderColor: selectedExercise.readingPassageBgColor ? `${selectedExercise.readingPassageBgColor}cc` : '#fde68a',
                         }}
                       >
-                        <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
-                          📖 نص القراءة
-                        </h4>
                         <div className="exam-reading-content leading-relaxed rounded-lg p-3 sm:p-4" dir="ltr">
                           <ReadingPassageContent text={selectedExercise.readingPassage} />
                         </div>
@@ -2024,7 +2018,6 @@ function ExamPage() {
                                         borderColor: exerciseInfo.readingPassageBgColor ? `${exerciseInfo.readingPassageBgColor}cc` : '#fde68a',
                                       }}
                                     >
-                                      <h4 className="text-xs sm:text-sm font-bold text-amber-800 mb-2">📖 نص القراءة</h4>
                                       <div className="exam-reading-content text-xs sm:text-sm text-slate-700 leading-relaxed rounded-lg p-3" dir="ltr">
                                         <ReadingPassageContent text={exerciseInfo.readingPassage} />
                                       </div>
@@ -2634,10 +2627,18 @@ function ExamPage() {
                                     }
 
                                     // عرض prompt أولاً (فقط إذا كان interactiveText موجود)
+                                    const promptLines = (prompt || '').split('\n');
                                     const promptElement = prompt && interactiveText ? (
-                                      <h3 className="text-lg font-semibold text-slate-900 mb-3 mt-2" dir="ltr">
-                                        {prompt}
-                                      </h3>
+                                      <div className="mb-6 mt-2" dir="ltr">
+                                        <h3 className="text-lg font-semibold text-slate-900">
+                                          {promptLines.map((line, i) => (
+                                            <span key={i}>
+                                              {line}
+                                              {i < promptLines.length - 1 && <br />}
+                                            </span>
+                                          ))}
+                                        </h3>
+                                      </div>
                                     ) : null;
 
                                     if (!interactiveText || interactiveBlanks.length === 0) {
@@ -2651,9 +2652,16 @@ function ExamPage() {
                                       return (
                                         <div className="mb-4">
                                           {prompt && (
-                                            <h3 className="text-lg font-semibold text-slate-900 mb-3 mt-2" dir="ltr">
-                                              {prompt}
-                                            </h3>
+                                            <div className="mb-6 mt-2" dir="ltr">
+                                              <h3 className="text-lg font-semibold text-slate-900">
+                                                {(prompt || '').split('\n').map((line, i) => (
+                                                  <span key={i}>
+                                                    {line}
+                                                    {i < (prompt || '').split('\n').length - 1 && <br />}
+                                                  </span>
+                                                ))}
+                                              </h3>
+                                            </div>
                                           )}
                                           <p className="text-sm text-slate-600">
                                             ⚠️ لا يوجد نص تفاعلي متاح
@@ -2711,76 +2719,85 @@ function ExamPage() {
                                         {/* ⚠️ لا نعرض promptElement إذا كان interactiveText موجوداً لأنه يحتوي على السؤال بالفعل */}
                                         {prompt && prompt !== interactiveText && promptElement}
 
-                                        {/* عرض interactiveText مع placeholders */}
-                                        <div className="text-lg font-semibold text-slate-900 mb-3 mt-2" dir="ltr">
-                                          <div className="inline-flex flex-wrap items-center gap-1 leading-relaxed">
+                                        {/* عرض interactiveText مع placeholders — تباعد ومسافات مثل المحرر */}
+                                        <div className="text-lg font-semibold text-slate-900 mb-3 mt-1 interactive-text-blanks" dir="ltr">
+                                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-2 leading-8">
                                             {parts.map((part, partIndex) => {
                                               if (part.type === 'text') {
-                                                return <span key={partIndex}>{part.content}</span>;
+                                                const lines = (part.content || '').split('\n');
+                                                return (
+                                                  <span key={partIndex} className="inline">
+                                                    {lines.map((line, i) => (
+                                                      <span key={i}>
+                                                        {line}
+                                                        {i < lines.length - 1 && <br />}
+                                                      </span>
+                                                    ))}
+                                                  </span>
+                                                );
                                               } else {
                                                 const blank = part.blank;
-                                                // ✅ إصلاح: value لازم يكون دايمًا string (لا undefined)
                                                 const currentAnswer = answers[itemIndex]?.interactiveAnswers?.[blank.id] ?? '';
-
-                                                // ✅ استخدام options بدلاً من choices (حسب البنية الصحيحة من API)
                                                 const blankOptions = blank.options || blank.choices || [];
 
                                                 if (blank.type === 'dropdown' && blankOptions.length > 0) {
                                                   return (
-                                                    <select
-                                                      key={partIndex}
-                                                      value={currentAnswer}
-                                                      disabled={isSubmitted}
-                                                      onChange={(e) => {
-                                                        const newAnswers = { ...answers };
-                                                        if (!newAnswers[itemIndex]) {
-                                                          newAnswers[itemIndex] = { interactiveAnswers: {} };
-                                                        }
-                                                        if (!newAnswers[itemIndex].interactiveAnswers) {
-                                                          newAnswers[itemIndex].interactiveAnswers = {};
-                                                        }
-                                                        newAnswers[itemIndex].interactiveAnswers[blank.id] = e.target.value;
-                                                        setAnswers(newAnswers);
-                                                        saveAnswer(itemIndex, item.questionId, {
-                                                          ...newAnswers[itemIndex],
-                                                          interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
-                                                        }, itemOverride);
-                                                      }}
-                                                      className="mx-1 px-2 py-1 border border-slate-300 rounded bg-white text-slate-900 min-w-[100px]"
-                                                    >
-                                                      <option value="">-- اختر --</option>
-                                                      {blankOptions.map((option, optionIndex) => (
-                                                        <option key={optionIndex} value={option}>
-                                                          {option}
-                                                        </option>
-                                                      ))}
-                                                    </select>
+                                                    <span key={partIndex} className="inline-flex align-middle mx-1">
+                                                      <select
+                                                        value={currentAnswer}
+                                                        disabled={isSubmitted}
+                                                        onChange={(e) => {
+                                                          const newAnswers = { ...answers };
+                                                          if (!newAnswers[itemIndex]) {
+                                                            newAnswers[itemIndex] = { interactiveAnswers: {} };
+                                                          }
+                                                          if (!newAnswers[itemIndex].interactiveAnswers) {
+                                                            newAnswers[itemIndex].interactiveAnswers = {};
+                                                          }
+                                                          newAnswers[itemIndex].interactiveAnswers[blank.id] = e.target.value;
+                                                          setAnswers(newAnswers);
+                                                          saveAnswer(itemIndex, item.questionId, {
+                                                            ...newAnswers[itemIndex],
+                                                            interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
+                                                          }, itemOverride);
+                                                        }}
+                                                        className="px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 min-w-[110px] text-base"
+                                                      >
+                                                        <option value="">-- اختر --</option>
+                                                        {blankOptions.map((option, optionIndex) => (
+                                                          <option key={optionIndex} value={option}>
+                                                            {option}
+                                                          </option>
+                                                        ))}
+                                                      </select>
+                                                    </span>
                                                   );
                                                 } else {
                                                   return (
-                                                    <input
-                                                      key={partIndex}
-                                                      type="text"
-                                                      value={currentAnswer ?? ""}
-                                                      disabled={isSubmitted}
-                                                      onChange={(e) => {
-                                                        const newAnswers = { ...answers };
-                                                        if (!newAnswers[itemIndex]) {
-                                                          newAnswers[itemIndex] = { interactiveAnswers: {} };
-                                                        }
-                                                        if (!newAnswers[itemIndex].interactiveAnswers) {
-                                                          newAnswers[itemIndex].interactiveAnswers = {};
-                                                        }
-                                                        newAnswers[itemIndex].interactiveAnswers[blank.id] = e.target.value;
-                                                        setAnswers(newAnswers);
-                                                        saveAnswer(itemIndex, item.questionId, {
-                                                          ...newAnswers[itemIndex],
-                                                          interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
-                                                        }, itemOverride);
-                                                      }}
-                                                      placeholder={blank.hint || `فراغ ${blank.id.toUpperCase()}`}
-                                                      className="mx-1 px-2 py-1 border border-slate-300 rounded bg-white text-slate-900 min-w-[120px]"
-                                                    />
+                                                    <span key={partIndex} className="inline-flex align-middle mx-1">
+                                                      <input
+                                                        type="text"
+                                                        value={currentAnswer ?? ""}
+                                                        disabled={isSubmitted}
+                                                        onChange={(e) => {
+                                                          const newAnswers = { ...answers };
+                                                          if (!newAnswers[itemIndex]) {
+                                                            newAnswers[itemIndex] = { interactiveAnswers: {} };
+                                                          }
+                                                          if (!newAnswers[itemIndex].interactiveAnswers) {
+                                                            newAnswers[itemIndex].interactiveAnswers = {};
+                                                          }
+                                                          newAnswers[itemIndex].interactiveAnswers[blank.id] = e.target.value;
+                                                          setAnswers(newAnswers);
+                                                          saveAnswer(itemIndex, item.questionId, {
+                                                            ...newAnswers[itemIndex],
+                                                            interactiveAnswers: newAnswers[itemIndex].interactiveAnswers,
+                                                          }, itemOverride);
+                                                        }}
+                                                        placeholder={blank.hint || `فراغ ${blank.id.toUpperCase()}`}
+                                                        className="px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 min-w-[120px] text-base"
+                                                      />
+                                                    </span>
                                                   );
                                                 }
                                               }

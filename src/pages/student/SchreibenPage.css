@@ -3,4 +3,10 @@
   height: 44px !important;
   min-height: 44px !important;
   box-sizing: border-box;
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.schreiben-form-textinput::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }

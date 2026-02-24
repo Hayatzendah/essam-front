@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getGrammarTopic } from '../../services/api';
-import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { sanitizeHtml, normalizeWordHtml } from '../../utils/sanitizeHtml';
+import './GrammarTopicPage.css';
 
 // Exercise Block Component
 const ExerciseBlock = ({ block }) => {
@@ -499,9 +500,8 @@ export default function GrammarTopicPage() {
         return (
           <div key={block.id} className="mb-6 rounded-xl p-3 sm:p-4" dir="ltr"
                style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
-            <div className="text-base leading-relaxed text-slate-900 text-left rich-text-content"
-                 style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
-                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(text) }} />
+            <div className="leading-relaxed text-slate-900 text-left rich-text-content grammar-topic-content"
+                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(text)) }} />
           </div>
         );
 
@@ -611,7 +611,7 @@ export default function GrammarTopicPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="grammar-topic-page min-h-screen bg-slate-50">
       <div className="max-w-5xl mx-auto px-4 py-8">
         {/* الشريط العلوي */}
         <div className="flex items-center justify-between mb-6">
@@ -662,7 +662,7 @@ export default function GrammarTopicPage() {
 
             {/* Content Blocks */}
             {hasContent && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
+              <div className="grammar-topic-page-content bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
                 {Array.isArray(topic.contentBlocks) && topic.contentBlocks.length > 0 && (
                   <>
                     {topic.contentBlocks.map(renderContentBlock)}
@@ -673,10 +673,10 @@ export default function GrammarTopicPage() {
 
             {/* Legacy HTML Content (fallback) */}
             {!hasContent && topic.contentHtml && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
+              <div className="grammar-topic-page-content bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
                 <div
-                  className="prose prose-slate max-w-none"
-                  dangerouslySetInnerHTML={{ __html: topic.contentHtml }}
+                  className="prose prose-slate max-w-none grammar-topic-content"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(topic.contentHtml)) }}
                 />
               </div>
             )}

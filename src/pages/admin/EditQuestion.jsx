@@ -1013,7 +1013,7 @@ function EditQuestion() {
       };
 
       const questionData = {
-        prompt: formData.prompt.trim(),
+        prompt: formData.prompt.trimStart(), /* الاحتفاظ بالأسطر الفارغة تحت السؤال للطالب */
         qType: normalizeQType(formData.qType), // ✅ Normalize qType
         provider: normalizeProvider(formData.provider),
         level: formData.level,
