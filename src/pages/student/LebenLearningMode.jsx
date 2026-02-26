@@ -291,29 +291,22 @@ function LebenLearningMode() {
                   )}
                 </div>
               ) : (
-                /* ✅ إذا كانت أكثر من صورة: عرضها في grid */
+                /* ✅ عرض الصور من اليسار لليمين: Bild 1، ثم 2، ثم 3، ثم 4 */
                 <div className="grid grid-cols-4 gap-4 mb-6 max-w-4xl mx-auto">
-                  {/* ✅ عكس ترتيب الصور: Bild 1 تكون أول صورة من اليسار */}
-                  {[...currentQuestion.images].reverse().map((img, imgIndex) => {
-                    // حساب الفهرس الأصلي بعد العكس
-                    const originalIndex = currentQuestion.images.length - 1 - imgIndex;
-                    return (
-                      <div key={originalIndex} className="flex flex-col">
-                        <div className="w-full h-40 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center">
-                          <img
-                            src={img.url}
-                            alt={img.description || `Bild ${originalIndex + 1}`}
-                            className="max-w-full max-h-full rounded-lg object-contain"
-                          />
-                        </div>
-                        {img.description && (
-                          <p className="text-xs text-slate-600 mt-2 text-center font-medium">
-                            {img.description}
-                          </p>
-                        )}
+                  {currentQuestion.images.map((img, imgIndex) => (
+                    <div key={imgIndex} className="flex flex-col">
+                      <div className="w-full h-40 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center">
+                        <img
+                          src={img.url}
+                          alt={img.description || `Bild ${imgIndex + 1}`}
+                          className="max-w-full max-h-full rounded-lg object-contain"
+                        />
                       </div>
-                    );
-                  })}
+                      <p className="text-xs text-slate-600 mt-2 text-center font-medium">
+                        {img.description || `Bild ${imgIndex + 1}`}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
             </>

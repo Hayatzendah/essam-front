@@ -259,7 +259,8 @@
   font-size: 15px;
   font-weight: 600;
   color: #212121;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .es-section-meta {

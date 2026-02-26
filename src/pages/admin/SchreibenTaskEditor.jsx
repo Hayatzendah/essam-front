@@ -60,7 +60,7 @@ const TextBlockEditor = ({ block, onChange, onRemove }) => (
         borderRadius: '6px',
         fontSize: '14px',
         resize: 'vertical',
-        direction: 'rtl',
+        direction: 'ltr',
       }}
     />
   </div>

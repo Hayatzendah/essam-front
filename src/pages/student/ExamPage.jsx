@@ -95,7 +95,7 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
       {cards.map((card, idx) => {
         const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
         return (
-          <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left exam-card-content`} style={{ overflow: 'visible' }}>
+          <div key={idx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 exam-card-content`} style={{ overflow: 'visible' }}>
             <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 rich-text-content`}
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(card.title || '')) }} />
             <div className={`text-xs sm:text-sm ${color.content} leading-relaxed rich-text-content exam-card-entry-content`}
@@ -121,7 +121,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
           const start = questionOffset;
           questionOffset += count;
           return (
-            <div key={idx} dir="rtl">
+            <div key={idx} dir="ltr">
               {renderQuestions(start, count)}
             </div>
           );
@@ -173,7 +173,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
               {cards.map((card, cardIdx) => {
                 const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[cardIdx % CARD_COLORS_LIST.length];
                 return (
-                  <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 text-left exam-card-content`} style={{ overflow: 'visible' }}>
+                  <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 exam-card-content`} style={{ overflow: 'visible' }}>
                     <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 rich-text-content`}
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(card.title || '')) }} />
                     {(card.texts || []).map((entry, ti) => (
@@ -620,10 +620,7 @@ function ExamPage() {
           const sections = data.sections || data || [];
           if (sections.length > 0) {
             setSectionsOverview(sections);
-            // Select first section by default
-            if (!selectedSectionKey) {
-              setSelectedSectionKey(sections[0].key);
-            }
+            // العرض الافتراضي: كل الأسئلة (لا نختار قسمًا تلقائيًا)
           }
         })
         .catch((err) => {
@@ -1488,6 +1485,23 @@ function ExamPage() {
   const hasSections = sectionsOverview && sectionsOverview.length > 0;
   const hasExercises = currentSectionData?.exercises?.length > 0;
 
+  // استبعاد الأسئلة الفارغة/الوهمية من كل العروض (كل الأسئلة + الأقسام + المحادثة)
+  const isEmptyQuestion = (item) => {
+    const prompt = (item.promptSnapshot ?? item.prompt ?? item.text ?? '').toString().trim();
+    const dashOnly = /^[\s\-–—ـ]+$/.test(prompt);
+    const isEmptyPrompt = !prompt || prompt === '-' || prompt === '—' || dashOnly;
+    const qType = (item.qType || item.type || '').toLowerCase();
+    const isSpeakingOrFreeText = qType === 'speaking' || qType === 'free_text';
+    const opts = item.optionsText || (item.optionsSnapshot && item.optionsSnapshot.map((o) => (o && o.text) || '')) || item.options?.map((o) => (o && (o.text || o.label)) || '') || [];
+    const hasRealOption = Array.isArray(opts) && opts.some((t) => t != null && String(t).trim() !== '' && String(t).trim() !== '-' && String(t).trim() !== '—');
+    if (isEmptyPrompt && isSpeakingOrFreeText) return true;
+    if (isEmptyPrompt) return !hasRealOption;
+    // أسئلة لها نص لكن كل الخيارات "-"/"—" فقط → نعتبرها وهمية ونخفيه
+    const isMcqOrHasOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false'].includes(qType) || opts.length > 0;
+    if (isMcqOrHasOptions && !hasRealOption) return true;
+    return false;
+  };
+
   // Filter items by selected section or exercise
   const displayedItems = (() => {
     // إذا كان تمرين مختار → عرض أسئلة التمرين فقط (من attempt أو من بيانات التمرين كـ fallback)
@@ -1523,17 +1537,20 @@ function ExamPage() {
             _fromSection: true,
           };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .filter((item) => !isEmptyQuestion(item));
     }
     // إذا كان قسم مختار → عرض أسئلة القسم (تصفية حسب sectionKey أو حسب معرفات الأسئلة من API القسم)
     if (hasSections && selectedSectionKey && attempt?.items) {
       if (sectionQuestionIds && sectionQuestionIds.size > 0) {
-        const byIds = attempt.items.filter((item) => {
-          const qid = item.questionId || item.id || item._id ||
-            item.question?.id || item.question?._id ||
-            item.questionSnapshot?.id || item.questionSnapshot?._id;
-          return qid && sectionQuestionIds.has(qid);
-        });
+        const byIds = attempt.items
+          .filter((item) => {
+            const qid = item.questionId || item.id || item._id ||
+              item.question?.id || item.question?._id ||
+              item.questionSnapshot?.id || item.questionSnapshot?._id;
+            return qid && sectionQuestionIds.has(qid);
+          })
+          .filter((item) => !isEmptyQuestion(item));
         if (byIds.length > 0) return byIds;
         // لم تُوجد الأسئلة في attempt.items → بناء قائمة عرض من بيانات القسم
         const fromSection = [];
@@ -1555,15 +1572,17 @@ function ExamPage() {
             });
           });
         });
-        return fromSection;
+        return fromSection.filter((item) => !isEmptyQuestion(item));
       }
-      return attempt.items.filter((item) => {
-        const itemSectionKey = item.sectionKey || item.section?.key;
-        return itemSectionKey === selectedSectionKey;
-      });
+      return attempt.items
+        .filter((item) => {
+          const itemSectionKey = item.sectionKey || item.section?.key;
+          return itemSectionKey === selectedSectionKey;
+        })
+        .filter((item) => !isEmptyQuestion(item));
     }
-    // عرض كل الأسئلة
-    return attempt.items || [];
+    // عرض كل الأسئلة — استبعاد الأسئلة الفارغة/الوهمية
+    return (attempt.items || []).filter((item) => !isEmptyQuestion(item));
   })();
 
   // Calculate per-section progress from local answers (يدعم التصفية بـ sectionKey أو بمعرفات الأسئلة من API القسم)
@@ -1663,7 +1682,7 @@ function ExamPage() {
                         }`}
                     >
                       <span>{SKILL_ICONS[section.skill] || '📄'}</span>
-                      <span className="max-w-[120px] break-words text-left leading-tight">{section.title}</span>
+                      <span className="max-w-[120px] text-left leading-tight">{section.title}</span>
                       <span className="text-[10px] opacity-75">
                         {progress.answered}/{progress.total}
                         {isComplete && ' ✓'}
@@ -1699,7 +1718,7 @@ function ExamPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-base">📋</span>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold break-words">كل الأسئلة</div>
+                        <div className="font-semibold">كل الأسئلة</div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           {answeredCount}/{totalQuestions}
                         </div>
@@ -1707,7 +1726,9 @@ function ExamPage() {
                     </div>
                   </button>
 
-                  {sectionsOverview.map((section) => {
+                  {sectionsOverview
+                    .filter((section) => getSectionProgress(section.key).total > 0)
+                    .map((section) => {
                     const progress = getSectionProgress(section.key);
                     const isActive = selectedSectionKey === section.key;
                     const progressPercent = progress.total > 0 ? Math.round((progress.answered / progress.total) * 100) : 0;
@@ -1739,7 +1760,7 @@ function ExamPage() {
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className={`font-semibold break-words leading-tight ${isActive ? 'text-red-700' : 'text-slate-800'}`}>
+                            <div className={`font-semibold leading-tight ${isActive ? 'text-red-700' : 'text-slate-800'}`}>
                               {section.title}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
@@ -2626,8 +2647,8 @@ function ExamPage() {
                                       );
                                     }
 
-                                    // عرض prompt أولاً (فقط إذا كان interactiveText موجود)
-                                    const promptLines = (prompt || '').split('\n');
+                                    // عرض prompt مع الاحتفاظ بالأسطر الفارغة (دعم \n و \r\n)
+                                    const promptLines = (prompt || '').split(/\r?\n/);
                                     const promptElement = prompt && interactiveText ? (
                                       <div className="mb-6 mt-2" dir="ltr">
                                         <h3 className="text-lg font-semibold text-slate-900">
@@ -2654,10 +2675,10 @@ function ExamPage() {
                                           {prompt && (
                                             <div className="mb-6 mt-2" dir="ltr">
                                               <h3 className="text-lg font-semibold text-slate-900">
-                                                {(prompt || '').split('\n').map((line, i) => (
+                                                {(prompt || '').split(/\r?\n/).map((line, i, arr) => (
                                                   <span key={i}>
                                                     {line}
-                                                    {i < (prompt || '').split('\n').length - 1 && <br />}
+                                                    {i < arr.length - 1 && <br />}
                                                   </span>
                                                 ))}
                                               </h3>
@@ -2719,9 +2740,9 @@ function ExamPage() {
                                         {/* ⚠️ لا نعرض promptElement إذا كان interactiveText موجوداً لأنه يحتوي على السؤال بالفعل */}
                                         {prompt && prompt !== interactiveText && promptElement}
 
-                                        {/* عرض interactiveText مع placeholders — تباعد ومسافات مثل المحرر */}
+                                        {/* عرض interactiveText مع placeholders — تدفق عادي (نص وقوائم على نفس السطر كما في لوحة التحكم) */}
                                         <div className="text-lg font-semibold text-slate-900 mb-3 mt-1 interactive-text-blanks" dir="ltr">
-                                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-2 leading-8">
+                                          <div className="leading-8">
                                             {parts.map((part, partIndex) => {
                                               if (part.type === 'text') {
                                                 const lines = (part.content || '').split('\n');
@@ -3107,7 +3128,7 @@ function ExamPage() {
                                           ? 'bg-red-50 border-red-500'
                                           : 'bg-slate-50 border-slate-200 hover:border-red-500'
                                           }`}
-                                        dir="rtl"
+                                        dir="ltr"
                                       >
                                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${answers[itemIndex]?.studentAnswerBoolean === true
                                           ? 'border-red-600'
@@ -3129,7 +3150,7 @@ function ExamPage() {
                                           ? 'bg-red-50 border-red-500'
                                           : 'bg-slate-50 border-slate-200 hover:border-red-500'
                                           }`}
-                                        dir="rtl"
+                                        dir="ltr"
                                       >
                                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${answers[itemIndex]?.studentAnswerBoolean === false
                                           ? 'border-red-600'

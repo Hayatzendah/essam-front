@@ -6,7 +6,7 @@ const modules = {
     ['bold', 'italic', 'underline'],
     [{ color: [] }],
     [{ size: ['small', false, 'large', 'huge'] }],
-    [{ direction: 'rtl' }, { align: [] }],
+    [{ direction: 'ltr' }, { align: [] }],
     ['clean'],
   ],
 };

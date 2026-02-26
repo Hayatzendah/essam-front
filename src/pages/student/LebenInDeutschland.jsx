@@ -239,10 +239,10 @@ function LebenInDeutschland() {
           </div>
         )}
 
-        {/* 3 Cards للتعلم والامتحانات */}
-        <div className="max-w-5xl mx-auto mb-10">
-          <div className="grid gap-6 md:grid-cols-3">
-            {/* Card 1: تعلم الأسئلة العامة (300) */}
+        {/* البطاقات الثلاث كلهم بنفس الصف */}
+        <div className="max-w-6xl mx-auto mb-10">
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* البطاقة الزرقاء: تعلم الأسئلة العامة */}
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition">
               <div className="flex items-start gap-4 mb-4">
                 <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">
@@ -265,7 +265,7 @@ function LebenInDeutschland() {
               </button>
             </div>
 
-            {/* Card 2: تعلم أسئلة الولاية (160) */}
+            {/* البطاقة الخضراء: تعلم أسئلة الولاية */}
             <div className={`bg-white border rounded-xl p-6 shadow-sm transition ${
               selectedState 
                 ? 'border-slate-200 hover:shadow-md' 
@@ -306,99 +306,58 @@ function LebenInDeutschland() {
               </button>
             </div>
 
+            {/* البطاقة/البطاقات الحمراء: امتحانات الولاية — نفس الصف */}
+            <div className="min-h-[200px] flex flex-col">
+              {selectedState && (
+                <p className="text-sm text-slate-600 mb-2">
+                  الامتحانات لولاية {selectedState}
+                </p>
+              )}
+              {loadingExams && (
+                <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200">
+                  <p className="text-slate-500 text-sm">جاري التحميل…</p>
+                </div>
+              )}
+              {!selectedState && !loadingExams && (
+                <div className="flex-1 flex items-center justify-center text-center text-slate-500 text-sm rounded-xl bg-slate-100 border border-slate-200 p-4">
+                  اختر ولاية أولاً
+                </div>
+              )}
+              {selectedState && !loadingExams && availableExams.length === 0 && (
+                <div className="flex-1 flex items-center justify-center text-center text-slate-500 text-sm rounded-xl bg-amber-50 border border-amber-100 p-4">
+                  <span className="text-amber-800 text-xs">لا توجد امتحانات متاحة</span>
+                </div>
+              )}
+              {!loadingExams && availableExams.length > 0 && (
+                <div className="space-y-3">
+                  {availableExams.map((exam) => {
+                    if (!exam.id) return null;
+                    return (
+                      <div
+                        key={exam.id}
+                        className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm hover:shadow-md transition text-left"
+                      >
+                        <h3 className="text-sm font-semibold text-slate-900 mb-2 line-clamp-2">
+                          {exam.title}
+                        </h3>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+                          {exam.timeLimitMin > 0 && <span>⏱️ {exam.timeLimitMin} د</span>}
+                          {exam.attemptLimit > 0 && <span>🔄 {exam.attemptLimit}</span>}
+                        </div>
+                        <button
+                          onClick={() => handleStartExam(exam.id)}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium"
+                        >
+                          ابدأ الامتحان
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* عنوان فرعي */}
-        {selectedState && (
-          <div className="text-center mb-6">
-            <p className="text-sm text-slate-600">
-              الامتحانات المتاحة لولاية{' '}
-              <span className="font-semibold text-slate-900">{selectedState}</span>
-            </p>
-          </div>
-        )}
-
-        {/* حالة التحميل */}
-        {loadingExams && (
-          <div className="text-center text-slate-500 text-sm mt-10">
-            جاري تحميل الامتحانات…
-          </div>
-        )}
-
-        {/* لا توجد ولاية مختارة */}
-        {!selectedState && !loadingExams && (
-          <div className="text-center text-slate-500 text-sm mt-10 bg-slate-100 border border-slate-200 rounded-xl py-8">
-            ⬆️ اختر ولايتك أولاً لعرض الامتحانات المتاحة
-          </div>
-        )}
-
-        {/* لا توجد امتحانات */}
-        {selectedState && !loadingExams && availableExams.length === 0 && (
-          <div className="text-center text-slate-500 text-sm mt-10 bg-amber-50 border border-amber-100 rounded-xl py-8">
-            <p className="text-amber-800 font-medium mb-2">⚠️ لا توجد امتحانات متاحة حالياً</p>
-            <p className="text-amber-600 text-xs">
-              يجب على المعلم إنشاء امتحان بحالة "منشور (Published)" أولاً
-            </p>
-          </div>
-        )}
-
-        {/* كروت الامتحانات */}
-        {!loadingExams && availableExams.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {availableExams.map((exam) => {
-              if (!exam.id) {
-                console.warn('Exam without id:', exam);
-                return null;
-              }
-
-              return (
-                <div
-                  key={exam.id}
-                  className="group bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition text-left"
-                >
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center text-2xl flex-shrink-0">
-                      🏠
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-900 mb-1 break-words">
-                        {exam.title}
-                      </h3>
-                      {exam.description && (
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {exam.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* تفاصيل الامتحان */}
-                  <div className="flex items-center gap-3 text-xs text-slate-500 mb-4">
-                    {exam.timeLimitMin > 0 && (
-                      <span className="flex items-center gap-1">
-                        ⏱️ {exam.timeLimitMin} دقيقة
-                      </span>
-                    )}
-                    {exam.attemptLimit > 0 && (
-                      <span className="flex items-center gap-1">
-                        🔄 {exam.attemptLimit} محاولة
-                      </span>
-                    )}
-                  </div>
-
-                  {/* زر البدء */}
-                  <button
-                    onClick={() => handleStartExam(exam.id)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg transition font-medium text-sm"
-                  >
-                    ابدأ الامتحان
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -440,7 +440,8 @@
   margin: 0;
   font-weight: 500;
   color: #212529;
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: normal;
   font-size: 14px;
 }
 

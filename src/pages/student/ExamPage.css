@@ -462,6 +462,24 @@ input[type="text"].inline-block {
   display: block;
 }
 
+/* توسيط الطالب: أولوية عالية في البطاقات ونص القراءة (تغلّب على text-left للحاوية) */
+.exam-page .exam-card-content .rich-text-content .align-center,
+.exam-page .exam-card-content .rich-text-content p.align-center,
+.exam-page .exam-card-content .rich-text-content div.align-center,
+.exam-page .exam-reading-content .rich-text-content .align-center,
+.exam-page .exam-reading-content .rich-text-content p.align-center,
+.exam-page .exam-reading-content .rich-text-content div.align-center,
+.exam-page .exam-card-content .rich-text-content .ql-align-center,
+.exam-page .exam-reading-content .rich-text-content .ql-align-center {
+  text-align: center !important;
+}
+.exam-page .exam-card-content .rich-text-content [style*="text-align: center"],
+.exam-page .exam-card-content .rich-text-content [style*="text-align:center"],
+.exam-page .exam-reading-content .rich-text-content [style*="text-align: center"],
+.exam-page .exam-reading-content .rich-text-content [style*="text-align:center"] {
+  text-align: center !important;
+}
+
 /* منع كسر الكلمات في منتصفها — الكلمة تنتقل كاملةً للسطر التالي */
 /* hyphens: none يمنع كسر: El-Mansouri, Kfz-Mechatroniker, U-Bahn */
 .exam-page .rich-text-content,
@@ -523,8 +541,12 @@ input[type="text"].inline-block {
   overflow: visible !important;
   max-width: 100%;
   display: block;
-  /* النص الافتراضي أسود؛ النص اللي له لون في المحرر يبقى بلونه (inline style يتغلّب) */
+  /* النص الافتراضي أسود؛ المحاذاة الافتراضية في المنتصف للطالب */
   color: #000;
+  text-align: center;
+}
+.exam-reading-content .rich-text-content {
+  text-align: center;
 }
 
 /* إظهار كامل نص البطاقة (Frage/Antwort) — منع أي قص */
@@ -537,8 +559,8 @@ input[type="text"].inline-block {
   white-space: normal !important;
 }
 
-/* أسئلة النص التفاعلي (فراغات متعددة): تباعد واضح بين النص والقوائم المنسدلة */
-.interactive-text-blanks .flex-wrap {
+/* أسئلة النص التفاعلي (فراغات متعددة): تدفق عادي، النص والقوائم على نفس السطر */
+.interactive-text-blanks > div {
   word-spacing: 0.02em;
 }
 .interactive-text-blanks select,

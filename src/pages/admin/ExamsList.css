@@ -528,7 +528,8 @@
   .exam-title-section h3 {
     font-size: 18px;
     margin-bottom: 8px;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: normal;
   }
 
   .exam-actions {
