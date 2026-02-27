@@ -66,8 +66,36 @@ const safeOptionsArray = (item) => {
     if (Array.isArray(item.options)) {
       return item.options.map((opt) => typeof opt === 'string' ? opt : (opt?.text ?? opt ?? ''));
     }
+    if (Array.isArray(item.optionsSnapshot)) {
+      return item.optionsSnapshot.map((opt) => typeof opt === 'string' ? opt : (opt?.text ?? opt ?? ''));
+    }
   } catch (_) { }
   return [];
+};
+
+// ✅ خيار وهمي (فارغ أو "-"/"—" أو "✓" فقط) — لا نعرضه للطالب
+const isPlaceholderOptionText = (t) => {
+  const s = (t != null ? String(t).trim() : '') || '';
+  if (!s) return true;
+  if (/^[\s\-–—ـ]+$/.test(s)) return true;
+  // رموز فقط بدون نص (✓ ✔ أو حرف واحد غير حقيقي)
+  if (/^[\s✓✔☑\u2713\u2714\u2611]+$/.test(s)) return true;
+  if (s.length <= 1 && !/[a-zA-Z0-9\u0600-\u06FF]/.test(s)) return true;
+  return false;
+};
+
+// ✅ خيارات العرض فقط (بدون الوهمية) مع المؤشرات الأصلية للإجابة
+const getDisplayOptions = (item) => {
+  const all = safeOptionsArray(item);
+  const displayOptions = [];
+  const originalIndices = [];
+  all.forEach((text, idx) => {
+    if (!isPlaceholderOptionText(text)) {
+      displayOptions.push(text);
+      originalIndices.push(idx);
+    }
+  });
+  return { displayOptions, originalIndices };
 };
 
 // ✅ ألوان بطاقات القراءة (Lesen cards) - الخلفية والحد فقط؛ النص الافتراضي أسود
@@ -620,7 +648,8 @@ function ExamPage() {
           const sections = data.sections || data || [];
           if (sections.length > 0) {
             setSectionsOverview(sections);
-            // العرض الافتراضي: كل الأسئلة (لا نختار قسمًا تلقائيًا)
+            // العرض الافتراضي: أول قسم (بدون "كل الأسئلة")
+            setSelectedSectionKey((prev) => (prev == null ? sections[0].key : prev));
           }
         })
         .catch((err) => {
@@ -659,7 +688,7 @@ function ExamPage() {
     }
   }, [attempt]);
 
-  // ✅ بناء خريطة questionId → globalItemIndex للتمارين
+  // ✅ بناء خريطة questionId → globalItemIndex للتمارين (مفتاح نصي للتطابق مع الـ API)
   const questionIdToItemIndex = useMemo(() => {
     const map = new Map();
     if (attempt?.items) {
@@ -667,7 +696,7 @@ function ExamPage() {
         const qId = item.questionId || item.id || item._id ||
           item.question?.id || item.question?._id ||
           item.questionSnapshot?.id || item.questionSnapshot?._id;
-        if (qId) map.set(qId, idx);
+        if (qId) map.set(String(qId), idx);
       });
     }
     return map;
@@ -760,6 +789,23 @@ function ExamPage() {
     return ids;
   }, [selectedSectionKey, currentSectionData]);
 
+  // ✅ ترتيب كل الأسئلة حسب تعريف الأقسام من الـ API (مصدر واحد — لا أسئلة وهمية تظهر في "كل الأسئلة" فقط)
+  const allSectionsOrderedQuestionIds = useMemo(() => {
+    if (!sectionsOverview?.length || !sectionExercises || Object.keys(sectionExercises).length === 0) return [];
+    const ids = [];
+    const sortedSections = [...sectionsOverview].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const section of sortedSections) {
+      const data = sectionExercises[section.key];
+      if (!data?.exercises) continue;
+      for (const ex of data.exercises || []) {
+        for (const q of ex.questions || []) {
+          if (q.questionId) ids.push(String(q.questionId));
+        }
+      }
+    }
+    return ids;
+  }, [sectionsOverview, sectionExercises]);
+
   // ✅ خريطة questionId → بيانات التمرين (صوت، قراءة) لعرضها في "كل الأسئلة"
   const questionExerciseMap = useMemo(() => {
     const map = new Map();
@@ -788,6 +834,7 @@ function ExamPage() {
   const loadAttempt = async () => {
     try {
       setLoading(true);
+      setError('');
       // ✅ استخراج examId من query string
       const examId = searchParams.get('examId');
 
@@ -820,26 +867,37 @@ function ExamPage() {
       // معالجة items - قد تكون في attemptData.items أو attemptData.data.items
       let items = attemptData.items || attemptData.data?.items || [];
 
-      // إذا كان items مصفوفة فارغة أو غير موجودة - حاول تسليم المحاولة الفاضية وابدأ وحدة جديدة
+      // إذا كان items مصفوفة فارغة — محاولة قديمة/فارغة أو محتوى تعليمي فقط
       if (!Array.isArray(items) || items.length === 0) {
-        console.warn('⚠️ لا توجد items في الـ response - محاولة تسليم وإعادة بدء');
-        const examId = searchParams.get('examId') || attemptData.examId;
-        if (examId && attemptData.attemptId && attemptData.status === 'in_progress') {
+        const examIdForRetry = searchParams.get('examId') || attemptData.examId;
+        const isEducational = !!attemptData.exam?.isEducational;
+        if (examIdForRetry && !isEducational) {
           try {
-            await examsAPI.submitAttempt(attemptData.attemptId, []);
-            console.log('✅ تم تسليم المحاولة الفاضية، جاري بدء محاولة جديدة...');
-            const newAttempt = await examsAPI.startAttempt(examId);
+            if (attemptData.attemptId && attemptData.status === 'in_progress') {
+              await examsAPI.submitAttempt(attemptData.attemptId, []);
+              console.log('✅ تم تسليم المحاولة الفاضية، جاري بدء محاولة جديدة...');
+            }
+            const newAttempt = await examsAPI.startAttempt(examIdForRetry);
             const newAttemptId = newAttempt.attemptId || newAttempt._id || newAttempt.id;
-            if (newAttemptId && newAttempt.items?.length > 0) {
-              window.location.href = `/student/exam/${newAttemptId}?examId=${examId}`;
+            const newItems = newAttempt.items || newAttempt.questions || [];
+            if (newAttemptId && newItems.length > 0) {
+              window.location.href = `/student/exam/${newAttemptId}?examId=${examIdForRetry}`;
+              setLoading(false);
+              return;
+            }
+            // محتوى تعليمي فقط: المحاولة الجديدة بدون أسئلة — نعرض الصفحة
+            if (newAttemptId && newAttempt.exam?.isEducational) {
+              setAttempt({ ...newAttempt, items: newAttempt.items || [] });
+              setLoading(false);
               return;
             }
           } catch (retryErr) {
-            console.error('❌ فشل إعادة البدء:', retryErr);
+            console.warn('⚠️ إعادة البدء لم تنجح:', retryErr?.response?.data || retryErr?.message);
           }
         }
-        setError('لا توجد أسئلة في هذا الامتحان. تأكد من أن الامتحان يحتوي على أسئلة.');
+        // محتوى تعليمي أو محاولة فارغة: نعرض الصفحة على أي حال (المحتوى من الأقسام يظهر دون رسالة خطأ)
         setAttempt({ ...attemptData, items: [] });
+        setLoading(false);
         return;
       }
 
@@ -1445,8 +1503,8 @@ function ExamPage() {
 
   // Schreiben exams don't have items - they have schreibenTaskId
   const isSchreibenExam = attempt?.mainSkill === 'schreiben' && attempt?.schreibenTaskId;
-
-  if (!attempt || (!isSchreibenExam && (!attempt.items || attempt.items.length === 0))) {
+  // نعرض "لا توجد أسئلة" كصفحة كاملة فقط عند عدم وجود محاولة. إذا وجدت محاولة (حتى بدون أسئلة) نعرض الصفحة لتحميل الأقسام والمحتوى التعليمي
+  if (!attempt) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="max-w-md mx-auto text-center">
@@ -1474,8 +1532,9 @@ function ExamPage() {
     return null;
   }
 
-  const currentQuestion = attempt.items[currentQuestionIndex];
-  const totalQuestions = publishedTotal || attempt.items.length;
+  const attemptItems = attempt.items || [];
+  const currentQuestion = attemptItems[currentQuestionIndex];
+  const totalQuestions = publishedTotal || attemptItems.length;
   const answeredCount = Object.keys(answers).length;
 
   // التحقق من أن المحاولة لم يتم تسليمها
@@ -1484,21 +1543,38 @@ function ExamPage() {
   // Sections sidebar logic (currentSectionData و sectionQuestionIds معرّفان أعلاه قبل أي return)
   const hasSections = sectionsOverview && sectionsOverview.length > 0;
   const hasExercises = currentSectionData?.exercises?.length > 0;
+  // محتوى تعليمي: لا نعرض زر تسليم الامتحان ولا نذكر التسليم في التعليمات
+  const isEducational = !!(attempt?.exam?.isEducational);
 
-  // استبعاد الأسئلة الفارغة/الوهمية من كل العروض (كل الأسئلة + الأقسام + المحادثة)
+  // استبعاد الأسئلة الفارغة/الوهمية من كل العروض (نص "-" فقط أو خيار بدون نص/✓)
   const isEmptyQuestion = (item) => {
+    if (!item) return true;
+    if (item.contentOnly && !(item.promptSnapshot ?? item.prompt ?? item.text ?? '').toString().trim()) return true;
     const prompt = (item.promptSnapshot ?? item.prompt ?? item.text ?? '').toString().trim();
     const dashOnly = /^[\s\-–—ـ]+$/.test(prompt);
     const isEmptyPrompt = !prompt || prompt === '-' || prompt === '—' || dashOnly;
     const qType = (item.qType || item.type || '').toLowerCase();
     const isSpeakingOrFreeText = qType === 'speaking' || qType === 'free_text';
-    const opts = item.optionsText || (item.optionsSnapshot && item.optionsSnapshot.map((o) => (o && o.text) || '')) || item.options?.map((o) => (o && (o.text || o.label)) || '') || [];
-    const hasRealOption = Array.isArray(opts) && opts.some((t) => t != null && String(t).trim() !== '' && String(t).trim() !== '-' && String(t).trim() !== '—');
+    const points = item.points ?? item.question?.points ?? item.questionData?.points ?? 1;
+    const optsFromSafe = safeOptionsArray(item);
+    const optsFromSnapshot = (item.optionsSnapshot && item.optionsSnapshot.map((o) => (o && o.text) || '')) || [];
+    const opts = optsFromSafe.length ? optsFromSafe : optsFromSnapshot;
+    const isOptionDashOrEmpty = isPlaceholderOptionText;
+    const hasRealOption = Array.isArray(opts) && opts.some((t) => !isOptionDashOrEmpty(t));
+    // سؤال نصه "-" فقط وبدون خيار حقيقي → إخفاء (مثل الصورة)
+    if (isEmptyPrompt && !hasRealOption) return true;
+    // أي سؤال كل خياراته وهمية (فارغة أو "-" أو "✓" فقط)
+    if (Array.isArray(opts) && opts.length >= 1 && opts.every(isOptionDashOrEmpty)) return true;
     if (isEmptyPrompt && isSpeakingOrFreeText) return true;
-    if (isEmptyPrompt) return !hasRealOption;
-    // أسئلة لها نص لكن كل الخيارات "-"/"—" فقط → نعتبرها وهمية ونخفيه
-    const isMcqOrHasOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false'].includes(qType) || opts.length > 0;
+    const isMcqOrHasOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false', 'speaking'].includes(qType) || opts.length > 0;
     if (isMcqOrHasOptions && !hasRealOption) return true;
+    if (points === 0 && !hasRealOption) return true;
+    // أسئلة الاختيار (MCQ) التي كان لها خيارات لكن كلها وهمية بعد التصفية → إخفاء (لا نطبق على speaking/free_text لأنها قد لا يكون لها خيارات أصلاً)
+    const expectsOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false'].includes(qType);
+    if (expectsOptions && opts.length >= 1) {
+      const { displayOptions } = getDisplayOptions(item);
+      if (displayOptions.length === 0) return true;
+    }
     return false;
   };
 
@@ -1581,7 +1657,18 @@ function ExamPage() {
         })
         .filter((item) => !isEmptyQuestion(item));
     }
-    // عرض كل الأسئلة — استبعاد الأسئلة الفارغة/الوهمية
+    // عرض كل الأسئلة: من تعريف الأقسام (الـ API) فقط — نفس مصدر "قسم قسم" حتى لا تظهر أسئلة وهمية
+    if (hasSections && allSectionsOrderedQuestionIds.length > 0 && attempt?.items) {
+      const itemsFromSections = allSectionsOrderedQuestionIds
+        .map((qId) => {
+          const idx = questionIdToItemIndex.get(String(qId));
+          return idx !== undefined ? attempt.items[idx] : null;
+        })
+        .filter(Boolean)
+        .filter((item) => !isEmptyQuestion(item));
+      return itemsFromSections;
+    }
+    // fallback: بدون أقسام أو قبل تحميلها
     return (attempt.items || []).filter((item) => !isEmptyQuestion(item));
   })();
 
@@ -1643,7 +1730,7 @@ function ExamPage() {
             {attempt.exam?.title || 'امتحان'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600">
-            {totalQuestions} سؤال • أجب على جميع الأسئلة ثم اضغط "تسليم الامتحان"
+            {totalQuestions} سؤال
           </p>
         </div>
       </div>
@@ -1655,18 +1742,6 @@ function ExamPage() {
             {/* Mobile: horizontal scrollable tabs */}
             <div className="md:hidden mb-4 -mx-3 px-3">
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <button
-                  onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition-all ${!selectedSectionKey
-                    ? 'bg-red-600 text-white shadow-sm'
-                    : 'bg-white text-slate-600 border border-slate-200'
-                    }`}
-                >
-                  <span>📋</span>
-                  <span>الكل</span>
-                  <span className="text-[10px] opacity-75">{answeredCount}/{totalQuestions}</span>
-                </button>
-
                 {sectionsOverview.map((section) => {
                   const progress = getSectionProgress(section.key);
                   const isActive = selectedSectionKey === section.key;
@@ -1707,25 +1782,6 @@ function ExamPage() {
                   </p>
                 </div>
                 <div className="p-2 space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
-                  {/* All questions option */}
-                  <button
-                    onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
-                    className={`w-full text-right p-3 rounded-xl text-xs transition-all ${!selectedSectionKey
-                      ? 'bg-red-50 border border-red-200 text-red-700 font-semibold'
-                      : 'hover:bg-slate-50 text-slate-600'
-                      }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">📋</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold">كل الأسئلة</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {answeredCount}/{totalQuestions}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-
                   {sectionsOverview
                     .filter((section) => getSectionProgress(section.key).total > 0)
                     .map((section) => {
@@ -1911,14 +1967,9 @@ function ExamPage() {
                   </div>
                 )}
 
-                {/* عرض الأسئلة - لا تعرض إذا كان هناك تمارين ولم يتم اختيار تمرين */}
+                {/* عرض الأسئلة - لا تعرض إذا كان هناك تمارين ولم يتم اختيار تمرين. لا نعرض "لا توجد أسئلة" لتجنب ظهورها مع الأسئلة عند الدخول لتمرين */}
                 {!(hasSections && selectedSectionKey && hasExercises && !selectedExercise) && !loadingExercises && (
                   <>
-                    {displayedItems.length === 0 && hasSections && selectedSectionKey && (
-                      <div className="text-center text-slate-500 text-sm bg-slate-50 border border-slate-200 rounded-xl py-8 mb-6">
-                        لا توجد أسئلة في هذا القسم
-                      </div>
-                    )}
                     <div className="space-y-6 mb-6">
                       {(() => {
                         // تتبع أي تمرين تم عرض صوته بالفعل (لعدم التكرار في "كل الأسئلة")
@@ -3077,43 +3128,46 @@ function ExamPage() {
                                     return null;
                                   })()}
 
-                                  {/* MCQ */}
-                                  {qType === 'mcq' && options && options.length > 0 && (
-                                    <div className="space-y-2">
-                                      {options.map((option, optIdx) => {
-                                        // optionsText من الباك هو array of strings مباشرة
-                                        const optionText = typeof option === 'string' ? option : (option.text || option);
-                                        const currentAnswer = answers[itemIndex];
-                                        const selectedIndex = currentAnswer?.selectedIndex;
-                                        const isSelected = selectedIndex === optIdx;
+                                  {/* MCQ — عرض الخيارات الحقيقية فقط (بدون "-"/"—") */}
+                                  {qType === 'mcq' && (() => {
+                                    const { displayOptions, originalIndices } = getDisplayOptions(item);
+                                    if (!displayOptions.length) return null;
+                                    return (
+                                      <div className="space-y-2">
+                                        {displayOptions.map((option, optIdx) => {
+                                          const optionText = typeof option === 'string' ? option : (option?.text ?? option ?? '');
+                                          const originalIdx = originalIndices[optIdx];
+                                          const currentAnswer = answers[itemIndex];
+                                          const selectedIndex = currentAnswer?.selectedIndex;
+                                          const isSelected = selectedIndex === originalIdx;
 
-                                        return (
-                                          <button
-                                            key={optIdx}
-                                            onClick={() => {
-                                              // لكل سؤال، خزني خيار واحد فقط (يحل محل القديم)
-                                              handleAnswerChange(itemIndex, optIdx, 'mcq');
-                                              saveAnswer(itemIndex, item.questionId, optIdx, itemOverride);
-                                            }}
-                                            disabled={isSubmitted}
-                                            className={`w-full flex items-center gap-3 p-3 rounded-lg border text-base transition ${isSelected
-                                              ? 'bg-red-50 border-red-500'
-                                              : 'bg-slate-50 border-slate-200 hover:border-red-500'
-                                              }`}
-                                            dir="ltr"
-                                          >
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-red-600' : 'border-slate-300'
-                                              }`}>
-                                              {isSelected && (
-                                                <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                                              )}
-                                            </div>
-                                            <span className="text-left flex-1">{optionText}</span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
+                                          return (
+                                            <button
+                                              key={optIdx}
+                                              onClick={() => {
+                                                handleAnswerChange(itemIndex, originalIdx, 'mcq');
+                                                saveAnswer(itemIndex, item.questionId, originalIdx, itemOverride);
+                                              }}
+                                              disabled={isSubmitted}
+                                              className={`w-full flex items-center gap-3 p-3 rounded-lg border text-base transition ${isSelected
+                                                ? 'bg-red-50 border-red-500'
+                                                : 'bg-slate-50 border-slate-200 hover:border-red-500'
+                                                }`}
+                                              dir="ltr"
+                                            >
+                                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-red-600' : 'border-slate-300'
+                                                }`}>
+                                                {isSelected && (
+                                                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                                                )}
+                                              </div>
+                                              <span className="text-left flex-1">{optionText}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })()}
 
                                   {/* True/False */}
                                   {qType === 'true_false' && (
@@ -3528,20 +3582,7 @@ function ExamPage() {
                       </div>
                     )}
 
-                    {/* زر إنهاء القسم — تم إزالته حسب طلب المستخدم */}
-
-                    {/* ✅ زر تسليم الامتحان — يظهر في "كل الأسئلة" أو إذا ما في أقسام */}
-                    {!isSubmitted && (!hasSections || !selectedSectionKey) && (
-                      <div className="flex justify-center sm:justify-end mt-6 sm:mt-8">
-                        <button
-                          onClick={handleSubmit}
-                          disabled={submitting}
-                          className="w-full sm:w-auto px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
-                        >
-                          {submitting ? 'جاري التسليم…' : '✅ تسليم الامتحان'}
-                        </button>
-                      </div>
-                    )}
+                    {/* زر تسليم الامتحان — تم إزالته حسب طلب المستخدم */}
                   </>
                 )}
               </>

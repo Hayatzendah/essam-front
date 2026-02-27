@@ -500,6 +500,14 @@ input[type="text"].inline-block {
   hyphens: none !important;
 }
 
+/* ✅ نص القراءة: override — السماح بالالتفاف لمنع الفيضان الأفقي */
+.exam-reading-content,
+.exam-reading-content .rich-text-content,
+.exam-reading-content .exam-passage-text {
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
+}
+
 /* حاوية نص القراءة: إظهار النص كاملاً بدون قص */
 .reading-text-card {
   overflow: visible !important;

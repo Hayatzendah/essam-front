@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { sanitizeHtml, normalizeWordHtml } from '../../utils/sanitizeHtml';
 import { getSchreibenTasks, getSchreibenTask, checkSchreibenField } from '../../services/api';
 import './SchreibenPage.css';
 
@@ -128,17 +129,33 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
     const data = block.data || block;
 
     switch (block.type) {
-      case 'text':
+      case 'text': {
+        const textContent = data.content || '';
+        const isHtml = typeof textContent === 'string' && /<[a-z][\s\S]*>/i.test(textContent);
+        const blockStyle = {
+          backgroundColor: data.bgColor || '#f8fafc',
+          color: data.textColor || '#334155',
+        };
         return (
           <div
             key={block.id || blockIndex}
-            className="mb-4 p-5 bg-slate-50 rounded-xl border-l-4 border-blue-500"
+            className="schreiben-text-block mb-4 p-5 rounded-xl border-l-4 border-blue-500 min-w-0"
+            style={blockStyle}
           >
-            <p className="text-base leading-relaxed text-slate-700 whitespace-pre-wrap text-left">
-              {data.content}
-            </p>
+            {isHtml ? (
+              <div
+                className="text-base leading-relaxed text-left rich-text-content"
+                style={{ wordBreak: 'normal', overflowWrap: 'break-word' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(textContent)) }}
+              />
+            ) : (
+              <p className="text-base leading-relaxed text-left" style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
+                {textContent}
+              </p>
+            )}
           </div>
         );
+      }
 
       case 'image':
         return (
@@ -163,7 +180,7 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
         return (
           <div
             key={block.id || blockIndex}
-            className="mb-4 p-5 bg-white rounded-xl border border-slate-200"
+            className="mb-4 p-5 bg-white rounded-xl border border-slate-200 min-w-0"
           >
             {data.title && (
               <h4 className="text-base font-semibold text-slate-800 mb-4">
@@ -187,9 +204,9 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
                       </label>
                     )}
 
-                    {/* Field input + check button row */}
+                    {/* Field input + check button row - min-w-0 يمنع النص من الخروج عن الحدود */}
                     <div className="flex gap-2 items-start">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         {renderField(field, blockIndex, fieldIndex)}
                       </div>
                       {/* Check button - only for student fields */}
@@ -236,14 +253,14 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
             onChange={(e) => handleFieldChange(blockIndex, fieldIndex, e.target.value)}
             placeholder={field.placeholder || 'اكتب هنا...'}
             rows={1}
-            className="schreiben-form-textinput w-full p-3 py-2.5 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:outline-none focus:border-blue-500 transition-colors"
+            className="schreiben-form-textinput w-full min-w-0 p-3 py-2.5 border-2 border-slate-200 rounded-lg text-base leading-relaxed resize-y focus:outline-none focus:border-blue-500 transition-colors"
             dir="ltr"
           />
         );
 
       case 'prefilled':
         return (
-          <div className="p-4 bg-slate-100 rounded-lg text-base text-slate-700" dir="ltr">
+          <div className="p-4 bg-slate-100 rounded-lg text-base text-slate-700 min-w-0" style={{ wordBreak: 'keep-all', overflowWrap: 'normal' }} dir="ltr">
             {field.value}
           </div>
         );
@@ -330,8 +347,8 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
             ✍️ {task.title}
           </h1>
           {task.instructions && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap text-left">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl min-w-0">
+              <p className="text-sm text-amber-800 leading-relaxed text-left" style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
                 {task.instructions}
               </p>
             </div>
@@ -339,7 +356,7 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
         </div>
 
         {/* Content Blocks */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 text-left">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 text-left min-w-0">
           {(task.contentBlocks || []).map((block, index) => renderBlock(block, index))}
         </div>
 
