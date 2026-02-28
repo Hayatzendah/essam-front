@@ -1713,37 +1713,38 @@ function ExamPage() {
     return (attempt.items || []).filter((item) => !isEmptyQuestion(item));
   })();
 
-  // Calculate per-section progress from local answers (يدعم التصفية بـ sectionKey أو بمعرفات الأسئلة من API القسم)
+  // Calculate per-section progress from local answers
+  // كل تمرين (Übung) = وحدة واحدة — التمرين "مكتمل" لما تُجاب كل أسئلته الحقيقية
   const getSectionProgress = (sectionKey) => {
     const sectionData = sectionExercises[sectionKey];
-    const idsFromSection = sectionData?.exercises
-      ? new Set(sectionData.exercises.flatMap((ex) => (ex.questions || []).map((q) => q.questionId)))
-      : null;
-    // تصفية attempt.items حسب الأسئلة المنشورة فقط (من بيانات القسم)
+    const exercises = sectionData?.exercises || [];
+
+    if (exercises.length > 0) {
+      const total = exercises.length; // كل تمرين = 1
+      let answered = 0;
+      exercises.forEach((ex) => {
+        const realQs = (ex.questions || []).filter((q) => !q.contentOnly);
+        if (realQs.length === 0) return;
+        const allDone = realQs.every((q) => {
+          const idx = questionIdToItemIndex?.get(q.questionId);
+          return idx !== undefined && answers[idx] !== undefined;
+        });
+        if (allDone) answered++;
+      });
+      return { answered, total };
+    }
+
+    // fallback: بيانات القسم لم تُحمّل بعد → استخدام sectionKey
     const sectionItems = (attempt?.items || []).filter((item) => {
-      const qid = item.questionId || item.id || item._id ||
-        item.question?.id || item.question?._id ||
-        item.questionSnapshot?.id || item.questionSnapshot?._id;
-      // إذا عندنا بيانات القسم، نستخدمها للفلترة (تتضمن فقط الأسئلة المنشورة)
-      if (idsFromSection?.size) {
-        return qid && idsFromSection.has(qid);
-      }
-      // fallback: فلترة حسب sectionKey
       const itemSectionKey = item.sectionKey || item.section?.key;
       return itemSectionKey === sectionKey;
     });
-    // استخدام عدد الأسئلة المنشورة من بيانات القسم كأولوية
-    const total = idsFromSection?.size || sectionItems.length;
+    const total = sectionItems.length;
     let answered = 0;
     sectionItems.forEach((item) => {
-      const idx = item._fromSection ? `q-${item.questionId}` : attempt.items.indexOf(item);
+      const idx = attempt.items.indexOf(item);
       if (answers[idx] !== undefined) answered++;
     });
-    if (sectionItems.length === 0 && idsFromSection) {
-      idsFromSection.forEach((qid) => {
-        if (answers[`q-${qid}`] !== undefined) answered++;
-      });
-    }
     return { answered, total };
   };
 

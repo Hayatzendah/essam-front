@@ -16,19 +16,16 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
   return (
     <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
       {exercises.map((exercise) => {
-        // حساب التقدم من answers المحلية
-        const total = exercise.questionCount || exercise.questions?.length || 0;
-        let answeredCount = 0;
-        if (exercise.questions && questionIdToItemIndex) {
-          exercise.questions.forEach((q) => {
-            const idx = questionIdToItemIndex.get(q.questionId);
-            if (idx !== undefined && answers[idx] !== undefined) {
-              answeredCount++;
-            }
-          });
-        }
-        const percent = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
-        const isComplete = percent === 100;
+        // كل تمرين = وحدة واحدة — مكتمل لما تُجاب كل أسئلته الحقيقية
+        const realQs = (exercise.questions || []).filter((q) => !q.contentOnly);
+        const total = 1;
+        const allDone = realQs.length > 0 && questionIdToItemIndex && realQs.every((q) => {
+          const idx = questionIdToItemIndex.get(q.questionId);
+          return idx !== undefined && answers[idx] !== undefined;
+        });
+        const answeredCount = allDone ? 1 : 0;
+        const percent = allDone ? 100 : 0;
+        const isComplete = allDone;
 
         return (
           <button
