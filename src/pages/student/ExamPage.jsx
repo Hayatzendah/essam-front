@@ -1619,27 +1619,29 @@ function ExamPage() {
     // إذا كان قسم مختار → عرض أسئلة القسم (تصفية حسب sectionKey أو حسب معرفات الأسئلة من API القسم)
     if (hasSections && selectedSectionKey && attempt?.items) {
       if (sectionQuestionIds && sectionQuestionIds.size > 0) {
-        // بناء خريطة attempt items حسب questionId
-        const attemptItemById = new Map();
-        attempt.items.forEach((item) => {
+        // أسئلة الـ attempt الموجودة في هذا القسم (المصدر الأساسي — يحتفظ ببيانات الطالب)
+        const byIds = attempt.items
+          .filter((item) => {
+            const qid = item.questionId || item.id || item._id ||
+              item.question?.id || item.question?._id ||
+              item.questionSnapshot?.id || item.questionSnapshot?._id;
+            return qid && sectionQuestionIds.has(qid);
+          })
+          .filter((item) => !isEmptyQuestion(item));
+
+        // أسئلة القسم غير الموجودة في attempt (أُضيفت بعد بدء المحاولة)
+        const byIdsSet = new Set(byIds.map((item) => {
           const qid = item.questionId || item.id || item._id ||
             item.question?.id || item.question?._id ||
             item.questionSnapshot?.id || item.questionSnapshot?._id;
-          if (qid) attemptItemById.set(String(qid), item);
-        });
+          return qid ? String(qid) : null;
+        }).filter(Boolean));
 
-        // جلب كل أسئلة القسم من بيانات التمرين (إذا محملة)
-        const allSectionQs = [];
+        const missingFromAttempt = [];
         (currentSectionData?.exercises || []).forEach((ex) => {
-          (ex.questions || []).forEach((q) => allSectionQs.push(q));
-        });
-
-        if (allSectionQs.length > 0) {
-          // القسم محمّل: عرض كل أسئلة القسم — من attempt إذا موجود، وإلا من تعريف القسم
-          return allSectionQs
-            .map((q) => {
-              const attemptItem = q.questionId ? attemptItemById.get(q.questionId) : null;
-              return attemptItem || {
+          (ex.questions || []).forEach((q) => {
+            if (q.questionId && !byIdsSet.has(String(q.questionId))) {
+              missingFromAttempt.push({
                 questionId: q.questionId,
                 prompt: q.prompt,
                 promptSnapshot: q.prompt,
@@ -1652,22 +1654,35 @@ function ExamPage() {
                 sectionKey: selectedSectionKey,
                 section: { key: selectedSectionKey },
                 _fromSection: true,
-              };
-            })
-            .filter(Boolean)
-            .filter((item) => !isEmptyQuestion(item));
-        }
+              });
+            }
+          });
+        });
 
-        // القسم لم يُحمَّل بعد → fallback: attempt items المطابقة لـ sectionQuestionIds
-        const byIds = attempt.items
-          .filter((item) => {
-            const qid = item.questionId || item.id || item._id ||
-              item.question?.id || item.question?._id ||
-              item.questionSnapshot?.id || item.questionSnapshot?._id;
-            return qid && sectionQuestionIds.has(qid);
-          })
-          .filter((item) => !isEmptyQuestion(item));
-        return byIds;
+        const combined = [...byIds, ...missingFromAttempt.filter((item) => !isEmptyQuestion(item))];
+        if (combined.length > 0) return combined;
+
+        // fallback: إذا ما وُجدت أسئلة في attempt → عرض من تعريف القسم مباشرة
+        const fromSection = [];
+        (currentSectionData?.exercises || []).forEach((ex) => {
+          (ex.questions || []).forEach((q) => {
+            fromSection.push({
+              questionId: q.questionId,
+              prompt: q.prompt,
+              promptSnapshot: q.prompt,
+              text: q.prompt,
+              qType: q.qType || q.type || 'mcq',
+              type: q.qType || q.type || 'mcq',
+              options: q.options || [],
+              images: q.images || [],
+              points: q.points,
+              sectionKey: selectedSectionKey,
+              section: { key: selectedSectionKey },
+              _fromSection: true,
+            });
+          });
+        });
+        return fromSection.filter((item) => !isEmptyQuestion(item));
       }
       return attempt.items
         .filter((item) => {
