@@ -1621,7 +1621,8 @@ function ExamPage() {
           };
         })
         .filter(Boolean)
-        .filter((item) => !isEmptyQuestion(item));
+        .filter((item) => !isEmptyQuestion(item))
+        .filter((item) => !item.contentOnly);
     }
     // إذا كان قسم مختار → عرض أسئلة القسم (تصفية حسب sectionKey أو حسب معرفات الأسئلة من API القسم)
     if (hasSections && selectedSectionKey && attempt?.items) {
@@ -1634,7 +1635,8 @@ function ExamPage() {
               item.questionSnapshot?.id || item.questionSnapshot?._id;
             return qid && sectionQuestionIds.has(qid);
           })
-          .filter((item) => !isEmptyQuestion(item));
+          .filter((item) => !isEmptyQuestion(item))
+          .filter((item) => !item.contentOnly);
 
         // أسئلة القسم غير الموجودة في attempt (أُضيفت بعد بدء المحاولة)
         const byIdsSet = new Set(byIds.map((item) => {
@@ -1666,13 +1668,14 @@ function ExamPage() {
           });
         });
 
-        const combined = [...byIds, ...missingFromAttempt.filter((item) => !isEmptyQuestion(item))];
+        const combined = [...byIds, ...missingFromAttempt.filter((item) => !isEmptyQuestion(item) && !item.contentOnly)];
         if (combined.length > 0) return combined;
 
         // fallback: إذا ما وُجدت أسئلة في attempt → عرض من تعريف القسم مباشرة
         const fromSection = [];
         (currentSectionData?.exercises || []).forEach((ex) => {
           (ex.questions || []).forEach((q) => {
+            if (q.contentOnly) return;
             fromSection.push({
               questionId: q.questionId,
               prompt: q.prompt,
@@ -1696,7 +1699,8 @@ function ExamPage() {
           const itemSectionKey = item.sectionKey || item.section?.key;
           return itemSectionKey === selectedSectionKey;
         })
-        .filter((item) => !isEmptyQuestion(item));
+        .filter((item) => !isEmptyQuestion(item))
+        .filter((item) => !item.contentOnly);
     }
     // عرض كل الأسئلة: من تعريف الأقسام (الـ API) فقط — نفس مصدر "قسم قسم" حتى لا تظهر أسئلة وهمية
     if (hasSections && allSectionsOrderedQuestionIds.length > 0 && attempt?.items) {
@@ -1784,6 +1788,20 @@ function ExamPage() {
             {/* Mobile: horizontal scrollable tabs */}
             <div className="md:hidden mb-4 -mx-3 px-3">
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {/* زر "كل الأسئلة" في الموبايل */}
+                {!isEducational && (
+                  <button
+                    onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition-all ${selectedSectionKey === null
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-white text-slate-600 border border-slate-200'
+                      }`}
+                  >
+                    <span>📋</span>
+                    <span>كل الأسئلة</span>
+                    <span className="text-[10px] opacity-75">{answeredCount}/{totalQuestions}</span>
+                  </button>
+                )}
                 {sectionsOverview.map((section) => {
                   const progress = getSectionProgress(section.key);
                   const isActive = selectedSectionKey === section.key;
@@ -1824,6 +1842,44 @@ function ExamPage() {
                   </p>
                 </div>
                 <div className="p-2 space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  {/* زر "كل الأسئلة" — يظهر كل أسئلة الامتحان ويتيح التسليم */}
+                  {!isEducational && (
+                    <button
+                      onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
+                      className={`w-full text-right p-3 rounded-xl text-xs transition-all mb-1 ${selectedSectionKey === null
+                        ? 'bg-red-50 border border-red-200 text-red-700'
+                        : 'hover:bg-slate-50 text-slate-600 border border-transparent'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-shrink-0">
+                          <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                            <circle
+                              cx="18" cy="18" r="15.5" fill="none"
+                              stroke={answeredCount === totalQuestions && totalQuestions > 0 ? '#22c55e' : '#ef4444'}
+                              strokeWidth="3"
+                              strokeDasharray={`${totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0} ${totalQuestions > 0 ? 100 - Math.round((answeredCount / totalQuestions) * 100) : 100}`}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-[11px]">📋</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-semibold leading-tight ${selectedSectionKey === null ? 'text-red-700' : 'text-slate-800'}`}>
+                            كل الأسئلة
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {answeredCount}/{totalQuestions} سؤال
+                          </div>
+                        </div>
+                        {answeredCount === totalQuestions && totalQuestions > 0 && (
+                          <span className="text-green-500 text-sm flex-shrink-0">●</span>
+                        )}
+                      </div>
+                    </button>
+                  )}
+                  <div className="border-t border-slate-100 my-1" />
                   {sectionsOverview
                     .filter((section) => getSectionProgress(section.key).total > 0)
                     .map((section) => {
@@ -2009,7 +2065,7 @@ function ExamPage() {
                   </div>
                 )}
 
-                {/* عرض الأسئلة - لا تعرض إذا كان هناك تمارين ولم يتم اختيار تمرين. لا نعرض "لا توجد أسئلة" لتجنب ظهورها مع الأسئلة عند الدخول لتمرين */}
+                {/* عرض الأسئلة - لا تعرض إذا كان هناك تمارين ولم يتم اختيار تمرين */}
                 {!(hasSections && selectedSectionKey && hasExercises && !selectedExercise) && !loadingExercises && (
                   <>
                     <div className="space-y-6 mb-6">
@@ -3624,7 +3680,22 @@ function ExamPage() {
                       </div>
                     )}
 
-                    {/* زر تسليم الامتحان — تم إزالته حسب طلب المستخدم */}
+                    {/* زر تسليم الامتحان — يظهر فقط في وضع "كل الأسئلة" */}
+                    {hasSections && selectedSectionKey === null && !isEducational && (
+                      <div className="mt-8 mb-4 text-center">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                          <p className="text-sm text-slate-600 mb-4">
+                            أجبت على {answeredCount} من أصل {totalQuestions} سؤال
+                          </p>
+                          <button
+                            onClick={handleSubmit}
+                            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm"
+                          >
+                            تسليم الامتحان
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </>
