@@ -1566,11 +1566,13 @@ function ExamPage() {
     // أي سؤال كل خياراته وهمية (فارغة أو "-" أو "✓" فقط)
     if (Array.isArray(opts) && opts.length >= 1 && opts.every(isOptionDashOrEmpty)) return true;
     if (isEmptyPrompt && isSpeakingOrFreeText) return true;
+    const isTrueFalse = qType === 'true_false' || qType === 'true-false';
     const isMcqOrHasOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false', 'speaking'].includes(qType) || opts.length > 0;
-    if (isMcqOrHasOptions && !hasRealOption) return true;
+    // true_false له أزراره الخاصة (Richtig/Falsch) ولا يحتاج options — لا نفلتره بسبب غياب الخيارات
+    if (isMcqOrHasOptions && !hasRealOption && !isTrueFalse) return true;
     if (points === 0 && !hasRealOption) return true;
     // أسئلة الاختيار (MCQ) التي كان لها خيارات لكن كلها وهمية بعد التصفية → إخفاء (لا نطبق على speaking/free_text لأنها قد لا يكون لها خيارات أصلاً)
-    const expectsOptions = ['mcq', 'multiple-choice', 'true_false', 'true-false'].includes(qType);
+    const expectsOptions = ['mcq', 'multiple-choice'].includes(qType); // true_false لا يحتاج options
     if (expectsOptions && opts.length >= 1) {
       const { displayOptions } = getDisplayOptions(item);
       if (displayOptions.length === 0) return true;
