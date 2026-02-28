@@ -763,15 +763,20 @@ function ExamPage() {
 
     if (publishedIds.size === 0) return;
 
+    // فلترة + إزالة التكرارات (نفس questionId مرتين بسبب خطأ في البيانات)
+    const seenQids = new Set();
     const filtered = attempt.items.filter((item) => {
       const qid = item.questionId || item.id || item._id ||
         item.question?.id || item.question?._id ||
         item.questionSnapshot?.id || item.questionSnapshot?._id;
-      return qid && publishedIds.has(qid);
+      if (!qid || !publishedIds.has(qid)) return false;
+      if (seenQids.has(qid)) return false; // إزالة التكرارات
+      seenQids.add(qid);
+      return true;
     });
 
     if (filtered.length < attempt.items.length) {
-      console.log(`✅ Filtered out ${attempt.items.length - filtered.length} deleted questions from attempt.items`);
+      console.log(`✅ Filtered out ${attempt.items.length - filtered.length} deleted/duplicate questions from attempt.items`);
       setAttempt({ ...attempt, items: filtered });
     }
   }, [sectionExercises, sectionsOverview]);
