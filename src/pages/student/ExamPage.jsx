@@ -2219,12 +2219,41 @@ function ExamPage() {
                           const questionId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
                           const uniqueKey = questionId ? `${questionId}-${itemIndex}` : `item-${itemIndex}`;
 
-                          // ✅ تخطي عرض أسئلة contentOnly كأسئلة (placeholder فقط) - نعرض بس content blocks
+                          // ✅ تخطي عرض أسئلة contentOnly كأسئلة (placeholder فقط) - نعرض بس content blocks + exercise header
                           if (item.contentOnly) {
                             return (
-                              <div key={uniqueKey}>
+                              <div key={uniqueKey} className="space-y-4">
                                 {blockDist && blockDist.beforeMap[displayIndex] && (
                                   <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
+                                )}
+                                {/* في "كل الأسئلة": عرض محتوى التمرين (صوت/قراءة/contentBlocks) للامتحانات التعليمية */}
+                                {showExerciseHeader && (
+                                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
+                                    <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
+                                      Übung {exerciseInfo.exerciseIndex}
+                                    </h3>
+                                    {exerciseInfo.audioUrl && (
+                                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                        <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">🎵 ملف الاستماع</span>
+                                        <audio controls controlsList="nodownload" preload="metadata" src={toApiUrl(exerciseInfo.audioUrl)} className="w-full">
+                                          المتصفح لا يدعم تشغيل الملفات الصوتية
+                                        </audio>
+                                      </div>
+                                    )}
+                                    {exerciseInfo.readingPassage && (
+                                      <div className="rounded-lg p-3 border" style={{ backgroundColor: exerciseInfo.readingPassageBgColor || '#fefce8', borderColor: exerciseInfo.readingPassageBgColor ? `${exerciseInfo.readingPassageBgColor}cc` : '#fde68a' }}>
+                                        <div className="exam-reading-content text-xs sm:text-sm text-slate-700 leading-relaxed rounded-lg p-3" dir="ltr">
+                                          <ReadingPassageContent text={exerciseInfo.readingPassage} />
+                                        </div>
+                                      </div>
+                                    )}
+                                    {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
+                                      <ReadingCardsGrid cards={exerciseInfo.readingCards} cardsLayout={exerciseInfo.cardsLayout} />
+                                    )}
+                                    {exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (
+                                      <ContentBlocksRenderer blocks={exerciseInfo.contentBlocks} />
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             );
