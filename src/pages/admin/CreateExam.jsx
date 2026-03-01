@@ -416,7 +416,7 @@ function CreateExam() {
   return (
     <div className="create-exam-page">
       <div className="page-header">
-        <button onClick={() => navigate('/admin')} className="back-btn">
+        <button onClick={() => navigate('/welcome')} className="back-btn">
           ← العودة للوحة التحكم
         </button>
         <h1>إنشاء امتحان جديد</h1>
@@ -806,7 +806,7 @@ function CreateExam() {
           <div className="form-actions">
             <button
               type="button"
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/welcome')}
               className="cancel-btn"
             >
               إلغاء

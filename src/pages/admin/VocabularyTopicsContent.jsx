@@ -339,7 +339,7 @@ function VocabularyTopicsContent() {
   return (
     <div className="vocabulary-topics-content">
       <div className="content-header">
-        <button onClick={() => navigate('/admin')} className="back-button">
+        <button onClick={() => navigate('/welcome')} className="back-button">
           <svg fill="none" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
             <path
               strokeLinecap="round" strokeLinejoin="round" strokeWidth={3}

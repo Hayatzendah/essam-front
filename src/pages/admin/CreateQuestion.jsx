@@ -5030,7 +5030,7 @@ function CreateQuestion() {
           <div className="form-actions">
             <button
               type="button"
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/welcome')}
               className="cancel-btn"
             >
               إلغاء

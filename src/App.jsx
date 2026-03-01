@@ -3,7 +3,6 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Welcome from './pages/Welcome';
 import Home from './pages/Home';
-import Dashboard from './pages/admin/Dashboard';
 import CreateQuestion from './pages/admin/CreateQuestion';
 import EditQuestion from './pages/admin/EditQuestion';
 import CreateExam from './pages/admin/CreateExam';
@@ -77,14 +76,7 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/admin"
-          element={
-            <AdminRoute>
-              <Dashboard />
-            </AdminRoute>
-          }
-        />
+        <Route path="/admin" element={<Navigate to="/welcome" />} />
         <Route
           path="/admin/questions/new"
           element={
