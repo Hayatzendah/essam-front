@@ -1234,7 +1234,17 @@ function EditQuestion() {
       setSavingContent(true);
       setError('');
       try {
-        await questionsAPI.update(id, { contentBlocks });
+        const cleanedBlocks = contentBlocks.map(b => {
+          if (b.type === 'cards' && b.cards) {
+            return { ...b, cards: b.cards.map(({ _uploadingImage, ...card }) => card) };
+          }
+          if (b.type === 'audio') {
+            const { _audioFile, _audioPreview, _uploading, ...rest } = b;
+            return rest;
+          }
+          return b;
+        });
+        await questionsAPI.update(id, { contentBlocks: cleanedBlocks });
         setSuccess('تم حفظ المحتوى بنجاح');
       } catch (err) {
         setError('فشل حفظ المحتوى: ' + (err.response?.data?.message || err.message));

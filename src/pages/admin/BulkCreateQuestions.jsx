@@ -563,6 +563,9 @@ function BulkCreateQuestions() {
           const { audioFile, audioPreview, _uploading, ...rest } = b;
           return rest;
         }
+        if (b.type === 'cards' && b.cards) {
+          return { ...b, cards: b.cards.map(({ _uploadingImage, ...card }) => card) };
+        }
         return b;
       }) : [];
 
