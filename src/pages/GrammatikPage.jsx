@@ -8,7 +8,7 @@ import { useLevels } from "../hooks/useLevels";
 const DEFAULT_ICONS = ["📚", "✏️", "📝", "🎯", "🔤", "📖", "🧩", "🔁", "🔗", "🧱"];
 
 export default function GrammatikPage() {
-  const { levelNames } = useLevels();
+  const { levelNames } = useLevels('grammatik');
   const [activeLevel, setActiveLevel] = useState("A1");
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);

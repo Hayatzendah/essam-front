@@ -5,7 +5,7 @@ import { getVocabularyTopics } from "../services/api";
 import { useLevels } from "../hooks/useLevels";
 
 export default function WortschatzPage() {
-  const { levelNames } = useLevels();
+  const { levelNames } = useLevels('wortschatz');
   const [activeLevel, setActiveLevel] = useState("A1");
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);

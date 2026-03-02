@@ -18,6 +18,15 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+const SECTION_OPTIONS = [
+  { key: 'grammatik', label: 'Grammatik' },
+  { key: 'wortschatz', label: 'Wortschatz' },
+  { key: 'pruefungen', label: 'Prüfungen' },
+  { key: 'leben_in_deutschland', label: 'Leben in Deutschland' },
+];
+
+const ALL_SECTIONS = SECTION_OPTIONS.map((s) => s.key);
+
 // Sortable Level Row
 const SortableLevelRow = ({ level, onEdit, onDelete }) => {
   const {
@@ -104,6 +113,7 @@ function LevelsManagement() {
   // Add form
   const [newName, setNewName] = useState('');
   const [newLabel, setNewLabel] = useState('');
+  const [newSections, setNewSections] = useState([...ALL_SECTIONS]);
   const [adding, setAdding] = useState(false);
 
   // Edit state
@@ -111,6 +121,7 @@ function LevelsManagement() {
   const [editName, setEditName] = useState('');
   const [editLabel, setEditLabel] = useState('');
   const [editActive, setEditActive] = useState(true);
+  const [editSections, setEditSections] = useState([]);
 
   // Delete confirmation
   const [deletingLevel, setDeletingLevel] = useState(null);
@@ -147,9 +158,10 @@ function LevelsManagement() {
     setError('');
     setSuccess('');
     try {
-      await levelsAPI.create({ name: newName.trim(), label: newLabel.trim() || undefined });
+      await levelsAPI.create({ name: newName.trim(), label: newLabel.trim() || undefined, sections: newSections });
       setNewName('');
       setNewLabel('');
+      setNewSections([...ALL_SECTIONS]);
       setSuccess('تم إضافة المستوى بنجاح');
       fetchLevels();
     } catch (err) {
@@ -181,6 +193,7 @@ function LevelsManagement() {
     setEditName(level.name);
     setEditLabel(level.label || '');
     setEditActive(level.isActive);
+    setEditSections(level.sections || [...ALL_SECTIONS]);
   };
 
   const handleEditSave = async () => {
@@ -192,6 +205,10 @@ function LevelsManagement() {
       if (editName !== editingLevel.name) updates.name = editName;
       if (editLabel !== (editingLevel.label || '')) updates.label = editLabel || undefined;
       if (editActive !== editingLevel.isActive) updates.isActive = editActive;
+      const origSections = editingLevel.sections || ALL_SECTIONS;
+      if (JSON.stringify([...editSections].sort()) !== JSON.stringify([...origSections].sort())) {
+        updates.sections = editSections;
+      }
       if (Object.keys(updates).length === 0) {
         setEditingLevel(null);
         return;
@@ -269,7 +286,7 @@ function LevelsManagement() {
         {/* Add Form */}
         <form onSubmit={handleAdd} className="mb-6 p-4 bg-white rounded-lg border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-3">إضافة مستوى جديد</h3>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 mb-3">
             <input
               type="text"
               placeholder="اسم المستوى (مثل: C2)"
@@ -285,14 +302,39 @@ function LevelsManagement() {
               onChange={(e) => setNewLabel(e.target.value)}
               className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button
-              type="submit"
-              disabled={adding || !newName.trim()}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-            >
-              {adding ? 'جاري الإضافة...' : 'إضافة'}
-            </button>
           </div>
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-slate-700 mb-2">الأقسام</label>
+            <div className="flex flex-wrap gap-3">
+              {SECTION_OPTIONS.map((opt) => (
+                <label key={opt.key} className="flex items-center gap-1.5 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={newSections.includes(opt.key)}
+                    onChange={(e) => {
+                      setNewSections((prev) =>
+                        e.target.checked
+                          ? [...prev, opt.key]
+                          : prev.filter((s) => s !== opt.key)
+                      );
+                    }}
+                    className="rounded border-slate-300"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+            {newSections.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">يجب اختيار قسم واحد على الأقل</p>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={adding || !newName.trim() || newSections.length === 0}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {adding ? 'جاري الإضافة...' : 'إضافة'}
+          </button>
         </form>
 
         {/* Levels List with DnD */}
@@ -344,6 +386,31 @@ function LevelsManagement() {
                     placeholder="اختياري"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">الأقسام</label>
+                  <div className="flex flex-wrap gap-3">
+                    {SECTION_OPTIONS.map((opt) => (
+                      <label key={opt.key} className="flex items-center gap-1.5 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={editSections.includes(opt.key)}
+                          onChange={(e) => {
+                            setEditSections((prev) =>
+                              e.target.checked
+                                ? [...prev, opt.key]
+                                : prev.filter((s) => s !== opt.key)
+                            );
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {editSections.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">يجب اختيار قسم واحد على الأقل</p>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -364,7 +431,8 @@ function LevelsManagement() {
                 </button>
                 <button
                   onClick={handleEditSave}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={editSections.length === 0}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
                   حفظ
                 </button>

@@ -99,7 +99,7 @@ const EXAM_SKILLS = [
 ];
 
 export default function PruefungenPage() {
-  const { levelNames } = useLevels();
+  const { levelNames } = useLevels('pruefungen');
   const [activeLevel, setActiveLevel] = useState("A1");
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [selectedSkill, setSelectedSkill] = useState(null);

@@ -26,7 +26,7 @@ async function fetchLevels() {
   return cachePromise;
 }
 
-export function useLevels() {
+export function useLevels(section) {
   const [levels, setLevels] = useState(cachedLevels || []);
   const [loading, setLoading] = useState(!cachedLevels);
 
@@ -58,9 +58,13 @@ export function useLevels() {
     setLoading(false);
   }, []);
 
-  const levelNames = levels.length > 0
-    ? levels.map((l) => l.name)
+  const filteredLevels = section
+    ? levels.filter((l) => !l.sections || l.sections.includes(section))
+    : levels;
+
+  const levelNames = filteredLevels.length > 0
+    ? filteredLevels.map((l) => l.name)
     : FALLBACK_LEVELS;
 
-  return { levels, levelNames, loading, refresh };
+  return { levels: filteredLevels, levelNames, loading, refresh };
 }
