@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  base: './', // مسارات نسبية عشان الـ assets تتحمّل صح على Hostinger
   plugins: [react()],
   resolve: {
     alias: {

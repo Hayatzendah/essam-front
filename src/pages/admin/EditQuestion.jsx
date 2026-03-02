@@ -171,6 +171,7 @@ function EditQuestion() {
   const [loadingQuestion, setLoadingQuestion] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [useRichEditor, setUseRichEditor] = useState(false); // ✅ محرر غني للنصوص HTML (من الوورد)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -186,7 +187,7 @@ function EditQuestion() {
     section: '',
     level: 'B1',
     tags: [],
-    status: 'draft',
+    status: 'published',
     questionType: 'general',
     selectedState: '',
     // Leben in Deutschland fields
@@ -218,6 +219,12 @@ function EditQuestion() {
   const [isContentOnly, setIsContentOnly] = useState(false);
   const [contentBlocks, setContentBlocks] = useState([]);
   const [savingContent, setSavingContent] = useState(false);
+
+  // ✅ Reading passage + cards (من BulkCreateQuestions)
+  const [readingPassage, setReadingPassage] = useState('');
+  const [readingPassageBgColor, setReadingPassageBgColor] = useState('');
+  const [readingCards, setReadingCards] = useState([]);
+  const [cardsLayout, setCardsLayout] = useState('horizontal');
 
   // قائمة الولايات الألمانية
   const germanStates = [
@@ -439,6 +446,11 @@ function EditQuestion() {
         interactiveTextType = 'reorder';
       }
 
+      // ✅ إذا النص فيه HTML (جاي من محرر الوورد) → نفعّل المحرر الغني
+      if (/<[a-z][\s\S]*>/i.test(question.prompt || '')) {
+        setUseRichEditor(true);
+      }
+
       setFormData({
         prompt: question.prompt || '',
         qType: question.qType || 'mcq',
@@ -452,7 +464,7 @@ function EditQuestion() {
         section: question.section || '',
         level: question.level || 'B1',
         tags: Array.isArray(question.tags) ? question.tags : [],
-        status: question.status || 'draft',
+        status: question.status || 'published',
         questionType: selectedState ? 'state' : 'general',
         selectedState: selectedState,
         usageCategory: usageCategory,
@@ -483,6 +495,12 @@ function EditQuestion() {
       } else {
         setContentBlocks([]);
       }
+
+      // ✅ تحميل فقرة القراءة والبطاقات (من BulkCreateQuestions)
+      if (question.readingPassage) setReadingPassage(question.readingPassage);
+      if (question.readingPassageBgColor) setReadingPassageBgColor(question.readingPassageBgColor);
+      if (Array.isArray(question.readingCards) && question.readingCards.length > 0) setReadingCards(question.readingCards);
+      if (question.cardsLayout) setCardsLayout(question.cardsLayout);
 
       // إذا كان هناك media (صوت)
       if (question.media && question.media.type === 'audio') {
@@ -1122,6 +1140,14 @@ function EditQuestion() {
         }
       }
 
+      // ✅ حفظ فقرة القراءة والبطاقات
+      if (readingPassage || readingCards.length > 0) {
+        questionData.readingPassage = readingPassage || null;
+        questionData.readingPassageBgColor = readingPassageBgColor || null;
+        questionData.readingCards = readingCards.filter(c => (c.title || '').trim() || (c.content || '').trim());
+        questionData.cardsLayout = cardsLayout || 'horizontal';
+      }
+
       console.log('Updating question data:', JSON.stringify(questionData, null, 2));
 
       const updatedQuestion = await questionsAPI.update(id, questionData);
@@ -1457,17 +1483,178 @@ function EditQuestion() {
         <form onSubmit={handleSubmit} className="question-form">
           {/* Prompt */}
           <div className="form-group">
-            <label htmlFor="prompt">نص السؤال *</label>
-            <textarea
-              id="prompt"
-              name="prompt"
-              value={formData.prompt}
-              onChange={handleInputChange}
-              required
-              rows={4}
-              placeholder="أدخل نص السؤال هنا..."
-            />
+            <label htmlFor="prompt">
+              نص السؤال *
+              {!useRichEditor && (
+                <button
+                  type="button"
+                  onClick={() => setUseRichEditor(true)}
+                  style={{ marginRight: 8, fontSize: 12, padding: '2px 8px', border: '1px solid #cbd5e1', borderRadius: 4, background: '#f8fafc', cursor: 'pointer' }}
+                  title="التبديل لمحرر غني (مثل الوورد)"
+                >
+                  محرر غني
+                </button>
+              )}
+              {useRichEditor && (
+                <button
+                  type="button"
+                  onClick={() => setUseRichEditor(false)}
+                  style={{ marginRight: 8, fontSize: 12, padding: '2px 8px', border: '1px solid #cbd5e1', borderRadius: 4, background: '#f8fafc', cursor: 'pointer' }}
+                  title="التبديل لنص عادي"
+                >
+                  نص عادي
+                </button>
+              )}
+            </label>
+            {useRichEditor ? (
+              <Suspense fallback={<div style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 8, minHeight: 120, background: '#fafafa' }}>جاري تحميل المحرر...</div>}>
+                <SimpleHtmlEditor
+                  value={formData.prompt}
+                  onChange={(html) => setFormData((prev) => ({ ...prev, prompt: html }))}
+                  placeholder="أدخل نص السؤال هنا..."
+                  dir="ltr"
+                />
+              </Suspense>
+            ) : (
+              <textarea
+                id="prompt"
+                name="prompt"
+                value={formData.prompt}
+                onChange={handleInputChange}
+                required
+                rows={4}
+                placeholder="أدخل نص السؤال هنا..."
+              />
+            )}
           </div>
+
+          {/* ✅ فقرة القراءة (إذا موجودة) */}
+          {(readingPassage || readingCards.length > 0) && (
+            <div style={{ padding: 16, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 16 }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#92400e' }}>
+                فقرة القراءة
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <label style={{ fontSize: 12, color: '#92400e' }}>لون الخلفية:</label>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {[
+                    { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+                    { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+                    { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+                    { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+                    { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+                    { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+                    { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+                  ].map((c) => (
+                    <button key={c.value} type="button" title={c.label}
+                      onClick={() => setReadingPassageBgColor(c.value)}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', border: `2px solid ${readingPassageBgColor === c.value ? '#3b82f6' : c.border}`,
+                        backgroundColor: c.bg, cursor: 'pointer', boxShadow: readingPassageBgColor === c.value ? '0 0 0 2px #93c5fd' : 'none',
+                      }} />
+                  ))}
+                  <input type="color" value={readingPassageBgColor || '#fefce8'}
+                    onChange={(e) => setReadingPassageBgColor(e.target.value)}
+                    title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+                </div>
+              </div>
+              <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                <SimpleHtmlEditor
+                  value={readingPassage}
+                  onChange={(html) => setReadingPassage(html || '')}
+                  placeholder="انسخ نص القراءة هنا من الوورد..."
+                  dir="ltr"
+                />
+              </Suspense>
+
+              {/* بطاقات المعلومات */}
+              {readingCards.length > 0 && (
+                <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <label style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>
+                      بطاقات المعلومات
+                    </label>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #f59e0b' }}>
+                        <button type="button" onClick={() => setCardsLayout('horizontal')}
+                          style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            backgroundColor: cardsLayout === 'horizontal' ? '#f59e0b' : '#fef3c7',
+                            color: cardsLayout === 'horizontal' ? '#fff' : '#92400e' }}>
+                          ▤ أفقي
+                        </button>
+                        <button type="button" onClick={() => setCardsLayout('vertical')}
+                          style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            borderRight: '1px solid #f59e0b',
+                            backgroundColor: cardsLayout === 'vertical' ? '#f59e0b' : '#fef3c7',
+                            color: cardsLayout === 'vertical' ? '#fff' : '#92400e' }}>
+                          ▦ عمودي
+                        </button>
+                      </div>
+                      <button type="button"
+                        onClick={() => setReadingCards(prev => [...prev, { title: '', content: '', color: '' }])}
+                        style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                          border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f', cursor: 'pointer' }}>
+                        + بطاقة جديدة
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                    {readingCards.map((card, idx) => {
+                      const CARD_COLORS = [
+                        { key: 'teal', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
+                        { key: 'sky', bg: '#f0f9ff', border: '#bae6fd', text: '#0c4a6e' },
+                        { key: 'emerald', bg: '#ecfdf5', border: '#a7f3d0', text: '#064e3b' },
+                        { key: 'violet', bg: '#f5f3ff', border: '#c4b5fd', text: '#4c1d95' },
+                        { key: 'rose', bg: '#fff1f2', border: '#fecdd3', text: '#881337' },
+                        { key: 'amber', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
+                        { key: 'orange', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
+                        { key: 'indigo', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+                        { key: 'gray', bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
+                      ];
+                      const sel = CARD_COLORS.find(c => c.key === card.color) || CARD_COLORS[idx % CARD_COLORS.length];
+                      return (
+                        <div key={idx} style={{ padding: 12, backgroundColor: sel.bg, border: `2px solid ${sel.border}`, borderRadius: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: sel.text }}>بطاقة {idx + 1}</span>
+                            <button type="button"
+                              onClick={() => setReadingCards(prev => prev.filter((_, i) => i !== idx))}
+                              style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+                              حذف
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                            {CARD_COLORS.map(c => (
+                              <button key={c.key} type="button"
+                                onClick={() => setReadingCards(prev => prev.map((cd, i) => i === idx ? { ...cd, color: c.key } : cd))}
+                                style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: c.bg,
+                                  border: `2px solid ${card.color === c.key ? c.text : c.border}`, cursor: 'pointer',
+                                  boxShadow: card.color === c.key ? `0 0 0 2px ${c.border}` : 'none' }} />
+                            ))}
+                          </div>
+                          <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>...</div>}>
+                            <SimpleHtmlEditor
+                              value={card.title || ''}
+                              onChange={(html) => setReadingCards(prev => prev.map((cd, i) => i === idx ? { ...cd, title: html } : cd))}
+                              placeholder="عنوان البطاقة"
+                              dir="ltr"
+                            />
+                          </Suspense>
+                          <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>...</div>}>
+                            <SimpleHtmlEditor
+                              value={card.content || ''}
+                              onChange={(html) => setReadingCards(prev => prev.map((cd, i) => i === idx ? { ...cd, content: html } : cd))}
+                              placeholder="محتوى البطاقة..."
+                              dir="ltr"
+                            />
+                          </Suspense>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Question Type */}
           {!returnTo && (

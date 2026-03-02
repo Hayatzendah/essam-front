@@ -503,7 +503,14 @@ function ExamSections() {
                         </div>
                         <div className="es-question-content">
                           <p className="es-question-prompt">
-                            {q.prompt || q.question?.prompt || q.questionData?.prompt || 'سؤال #' + (index + 1)}
+                            {(() => {
+                              const raw = q.prompt || q.question?.prompt || q.questionData?.prompt || '';
+                              if (!raw) return 'سؤال #' + (index + 1);
+                              // إزالة وسوم HTML لعرض النص فقط في القائمة
+                              const tmp = document.createElement('div');
+                              tmp.innerHTML = raw;
+                              return tmp.textContent || tmp.innerText || raw;
+                            })()}
                           </p>
                           <div className="es-question-badges">
                             {(q.type || q.question?.type || q.questionData?.type) && (

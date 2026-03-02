@@ -1,0 +1,22 @@
+# ضروري عند رفع البيلد على Hostinger/أباتشي
+# يمنع اعتبار طلبات /assets/ كـ SPA فيُرجع index.html (ونحصل على MIME text/html)
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # إذا الطلب لملف أو مجلد موجود فعلياً — لا تعيد التوجيه (أرسل الملف الحقيقي)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # باقي المسارات (مثل /login أو /admin) — أرسل index.html لتطبيق SPA
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# MIME types للملفات الثابتة (لو السيرفر لا يضبطها)
+<IfModule mod_mime.c>
+  AddType text/css .css
+  AddType application/javascript .js
+  AddType application/javascript .mjs
+</IfModule>

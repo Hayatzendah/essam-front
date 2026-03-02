@@ -1744,11 +1744,35 @@ function ExamPage() {
         const sectionData = sectionExercises[section.key];
         if (!sectionData?.exercises) continue;
         for (const exercise of sectionData.exercises) {
-          for (const q of exercise.questions || []) {
-            if (!q.questionId || q.contentOnly) continue; // تخطي contentOnly والأسئلة بدون ID
+          const questions = exercise.questions || [];
+          let exerciseHasItems = false;
+          for (const q of questions) {
+            if (!q.questionId) continue; // تخطي الأسئلة بدون ID
             const qId = String(q.questionId);
             if (seenQIds.has(qId)) continue; // تخطي التكرارات
             seenQIds.add(qId);
+            exerciseHasItems = true;
+
+            // ✅ contentOnly: نضيفها للعرض (المحتوى التعليمي)
+            if (q.contentOnly) {
+              allItems.push({
+                questionId: q.questionId,
+                prompt: q.prompt,
+                promptSnapshot: q.prompt,
+                text: q.prompt,
+                qType: q.qType || q.type || 'mcq',
+                type: q.qType || q.type || 'mcq',
+                options: [],
+                images: q.images || [],
+                points: 0,
+                contentOnly: true,
+                sectionKey: section.key,
+                section: { key: section.key },
+                _fromSection: true,
+              });
+              continue;
+            }
+
             // جرب تجيب السؤال من attempt.items (عشان الإجابات محفوظة)
             const idx = questionIdToItemIndex.get(qId);
             if (idx !== undefined && attempt?.items[idx]) {
@@ -1771,9 +1795,27 @@ function ExamPage() {
               });
             }
           }
+
+          // ✅ تمرين بدون أسئلة لكن فيه محتوى تعليمي (audio/reading/contentBlocks) → ننشئ عنصر وهمي لعرض المحتوى
+          if (!exerciseHasItems && (exercise.audioUrl || exercise.readingPassage || (exercise.readingCards && exercise.readingCards.length > 0) || (exercise.contentBlocks && exercise.contentBlocks.length > 0) || exercise.title)) {
+            const virtualId = `virtual-ex-${section.key}-${exercise.exerciseIndex ?? exercise.exerciseNumber ?? Math.random()}`;
+            allItems.push({
+              questionId: virtualId,
+              prompt: '',
+              promptSnapshot: '',
+              text: '',
+              options: [],
+              points: 0,
+              contentOnly: true,
+              sectionKey: section.key,
+              section: { key: section.key },
+              _fromSection: true,
+              _virtualExercise: exercise, // مرجع للتمرين لعرض المحتوى
+            });
+          }
         }
       }
-      return allItems.filter((item) => !isEmptyQuestion(item));
+      return allItems.filter((item) => item.contentOnly || !isEmptyQuestion(item));
     }
     // fallback: بدون أقسام أو قبل تحميلها
     return (attempt.items || []).filter((item) => !isEmptyQuestion(item));
@@ -2173,12 +2215,29 @@ function ExamPage() {
                           const itemIndex = item._fromSection ? `q-${item.questionId}` : rawItemIndex;
                           // ✅ ترقيم الأسئلة بدون contentOnly
                           if (!item.contentOnly) visibleQuestionCounter++;
-                          const displayNumber = (hasSections && selectedSectionKey) || item._fromSection ? visibleQuestionCounter : rawItemIndex + 1;
+                          const displayNumber = visibleQuestionCounter;
                           const itemOverride = item._fromSection ? item : undefined;
 
                           // ✅ في "كل الأسئلة": عرض صوت/قراءة التمرين فوق أول سؤال لكل تمرين
                           const qId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
-                          const exerciseInfo = qId ? questionExerciseMap.get(qId) : null;
+                          let exerciseInfo = qId ? questionExerciseMap.get(qId) : null;
+
+                          // ✅ للعناصر الوهمية (_virtualExercise): نبني exerciseInfo من بيانات التمرين مباشرة
+                          if (!exerciseInfo && item._virtualExercise) {
+                            const vex = item._virtualExercise;
+                            exerciseInfo = {
+                              audioUrl: vex.audioUrl,
+                              readingPassage: vex.readingPassage,
+                              readingPassageBgColor: vex.readingPassageBgColor,
+                              readingCards: vex.readingCards,
+                              cardsLayout: vex.cardsLayout,
+                              contentBlocks: vex.contentBlocks,
+                              title: vex.title,
+                              exerciseIndex: vex.exerciseIndex ?? vex.exerciseNumber,
+                              exerciseId: `ex-${vex.exerciseIndex ?? vex.exerciseNumber}-${vex.title || ''}`,
+                            };
+                          }
+
                           const isAllQuestionsMode = !selectedSectionKey && !selectedExercise;
                           let showExerciseHeader = false;
                           if (isAllQuestionsMode && exerciseInfo?.exerciseId && !shownExerciseIds.has(exerciseInfo.exerciseId)) {
@@ -2219,14 +2278,11 @@ function ExamPage() {
                           const questionId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
                           const uniqueKey = questionId ? `${questionId}-${itemIndex}` : `item-${itemIndex}`;
 
-                          // ✅ تخطي عرض أسئلة contentOnly كأسئلة (placeholder فقط) - نعرض بس content blocks + exercise header
+                          // ✅ تخطي عرض أسئلة contentOnly كأسئلة (placeholder فقط) - نعرض بس content blocks
                           if (item.contentOnly) {
                             return (
-                              <div key={uniqueKey} className="space-y-4">
-                                {blockDist && blockDist.beforeMap[displayIndex] && (
-                                  <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
-                                )}
-                                {/* في "كل الأسئلة": عرض محتوى التمرين (صوت/قراءة/contentBlocks) للامتحانات التعليمية */}
+                              <div key={uniqueKey}>
+                                {/* ✅ عنوان التمرين + صوت/قراءة مشتركة في "كل الأسئلة" (contentOnly) */}
                                 {showExerciseHeader && (
                                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
                                     <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
@@ -2241,7 +2297,13 @@ function ExamPage() {
                                       </div>
                                     )}
                                     {exerciseInfo.readingPassage && (
-                                      <div className="rounded-lg p-3 border" style={{ backgroundColor: exerciseInfo.readingPassageBgColor || '#fefce8', borderColor: exerciseInfo.readingPassageBgColor ? `${exerciseInfo.readingPassageBgColor}cc` : '#fde68a' }}>
+                                      <div
+                                        className="rounded-lg p-3 border"
+                                        style={{
+                                          backgroundColor: exerciseInfo.readingPassageBgColor || '#fefce8',
+                                          borderColor: exerciseInfo.readingPassageBgColor ? `${exerciseInfo.readingPassageBgColor}cc` : '#fde68a',
+                                        }}
+                                      >
                                         <div className="exam-reading-content text-xs sm:text-sm text-slate-700 leading-relaxed rounded-lg p-3" dir="ltr">
                                           <ReadingPassageContent text={exerciseInfo.readingPassage} />
                                         </div>
@@ -2254,6 +2316,9 @@ function ExamPage() {
                                       <ContentBlocksRenderer blocks={exerciseInfo.contentBlocks} />
                                     )}
                                   </div>
+                                )}
+                                {blockDist && blockDist.beforeMap[displayIndex] && (
+                                  <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
                                 )}
                               </div>
                             );
@@ -3780,7 +3845,7 @@ function ExamPage() {
                     )}
 
                     {/* زر تسليم الامتحان — يظهر فقط في وضع "كل الأسئلة" */}
-                    {hasSections && selectedSectionKey === null && !isEducational && (
+                    {hasSections && selectedSectionKey === null && !isEducational && totalQuestions > 0 && (
                       <div className="mt-8 mb-4 text-center">
                         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                           <p className="text-sm text-slate-600 mb-4">
