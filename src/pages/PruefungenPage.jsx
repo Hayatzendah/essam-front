@@ -148,7 +148,9 @@ export default function PruefungenPage() {
         provider: selectedProvider,
         mainSkill: selectedSkill,
       });
-      setExams(data.items || data || []);
+      const rawExams = data.items || data || [];
+      rawExams.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      setExams(rawExams);
     } catch (err) {
       console.error("Error loading exams:", err);
       if (err.response?.status === 401) {
@@ -261,7 +263,7 @@ export default function PruefungenPage() {
 
             {/* كروت الجهات الممتحنة */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-12">
-              {PROVIDERS.map((provider) => (
+              {PROVIDERS.filter(p => p.allowedLevels.includes(activeLevel)).map((provider) => (
                 <button
                   key={provider.id}
                   type="button"
@@ -402,7 +404,7 @@ export default function PruefungenPage() {
             )}
 
             {!loading && !error && exams.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir="ltr">
                 {exams.map((exam) => (
                   <button
                     key={exam.id || exam._id}

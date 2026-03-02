@@ -12,9 +12,17 @@ const TOOLBAR_BTN = {
 /**
  * محرر بنص غني + شريط أدوات (مثل الوورد) ويحافظ على تنسيقات اللصق من الوورد.
  */
-export default function SimpleHtmlEditor({ value = '', onChange, placeholder, className = '', dir = 'ltr' }) {
+export default function SimpleHtmlEditor({ value = '', onChange, placeholder, className = '', dir = 'ltr', extraToolbar, editorRef }) {
   const elRef = useRef(null);
   const isInternalChange = useRef(false);
+
+  // Forward internal elRef to external editorRef
+  useEffect(() => {
+    if (editorRef) {
+      if (typeof editorRef === 'function') editorRef(elRef.current);
+      else editorRef.current = elRef.current;
+    }
+  }, [editorRef]);
 
   useEffect(() => {
     const el = elRef.current;
@@ -106,6 +114,12 @@ export default function SimpleHtmlEditor({ value = '', onChange, placeholder, cl
         <button type="button" title="توسيط" style={TOOLBAR_BTN} onClick={() => exec('justifyCenter')}>≡</button>
         <button type="button" title="محاذاة لليمين" style={TOOLBAR_BTN} onClick={() => exec('justifyRight')}>≡‎</button>
         <button type="button" title="ضبط" style={TOOLBAR_BTN} onClick={() => exec('justifyFull')}>≡</button>
+        {extraToolbar && (
+          <>
+            <span style={{ width: 1, background: '#e2e8f0', margin: '0 4px' }} />
+            {extraToolbar}
+          </>
+        )}
       </div>
       {isEmpty && placeholder && (
         <div

@@ -341,7 +341,11 @@ function ReorderTask({ parts, prompt, itemIndex, answers, setAnswers, saveAnswer
                 {index + 1}
               </div>
               <div className="flex-1 text-base text-slate-900">
-                {part.text}
+                {/<[^>]+>/.test(part.text || '') ? (
+                  <span dangerouslySetInnerHTML={{ __html: part.text }} />
+                ) : (
+                  part.text
+                )}
               </div>
               {!isSubmitted && (
                 <div className="flex-shrink-0 text-slate-400">
@@ -3058,7 +3062,14 @@ function ExamPage() {
                                           <div className="leading-8">
                                             {parts.map((part, partIndex) => {
                                               if (part.type === 'text') {
-                                                const lines = (part.content || '').split('\n');
+                                                const content = part.content || '';
+                                                const hasHtml = /<[^>]+>/.test(content);
+                                                if (hasHtml) {
+                                                  return (
+                                                    <span key={partIndex} className="inline" dangerouslySetInnerHTML={{ __html: content }} />
+                                                  );
+                                                }
+                                                const lines = content.split('\n');
                                                 return (
                                                   <span key={partIndex} className="inline">
                                                     {lines.map((line, i) => (

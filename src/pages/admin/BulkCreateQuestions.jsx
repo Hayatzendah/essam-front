@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import axios from 'axios';
@@ -51,7 +51,7 @@ function BulkCreateQuestions() {
   const [sections, setSections] = useState([]);
   const [sectionKey, setSectionKey] = useState(preSectionKey);
 
-  // Exercise mode: 'audio' (Hören), 'reading' (Lesen), 'speaking' (Sprechen)
+  // Exercise mode: 'audio' (Hören), 'reading' (Lesen), 'writing' (Schreiben), 'speaking' (Sprechen)
   const [exerciseMode, setExerciseMode] = useState('audio');
   const useAudio = exerciseMode === 'audio'; // backward compat
 
@@ -73,6 +73,18 @@ function BulkCreateQuestions() {
   // Content blocks (for speaking mode)
   const [contentBlocks, setContentBlocks] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+
+  // Writing mode state
+  const [writingPassage, setWritingPassage] = useState('');
+  const [writingPassageBgColor, setWritingPassageBgColor] = useState('');
+  const [writingCards, setWritingCards] = useState([]);
+  const [writingCardsLayout, setWritingCardsLayout] = useState('horizontal');
+  const [interactiveTextType, setInteractiveTextType] = useState('fill_blanks');
+  const [interactiveTextContent, setInteractiveTextContent] = useState('');
+  const [interactiveTextBgColor, setInteractiveTextBgColor] = useState('');
+  const [interactiveBlanks, setInteractiveBlanks] = useState([]);
+  const [interactiveReorderParts, setInteractiveReorderParts] = useState([]);
+  const interactiveEditorRef = useRef(null);
 
   // Questions
   const [questions, setQuestions] = useState([emptyQuestion()]);
@@ -258,6 +270,74 @@ function BulkCreateQuestions() {
     setReadingCards(prev => prev.filter((_, i) => i !== index));
   };
 
+  // --- Writing Cards ---
+  const addWritingCard = () => {
+    setWritingCards(prev => [...prev, { title: '', content: '', color: '' }]);
+  };
+  const updateWritingCard = (index, field, value) => {
+    setWritingCards(prev => prev.map((card, i) => i === index ? { ...card, [field]: value } : card));
+  };
+  const removeWritingCard = (index) => {
+    setWritingCards(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // --- Interactive Blanks ---
+  const addInteractiveBlank = () => {
+    const id = String.fromCharCode(97 + interactiveBlanks.length); // a, b, c...
+    setInteractiveBlanks(prev => [...prev, { id, type: 'text', correctAnswers: [''], choices: [], hint: '' }]);
+  };
+  const updateInteractiveBlank = (index, field, value) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => i === index ? { ...b, [field]: value } : b));
+  };
+  const removeInteractiveBlank = (index) => {
+    setInteractiveBlanks(prev => prev.filter((_, i) => i !== index));
+  };
+  const addBlankCorrectAnswer = (blankIndex) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => i === blankIndex ? { ...b, correctAnswers: [...b.correctAnswers, ''] } : b));
+  };
+  const updateBlankCorrectAnswer = (blankIndex, ansIndex, value) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => {
+      if (i !== blankIndex) return b;
+      const ca = [...b.correctAnswers];
+      ca[ansIndex] = value;
+      return { ...b, correctAnswers: ca };
+    }));
+  };
+  const removeBlankCorrectAnswer = (blankIndex, ansIndex) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => {
+      if (i !== blankIndex || b.correctAnswers.length <= 1) return b;
+      return { ...b, correctAnswers: b.correctAnswers.filter((_, j) => j !== ansIndex) };
+    }));
+  };
+  const addBlankChoice = (blankIndex) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => i === blankIndex ? { ...b, choices: [...b.choices, ''] } : b));
+  };
+  const updateBlankChoice = (blankIndex, choiceIndex, value) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => {
+      if (i !== blankIndex) return b;
+      const ch = [...b.choices];
+      ch[choiceIndex] = value;
+      return { ...b, choices: ch };
+    }));
+  };
+  const removeBlankChoice = (blankIndex, choiceIndex) => {
+    setInteractiveBlanks(prev => prev.map((b, i) => {
+      if (i !== blankIndex) return b;
+      return { ...b, choices: b.choices.filter((_, j) => j !== choiceIndex) };
+    }));
+  };
+
+  // --- Reorder Parts ---
+  const addReorderPart = () => {
+    setInteractiveReorderParts(prev => [...prev, { text: '', order: prev.length + 1 }]);
+  };
+  const updateReorderPart = (index, field, value) => {
+    setInteractiveReorderParts(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
+  };
+  const removeReorderPart = (index) => {
+    setInteractiveReorderParts(prev => prev.filter((_, i) => i !== index).map((p, i) => ({ ...p, order: i + 1 })));
+  };
+
   // --- Content Blocks (Speaking) ---
   const ADMIN_CARD_COLORS = [
     { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
@@ -427,8 +507,9 @@ function BulkCreateQuestions() {
 
     setLoading(true);
     try {
-      const payload = actualQuestions.map(buildQuestionPayload);
+      let payload = actualQuestions.map(buildQuestionPayload);
       const validCards = exerciseMode === 'reading' ? readingCards.filter(c => c.title.trim() && c.content.trim()) : [];
+      const validWritingCards = exerciseMode === 'writing' ? writingCards.filter(c => (c.title || '').replace(/<[^>]+>/g, '').trim() && (c.content || '').replace(/<[^>]+>/g, '').trim()) : [];
       const sendClipId = exerciseMode === 'audio' ? listeningClipId : null;
       const validContentBlocks = exerciseMode === 'speaking' ? contentBlocks.filter(b => {
         if (b.type === 'paragraph') return b.text?.trim();
@@ -445,18 +526,72 @@ function BulkCreateQuestions() {
         return b;
       }) : [];
 
+      // Build interactive text question for writing mode
+      if (exerciseMode === 'writing') {
+        if (interactiveTextType === 'fill_blanks' && interactiveTextContent.replace(/<[^>]+>/g, '').trim() && interactiveBlanks.length > 0) {
+          const plainText = interactiveTextContent.replace(/<[^>]+>/g, '');
+          const interactiveQ = {
+            prompt: 'نص تفاعلي',
+            qType: 'interactive_text',
+            points: 1,
+            text: plainText,
+            interactiveText: interactiveTextContent,
+            interactiveBlanks: interactiveBlanks.map(b => ({
+              id: b.id,
+              type: b.type,
+              answer: b.correctAnswers[0] || '',
+              correctAnswers: b.correctAnswers.filter(a => a.trim()),
+              options: b.type === 'dropdown' ? b.choices.filter(c => c.trim()) : [],
+              choices: b.type === 'dropdown' ? b.choices.filter(c => c.trim()) : [],
+              hint: b.hint || '',
+            })),
+            taskType: 'fill_blanks',
+            interactiveTextBgColor: interactiveTextBgColor || null,
+          };
+          payload.push(interactiveQ);
+        } else if (interactiveTextType === 'reorder' && interactiveReorderParts.length > 0) {
+          const validParts = interactiveReorderParts.filter(p => (p.text || '').replace(/<[^>]+>/g, '').trim());
+          if (validParts.length > 0) {
+            const interactiveQ = {
+              prompt: 'ترتيب الأجزاء',
+              qType: 'interactive_text',
+              points: 1,
+              taskType: 'reorder',
+              interactiveReorder: {
+                parts: validParts.map((p, i) => ({
+                  text: p.text,
+                  order: p.order || i + 1,
+                })),
+              },
+              interactiveTextBgColor: interactiveTextBgColor || null,
+            };
+            payload.push(interactiveQ);
+          }
+        }
+      }
+
       // التحقق من وجود محتوى أو أسئلة
-      if (payload.length === 0 && validContentBlocks.length === 0 && !sendClipId && !readingPassage.trim() && validCards.length === 0) {
+      const hasWritingContent = exerciseMode === 'writing' && (writingPassage.replace(/<[^>]+>/g, '').trim() || validWritingCards.length > 0 || interactiveTextContent.replace(/<[^>]+>/g, '').trim() || interactiveReorderParts.length > 0);
+      if (payload.length === 0 && validContentBlocks.length === 0 && !sendClipId && !readingPassage.trim() && validCards.length === 0 && !hasWritingContent) {
         setError('أضف أسئلة أو محتوى (فقرات/صور/صوت) على الأقل'); setLoading(false); return;
       }
 
+      // For writing mode: map writing state to existing backend fields (readingPassage, readingCards)
+      const sendPassage = exerciseMode === 'reading' ? (readingPassage.trim() || null) :
+                          exerciseMode === 'writing' ? (writingPassage.replace(/<[^>]+>/g, '').trim() ? writingPassage : null) : null;
+      const sendCards = exerciseMode === 'reading' && validCards.length > 0 ? validCards :
+                        exerciseMode === 'writing' && validWritingCards.length > 0 ? validWritingCards : null;
+      const sendCardsLayout = sendCards ? (exerciseMode === 'writing' ? writingCardsLayout : cardsLayout) : null;
+      const sendBgColor = exerciseMode === 'reading' ? (readingPassageBgColor?.trim() || null) :
+                          exerciseMode === 'writing' ? (writingPassageBgColor?.trim() || null) : null;
+
       const result = await examsAPI.bulkCreateQuestions(
         examId, sectionKey, sendClipId, payload,
-        exerciseMode === 'reading' ? readingPassage.trim() || null : null,
-        validCards.length > 0 ? validCards : null,
-        validCards.length > 0 ? cardsLayout : null,
+        sendPassage,
+        sendCards,
+        sendCardsLayout,
         validContentBlocks.length > 0 ? validContentBlocks : null,
-        exerciseMode === 'reading' ? (readingPassageBgColor?.trim() || null) : null
+        sendBgColor
       );
       setResults(result);
       const msg = payload.length > 0
@@ -545,7 +680,7 @@ function BulkCreateQuestions() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
-                onClick={() => { setExerciseMode('audio'); setReadingPassage(''); setReadingCards([]); setContentBlocks([]); }}
+                onClick={() => { setExerciseMode('audio'); setReadingPassage(''); setReadingCards([]); setContentBlocks([]); setWritingPassage(''); setWritingCards([]); setInteractiveTextContent(''); setInteractiveBlanks([]); setInteractiveReorderParts([]); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: exerciseMode === 'audio' ? '2px solid #0ea5e9' : '1px solid #cbd5e1',
@@ -557,7 +692,7 @@ function BulkCreateQuestions() {
               </button>
               <button
                 type="button"
-                onClick={() => { setExerciseMode('reading'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setContentBlocks([]); }}
+                onClick={() => { setExerciseMode('reading'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setContentBlocks([]); setWritingPassage(''); setWritingCards([]); setInteractiveTextContent(''); setInteractiveBlanks([]); setInteractiveReorderParts([]); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: exerciseMode === 'reading' ? '2px solid #6366f1' : '1px solid #cbd5e1',
@@ -569,7 +704,19 @@ function BulkCreateQuestions() {
               </button>
               <button
                 type="button"
-                onClick={() => { setExerciseMode('speaking'); setReadingPassage(''); setReadingCards([]); }}
+                onClick={() => { setExerciseMode('writing'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setReadingPassage(''); setReadingCards([]); setContentBlocks([]); }}
+                style={{
+                  padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                  border: exerciseMode === 'writing' ? '2px solid #f59e0b' : '1px solid #cbd5e1',
+                  backgroundColor: exerciseMode === 'writing' ? '#fffbeb' : 'white',
+                  color: exerciseMode === 'writing' ? '#b45309' : '#64748b',
+                }}
+              >
+                كتابة
+              </button>
+              <button
+                type="button"
+                onClick={() => { setExerciseMode('speaking'); setReadingPassage(''); setReadingCards([]); setWritingPassage(''); setWritingCards([]); setInteractiveTextContent(''); setInteractiveBlanks([]); setInteractiveReorderParts([]); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: exerciseMode === 'speaking' ? '2px solid #16a34a' : '1px solid #cbd5e1',
@@ -746,6 +893,364 @@ function BulkCreateQuestions() {
                     );
                   })}
                 </div>
+              </div>
+            </div>
+          ) : exerciseMode === 'writing' ? (
+            <div style={{ padding: 16, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+              {/* Section A: Writing Passage */}
+              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#b45309' }}>
+                فقرة الكتابة (اختياري)
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <label style={{ fontSize: 12, color: '#b45309' }}>لون الخلفية:</label>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {[
+                    { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+                    { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+                    { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+                    { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+                    { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+                    { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+                    { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+                  ].map((c) => (
+                    <button key={c.value} type="button" title={c.label}
+                      onClick={() => setWritingPassageBgColor(c.value)}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', border: `2px solid ${writingPassageBgColor === c.value ? '#f59e0b' : c.border}`,
+                        backgroundColor: c.bg, cursor: 'pointer', boxShadow: writingPassageBgColor === c.value ? '0 0 0 2px #fbbf24' : 'none',
+                      }} />
+                  ))}
+                  <input type="color" value={writingPassageBgColor || '#fefce8'}
+                    onChange={(e) => setWritingPassageBgColor(e.target.value)}
+                    title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+                </div>
+              </div>
+              <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                <SimpleHtmlEditor
+                  value={writingPassage}
+                  onChange={(html) => setWritingPassage(html || '')}
+                  placeholder="انسخ نص الكتابة هنا من الوورد... (المحاذاة وحجم الخط ستُحفظ)"
+                  dir="ltr"
+                />
+              </Suspense>
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: '#b45309' }}>
+                {writingPassage.trim() || writingCards.length > 0
+                  ? 'جميع الأسئلة أدناه ستظهر تحت هذه الفقرة/البطاقات كتمرين واحد'
+                  : 'بدون فقرة — كل سؤال سيظهر كتمرين منفصل'}
+              </p>
+
+              {/* Section B: Writing Cards */}
+              <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontWeight: 600, fontSize: 13, color: '#b45309' }}>
+                    بطاقات المعلومات (اختياري)
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {writingCards.length > 0 && (
+                      <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #f59e0b' }}>
+                        <button type="button" onClick={() => setWritingCardsLayout('horizontal')}
+                          title="بطاقة بعرض كامل - تحت بعض"
+                          style={{
+                            padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            backgroundColor: writingCardsLayout === 'horizontal' ? '#f59e0b' : '#fef3c7',
+                            color: writingCardsLayout === 'horizontal' ? '#fff' : '#b45309',
+                          }}>
+                          ▤ أفقي
+                        </button>
+                        <button type="button" onClick={() => setWritingCardsLayout('vertical')}
+                          title="بطاقات جنب بعض - أعمدة"
+                          style={{
+                            padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                            borderRight: '1px solid #f59e0b',
+                            backgroundColor: writingCardsLayout === 'vertical' ? '#f59e0b' : '#fef3c7',
+                            color: writingCardsLayout === 'vertical' ? '#fff' : '#b45309',
+                          }}>
+                          ▦ عمودي
+                        </button>
+                      </div>
+                    )}
+                    <button type="button" onClick={addWritingCard}
+                      style={{
+                        padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f', cursor: 'pointer'
+                      }}>
+                      + بطاقة جديدة
+                    </button>
+                  </div>
+                </div>
+
+                {writingCards.length === 0 && (
+                  <p style={{ fontSize: 11, color: '#b45309', margin: 0 }}>
+                    لم تُضاف بطاقات بعد — اضغط "بطاقة جديدة" لإضافة بطاقات معلومات
+                  </p>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: writingCardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                  {writingCards.map((card, idx) => {
+                    const WR_CARD_COLORS = [
+                      { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
+                      { key: 'sky', label: 'أزرق فاتح', bg: '#f0f9ff', border: '#bae6fd', text: '#0c4a6e' },
+                      { key: 'emerald', label: 'أخضر', bg: '#ecfdf5', border: '#a7f3d0', text: '#064e3b' },
+                      { key: 'violet', label: 'بنفسجي', bg: '#f5f3ff', border: '#c4b5fd', text: '#4c1d95' },
+                      { key: 'rose', label: 'وردي', bg: '#fff1f2', border: '#fecdd3', text: '#881337' },
+                      { key: 'amber', label: 'ذهبي', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
+                      { key: 'orange', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
+                      { key: 'indigo', label: 'نيلي', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+                      { key: 'gray', label: 'رمادي', bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
+                    ];
+                    const selectedColor = WR_CARD_COLORS.find(c => c.key === card.color) || WR_CARD_COLORS[idx % WR_CARD_COLORS.length];
+                    return (
+                      <div key={idx} style={{ padding: 12, backgroundColor: selectedColor.bg, border: `2px solid ${selectedColor.border}`, borderRadius: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: selectedColor.text }}>بطاقة {idx + 1}</span>
+                          <button type="button" onClick={() => removeWritingCard(idx)}
+                            style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+                            حذف
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                          {WR_CARD_COLORS.map(c => (
+                            <button key={c.key} type="button" title={c.label}
+                              onClick={() => updateWritingCard(idx, 'color', c.key)}
+                              style={{
+                                width: 22, height: 22, borderRadius: '50%',
+                                backgroundColor: c.bg, border: `2px solid ${card.color === c.key ? c.text : c.border}`,
+                                cursor: 'pointer', boxShadow: card.color === c.key ? `0 0 0 2px ${c.border}` : 'none',
+                              }} />
+                          ))}
+                        </div>
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <SimpleHtmlEditor
+                            value={card.title || ''}
+                            onChange={(html) => updateWritingCard(idx, 'title', html)}
+                            placeholder="عنوان البطاقة"
+                            dir="ltr"
+                          />
+                        </Suspense>
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <SimpleHtmlEditor
+                            value={card.content || ''}
+                            onChange={(html) => updateWritingCard(idx, 'content', html)}
+                            placeholder="محتوى البطاقة..."
+                            dir="ltr"
+                          />
+                        </Suspense>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section C: Interactive Text */}
+              <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontWeight: 600, fontSize: 13, color: '#b45309' }}>
+                    نص تفاعلي (اختياري)
+                  </label>
+                  <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #f59e0b' }}>
+                    <button type="button"
+                      onClick={() => setInteractiveTextType('fill_blanks')}
+                      style={{
+                        padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                        backgroundColor: interactiveTextType === 'fill_blanks' ? '#f59e0b' : '#fff7ed',
+                        color: interactiveTextType === 'fill_blanks' ? '#fff' : '#b45309',
+                      }}>
+                      فراغات متعددة
+                    </button>
+                    <button type="button"
+                      onClick={() => setInteractiveTextType('reorder')}
+                      style={{
+                        padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                        borderRight: '1px solid #f59e0b',
+                        backgroundColor: interactiveTextType === 'reorder' ? '#f59e0b' : '#fff7ed',
+                        color: interactiveTextType === 'reorder' ? '#fff' : '#b45309',
+                      }}>
+                      ترتيب الأجزاء
+                    </button>
+                  </div>
+                </div>
+
+                {/* Background color picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, color: '#b45309' }}>لون خلفية النص التفاعلي:</label>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {[
+                      { value: '', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa' },
+                      { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+                      { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+                      { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+                      { value: '#fefce8', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+                      { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+                      { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+                    ].map((c) => (
+                      <button key={c.value} type="button" title={c.label}
+                        onClick={() => setInteractiveTextBgColor(c.value)}
+                        style={{
+                          width: 22, height: 22, borderRadius: '50%', border: `2px solid ${interactiveTextBgColor === c.value ? '#f59e0b' : c.border}`,
+                          backgroundColor: c.bg, cursor: 'pointer', boxShadow: interactiveTextBgColor === c.value ? '0 0 0 2px #fbbf24' : 'none',
+                        }} />
+                    ))}
+                    <input type="color" value={interactiveTextBgColor || '#fff7ed'}
+                      onChange={(e) => setInteractiveTextBgColor(e.target.value)}
+                      title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+                  </div>
+                </div>
+
+                {interactiveTextType === 'fill_blanks' ? (
+                  <div>
+                    {/* Rich editor with Insert Blank button */}
+                    <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                      <SimpleHtmlEditor
+                        value={interactiveTextContent}
+                        onChange={(html) => setInteractiveTextContent(html || '')}
+                        placeholder="اكتب النص التفاعلي هنا... استخدم زر 'إدراج فراغ' لإضافة فراغات {{a}}, {{b}}..."
+                        dir="ltr"
+                        editorRef={interactiveEditorRef}
+                        extraToolbar={
+                          <button
+                            type="button"
+                            title="إدراج فراغ"
+                            onClick={() => {
+                              const el = interactiveEditorRef.current;
+                              if (!el) return;
+                              el.focus();
+                              const nextId = String.fromCharCode(97 + interactiveBlanks.length);
+                              const placeholder = `{{${nextId}}}`;
+                              document.execCommand('insertText', false, placeholder);
+                              addInteractiveBlank();
+                            }}
+                            style={{
+                              padding: '6px 10px', border: '1px solid #f59e0b', borderRadius: 6,
+                              background: '#fbbf24', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                              color: '#78350f',
+                            }}
+                          >
+                            إدراج فراغ
+                          </button>
+                        }
+                      />
+                    </Suspense>
+
+                    {/* Blanks definitions */}
+                    {interactiveBlanks.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#b45309', marginBottom: 6, display: 'block' }}>
+                          تعريف الفراغات ({interactiveBlanks.length})
+                        </label>
+                        {interactiveBlanks.map((blank, bIdx) => (
+                          <div key={bIdx} style={{
+                            padding: 12, marginBottom: 8, backgroundColor: '#fffbeb',
+                            border: '1px solid #fde68a', borderRadius: 8
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                                فراغ {`{{${blank.id}}}`}
+                              </span>
+                              <button type="button" onClick={() => removeInteractiveBlank(bIdx)}
+                                style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+                                حذف
+                              </button>
+                            </div>
+                            {/* Type selector */}
+                            <div style={{ marginBottom: 6 }}>
+                              <label style={{ fontSize: 11, color: '#78350f' }}>نوع الإدخال:</label>
+                              <select value={blank.type}
+                                onChange={(e) => updateInteractiveBlank(bIdx, 'type', e.target.value)}
+                                style={{ marginRight: 8, padding: '3px 8px', borderRadius: 4, border: '1px solid #fde68a', fontSize: 12 }}>
+                                <option value="text">حقل نصي</option>
+                                <option value="dropdown">قائمة منسدلة</option>
+                              </select>
+                            </div>
+                            {/* Correct answers */}
+                            <div style={{ marginBottom: 6 }}>
+                              <label style={{ fontSize: 11, color: '#78350f', display: 'block', marginBottom: 4 }}>الإجابات الصحيحة:</label>
+                              {blank.correctAnswers.map((ans, aIdx) => (
+                                <div key={aIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                                  <input type="text" value={ans}
+                                    onChange={(e) => updateBlankCorrectAnswer(bIdx, aIdx, e.target.value)}
+                                    placeholder={`إجابة صحيحة ${aIdx + 1}`}
+                                    style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid #fde68a', fontSize: 12 }} />
+                                  {blank.correctAnswers.length > 1 && (
+                                    <button type="button" onClick={() => removeBlankCorrectAnswer(bIdx, aIdx)}
+                                      style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                                  )}
+                                </div>
+                              ))}
+                              <button type="button" onClick={() => addBlankCorrectAnswer(bIdx)}
+                                style={{ fontSize: 11, color: '#f59e0b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                                + إجابة صحيحة أخرى
+                              </button>
+                            </div>
+                            {/* Choices (for dropdown) */}
+                            {blank.type === 'dropdown' && (
+                              <div style={{ marginBottom: 6 }}>
+                                <label style={{ fontSize: 11, color: '#78350f', display: 'block', marginBottom: 4 }}>خيارات القائمة:</label>
+                                {blank.choices.map((ch, cIdx) => (
+                                  <div key={cIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                                    <input type="text" value={ch}
+                                      onChange={(e) => updateBlankChoice(bIdx, cIdx, e.target.value)}
+                                      placeholder={`خيار ${cIdx + 1}`}
+                                      style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid #fde68a', fontSize: 12 }} />
+                                    <button type="button" onClick={() => removeBlankChoice(bIdx, cIdx)}
+                                      style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => addBlankChoice(bIdx)}
+                                  style={{ fontSize: 11, color: '#f59e0b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                                  + خيار جديد
+                                </button>
+                              </div>
+                            )}
+                            {/* Hint */}
+                            <div>
+                              <label style={{ fontSize: 11, color: '#78350f' }}>تلميح (اختياري):</label>
+                              <input type="text" value={blank.hint || ''}
+                                onChange={(e) => updateInteractiveBlank(bIdx, 'hint', e.target.value)}
+                                placeholder="تلميح يظهر للطالب..."
+                                style={{ width: '100%', padding: '4px 8px', borderRadius: 4, border: '1px solid #fde68a', fontSize: 12, marginTop: 2 }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {/* Reorder parts */}
+                    <p style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>
+                      أضف الأجزاء بالترتيب الصحيح — ستظهر للطالب مخلوطة
+                    </p>
+                    {interactiveReorderParts.map((part, pIdx) => (
+                      <div key={pIdx} style={{
+                        padding: 10, marginBottom: 8, backgroundColor: '#fffbeb',
+                        border: '1px solid #fde68a', borderRadius: 8
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>جزء {pIdx + 1} (ترتيب: {part.order})</span>
+                          <button type="button" onClick={() => removeReorderPart(pIdx)}
+                            style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+                            حذف
+                          </button>
+                        </div>
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <SimpleHtmlEditor
+                            value={part.text || ''}
+                            onChange={(html) => updateReorderPart(pIdx, 'text', html)}
+                            placeholder="نص هذا الجزء..."
+                            dir="ltr"
+                          />
+                        </Suspense>
+                      </div>
+                    ))}
+                    <button type="button" onClick={addReorderPart}
+                      style={{
+                        padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        border: '1px solid #f59e0b', backgroundColor: '#fbbf24', color: '#78350f', cursor: 'pointer'
+                      }}>
+                      + جزء جديد
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : exerciseMode === 'speaking' ? (
@@ -1419,6 +1924,13 @@ function BulkCreateQuestions() {
                 setSuccess('');
                 setReadingPassage('');
                 setReadingCards([]);
+                setWritingPassage('');
+                setWritingCards([]);
+                setInteractiveTextContent('');
+                setInteractiveBlanks([]);
+                setInteractiveReorderParts([]);
+                setInteractiveTextBgColor('');
+                setWritingPassageBgColor('');
               }}
               style={{ padding: '8px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
             >
