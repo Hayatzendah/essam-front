@@ -551,7 +551,7 @@ function BulkCreateQuestions() {
       const validCards = exerciseMode === 'reading' ? readingCards.filter(c => c.title.trim() && c.content.trim()) : [];
       const validWritingCards = exerciseMode === 'writing' ? writingCards.filter(c => (c.title || '').replace(/<[^>]+>/g, '').trim() && (c.content || '').replace(/<[^>]+>/g, '').trim()) : [];
       const sendClipId = exerciseMode === 'audio' ? listeningClipId : null;
-      const validContentBlocks = exerciseMode === 'speaking' ? contentBlocks.filter(b => {
+      const validContentBlocks = (exerciseMode === 'speaking' || exerciseMode === 'writing') ? contentBlocks.filter(b => {
         if (b.type === 'paragraph') return b.text?.trim();
         if (b.type === 'image') return b.images?.length > 0;
         if (b.type === 'cards') return b.cards?.some(c => c.title?.trim() && c.texts?.some(t => t.content?.trim()));
@@ -614,7 +614,7 @@ function BulkCreateQuestions() {
       }
 
       // التحقق من وجود محتوى أو أسئلة
-      const hasWritingContent = exerciseMode === 'writing' && (writingPassage.replace(/<[^>]+>/g, '').trim() || validWritingCards.length > 0 || interactiveTextContent.replace(/<[^>]+>/g, '').trim() || interactiveReorderParts.length > 0);
+      const hasWritingContent = exerciseMode === 'writing' && (writingPassage.replace(/<[^>]+>/g, '').trim() || validWritingCards.length > 0 || interactiveTextContent.replace(/<[^>]+>/g, '').trim() || interactiveReorderParts.length > 0 || validContentBlocks.length > 0);
       if (payload.length === 0 && validContentBlocks.length === 0 && !sendClipId && !readingPassage.trim() && validCards.length === 0 && !hasWritingContent) {
         setError('أضف أسئلة أو محتوى (فقرات/صور/صوت) على الأقل'); setLoading(false); return;
       }
@@ -747,7 +747,7 @@ function BulkCreateQuestions() {
               </button>
               <button
                 type="button"
-                onClick={() => { setExerciseMode('writing'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setReadingPassage(''); setReadingCards([]); setContentBlocks([]); }}
+                onClick={() => { setExerciseMode('writing'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setReadingPassage(''); setReadingCards([]); }}
                 style={{
                   padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                   border: exerciseMode === 'writing' ? '2px solid #f59e0b' : '1px solid #cbd5e1',
@@ -1294,6 +1294,211 @@ function BulkCreateQuestions() {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Content Blocks for Writing */}
+              <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontWeight: 700, fontSize: 14, color: '#92400e' }}>بلوكات المحتوى (بطاقات، فقرات، صور)</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" onClick={() => addContentBlock('paragraph')}
+                      style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #fde68a', backgroundColor: '#fffbeb', color: '#92400e', cursor: 'pointer' }}>
+                      + فقرة
+                    </button>
+                    <button type="button" onClick={() => addContentBlock('image')}
+                      style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #c4b5fd', backgroundColor: '#f5f3ff', color: '#6d28d9', cursor: 'pointer' }}>
+                      + صور
+                    </button>
+                    <button type="button" onClick={() => addContentBlock('cards')}
+                      style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #99f6e4', backgroundColor: '#f0fdfa', color: '#134e4a', cursor: 'pointer' }}>
+                      + بطاقات
+                    </button>
+                    <button type="button" onClick={() => addContentBlock('audio')}
+                      style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #7dd3fc', backgroundColor: '#e0f2fe', color: '#0369a1', cursor: 'pointer' }}>
+                      + صوت
+                    </button>
+                  </div>
+                </div>
+
+                {contentBlocks.length === 0 && (
+                  <p style={{ fontSize: 12, color: '#92400e', textAlign: 'center', padding: 16, backgroundColor: '#fef3c7', borderRadius: 8 }}>
+                    لا يوجد بلوكات — أضف بطاقات أو فقرات أو صور
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {contentBlocks.map((block, bIdx) => (
+                    <div key={bIdx} style={{ border: '1px solid #d1d5db', borderRadius: 8, padding: 12, backgroundColor: 'white' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
+                          {block.type === 'paragraph' ? '📝 فقرة' : block.type === 'image' ? '🖼️ صور' : block.type === 'cards' ? '📋 بطاقات' : block.type === 'audio' ? '🎵 صوت' : '❓'} #{bIdx + 1}
+                        </span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button type="button" onClick={() => moveContentBlock(bIdx, -1)} disabled={bIdx === 0}
+                            style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4, cursor: bIdx === 0 ? 'not-allowed' : 'pointer', backgroundColor: 'white', opacity: bIdx === 0 ? 0.4 : 1 }}>▲</button>
+                          <button type="button" onClick={() => moveContentBlock(bIdx, 1)} disabled={bIdx === contentBlocks.length - 1}
+                            style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4, cursor: bIdx === contentBlocks.length - 1 ? 'not-allowed' : 'pointer', backgroundColor: 'white', opacity: bIdx === contentBlocks.length - 1 ? 0.4 : 1 }}>▼</button>
+                          <button type="button" onClick={() => removeContentBlock(bIdx)}
+                            style={{ padding: '2px 8px', fontSize: 11, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}>حذف</button>
+                        </div>
+                      </div>
+
+                      {block.type === 'paragraph' && (
+                        <Suspense fallback={<div style={{ padding: 8, color: '#999' }}>جاري التحميل...</div>}>
+                          <SimpleHtmlEditor value={block.text || ''} onChange={(html) => updateContentBlock(bIdx, { text: html })} placeholder="اكتب الفقرة أو الصق من الوورد..." dir="ltr" />
+                        </Suspense>
+                      )}
+
+                      {block.type === 'image' && (
+                        <div>
+                          {(block.images || []).length > 0 ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: 8 }}>
+                              {block.images.map((img, imgIdx) => (
+                                <div key={imgIdx} style={{ position: 'relative' }}>
+                                  <img src={img.url?.startsWith('http') ? img.url : `${API_BASE_URL}${img.url}`}
+                                    alt={img.description || ''} style={{ width: '100%', borderRadius: 6, border: '1px solid #e5e7eb' }} />
+                                  <button type="button" onClick={() => removeBlockImage(bIdx, imgIdx)}
+                                    style={{ position: 'absolute', top: 4, right: 4, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '50%', width: 20, height: 20, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          <input type="file" id={`writingBlockImg-${bIdx}`} accept="image/*" multiple
+                            onChange={(e) => { if (e.target.files?.length) handleUploadBlockImages(bIdx, Array.from(e.target.files)); e.target.value = ''; }}
+                            style={{ display: 'none' }} />
+                          <label htmlFor={`writingBlockImg-${bIdx}`}
+                            style={{ display: 'inline-block', padding: '4px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #c4b5fd', backgroundColor: '#f5f3ff', color: '#6d28d9', cursor: uploadingImages ? 'not-allowed' : 'pointer' }}>
+                            {uploadingImages ? 'جاري الرفع...' : '🖼️ إضافة صور'}
+                          </label>
+                        </div>
+                      )}
+
+                      {block.type === 'cards' && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            {(block.cards || []).length > 0 && (
+                              <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #16a34a' }}>
+                                <button type="button" onClick={() => updateContentBlock(bIdx, { cardsLayout: 'horizontal' })}
+                                  style={{ padding: '3px 8px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: block.cardsLayout === 'horizontal' ? '#16a34a' : '#dcfce7', color: block.cardsLayout === 'horizontal' ? '#fff' : '#166534' }}>
+                                  ▤ أفقي
+                                </button>
+                                <button type="button" onClick={() => updateContentBlock(bIdx, { cardsLayout: 'vertical' })}
+                                  style={{ padding: '3px 8px', fontSize: 11, fontWeight: 600, border: 'none', borderRight: '1px solid #16a34a', cursor: 'pointer', backgroundColor: block.cardsLayout === 'vertical' ? '#16a34a' : '#dcfce7', color: block.cardsLayout === 'vertical' ? '#fff' : '#166534' }}>
+                                  ▦ عمودي
+                                </button>
+                              </div>
+                            )}
+                            <button type="button" onClick={() => addCardToBlock(bIdx)}
+                              style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #16a34a', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer' }}>
+                              + بطاقة
+                            </button>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: block.cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                            {(block.cards || []).map((card, cIdx) => {
+                              const selColor = ADMIN_CARD_COLORS.find(c => c.key === card.color) || ADMIN_CARD_COLORS[cIdx % ADMIN_CARD_COLORS.length];
+                              return (
+                                <div key={cIdx} style={{ padding: 10, backgroundColor: selColor.bg, border: `2px solid ${selColor.border}`, borderRadius: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: selColor.text }}>بطاقة {cIdx + 1}</span>
+                                    <button type="button" onClick={() => removeCardFromBlock(bIdx, cIdx)}
+                                      style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, padding: '1px 6px', fontSize: 10, cursor: 'pointer' }}>حذف</button>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 3, marginBottom: 6, flexWrap: 'wrap' }}>
+                                    {ADMIN_CARD_COLORS.map(c => (
+                                      <button key={c.key} type="button" title={c.label} onClick={() => updateCardInBlock(bIdx, cIdx, 'color', c.key)}
+                                        style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: c.bg, border: `2px solid ${card.color === c.key ? c.text : c.border}`, cursor: 'pointer' }} />
+                                    ))}
+                                  </div>
+                                  <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                                    <SimpleHtmlEditor value={card.title || ''} onChange={(html) => updateCardInBlock(bIdx, cIdx, 'title', html)} placeholder="عنوان البطاقة" dir="ltr" />
+                                  </Suspense>
+                                  <div style={{ marginTop: 6, marginBottom: 6 }}>
+                                    {card.image?.url ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <img src={card.image.url.startsWith('http') ? card.image.url : `${API_BASE_URL}${card.image.url}`}
+                                          alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: `1px solid ${selColor.border}` }} />
+                                        <button type="button" onClick={() => removeCardImage(bIdx, cIdx)}
+                                          style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, padding: '2px 6px', fontSize: 10, cursor: 'pointer' }}>حذف الصورة</button>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <input type="file" id={`wrCardImg-${bIdx}-${cIdx}`} accept="image/*"
+                                          onChange={(e) => { const file = e.target.files[0]; if (file) handleUploadCardImage(bIdx, cIdx, file); e.target.value = ''; }}
+                                          style={{ display: 'none' }} />
+                                        <label htmlFor={`wrCardImg-${bIdx}-${cIdx}`}
+                                          style={{ display: 'inline-block', padding: '3px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, border: `1px solid ${selColor.border}`, backgroundColor: 'white', color: selColor.text, cursor: 'pointer' }}>
+                                          {card._uploadingImage ? 'جاري الرفع...' : '🖼️ إضافة صورة'}
+                                        </label>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {(card.texts || []).map((entry, tIdx) => (
+                                    <div key={tIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'flex-start' }}>
+                                      <div style={{ flex: 1 }}>
+                                        <input type="text" value={entry.label || ''} onChange={(e) => updateCardText(bIdx, cIdx, tIdx, 'label', e.target.value)}
+                                          placeholder="عنوان فرعي (اختياري)"
+                                          style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: `1px solid ${selColor.border}`, fontSize: 11, marginBottom: 2, boxSizing: 'border-box', backgroundColor: 'white' }} />
+                                        <Suspense fallback={<div style={{ padding: 4, color: '#999', fontSize: 11 }}>...</div>}>
+                                          <SimpleHtmlEditor value={entry.content || ''} onChange={(html) => updateCardText(bIdx, cIdx, tIdx, 'content', html)} placeholder="محتوى..." dir="ltr" />
+                                        </Suspense>
+                                      </div>
+                                      {(card.texts || []).length > 1 && (
+                                        <button type="button" onClick={() => removeTextFromCard(bIdx, cIdx, tIdx)}
+                                          style={{ background: 'none', color: '#dc2626', border: 'none', cursor: 'pointer', fontSize: 13, padding: '2px', marginTop: 2 }}>✕</button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button type="button" onClick={() => addTextToCard(bIdx, cIdx)}
+                                    style={{ padding: '2px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, border: `1px solid ${selColor.border}`, backgroundColor: 'white', color: selColor.text, cursor: 'pointer', marginTop: 2 }}>
+                                    + نص إضافي
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {block.type === 'audio' && (
+                        <div style={{ padding: 12, backgroundColor: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 8 }}>
+                          {block.audioUrl ? (
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <span style={{ color: '#0369a1', fontWeight: 600, fontSize: 13 }}>✅ تم رفع الصوت</span>
+                                <button type="button" onClick={() => updateContentBlock(bIdx, { audioUrl: null })}
+                                  style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>✕ إزالة</button>
+                              </div>
+                              <audio controls preload="metadata" src={block.audioUrl.startsWith('http') ? block.audioUrl : `${API_BASE_URL}${block.audioUrl}`} style={{ width: '100%' }} />
+                            </div>
+                          ) : block.audioFile ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                <span style={{ fontSize: 12 }}>🎵 {block.audioFile.name}</span>
+                                <button type="button" onClick={() => { if (block.audioPreview) URL.revokeObjectURL(block.audioPreview); updateContentBlock(bIdx, { audioFile: null, audioPreview: null }); }}
+                                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                              </div>
+                              {block.audioPreview && <audio controls preload="metadata" src={block.audioPreview} style={{ width: '100%', marginBottom: 6 }} />}
+                              <button type="button" onClick={() => handleUploadBlockAudio(bIdx)} disabled={block._uploading}
+                                style={{ padding: '6px 16px', backgroundColor: block._uploading ? '#94a3b8' : '#0284c7', color: 'white', border: 'none', borderRadius: 6, cursor: block._uploading ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                {block._uploading ? 'جاري الرفع...' : '⬆️ رفع الصوت'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <input type="file" id={`writingBlockAudio-${bIdx}`} accept="audio/*"
+                                onChange={(e) => { const file = e.target.files[0]; if (file) updateContentBlock(bIdx, { audioFile: file, audioPreview: URL.createObjectURL(file) }); }}
+                                style={{ display: 'none' }} />
+                              <label htmlFor={`writingBlockAudio-${bIdx}`}
+                                style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#0284c7', color: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                🎵 اختر ملف صوتي
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : exerciseMode === 'speaking' ? (
