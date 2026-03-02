@@ -204,6 +204,16 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
                   <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 exam-card-content`} style={{ overflow: 'visible' }}>
                     <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 rich-text-content`}
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(card.title || '')) }} />
+                    {card.image?.url && (
+                      <div className="flex justify-center mb-2">
+                        <img
+                          src={card.image.url.startsWith('http') ? card.image.url : toApiUrl(card.image.url)}
+                          alt=""
+                          style={{ width: 100, height: 100, objectFit: 'contain', borderRadius: 6 }}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      </div>
+                    )}
                     {(card.texts || []).map((entry, ti) => (
                       <div key={ti} className="mb-2 exam-card-entry" style={{ overflow: 'visible' }}>
                         {entry.label && (

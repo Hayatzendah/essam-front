@@ -1261,6 +1261,45 @@ function EditQuestion() {
         setError('فشل رفع الصوت: ' + (err.response?.data?.message || err.message));
       }
     };
+    const handleUploadCardImage = async (blockIdx, cardIdx, file) => {
+      if (!file || !file.type.startsWith('image/')) return;
+      const token = localStorage.getItem('accessToken');
+      if (!token) { setError('يرجى تسجيل الدخول أولاً'); return; }
+      // Mark uploading
+      const markUploading = (val) => {
+        setContentBlocks(prev => prev.map((b, i) => {
+          if (i !== blockIdx) return b;
+          const cards = [...(b.cards || [])];
+          cards[cardIdx] = { ...cards[cardIdx], _uploadingImage: val };
+          return { ...b, cards };
+        }));
+      };
+      markUploading(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await axios.post(`${API_BASE_URL}/media/upload`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+        });
+        setContentBlocks(prev => prev.map((b, i) => {
+          if (i !== blockIdx) return b;
+          const cards = [...(b.cards || [])];
+          cards[cardIdx] = { ...cards[cardIdx], image: { key: res.data.key, url: res.data.url, mime: res.data.mime || file.type }, _uploadingImage: false };
+          return { ...b, cards };
+        }));
+      } catch (err) {
+        markUploading(false);
+        setError('فشل رفع الصورة: ' + (err.response?.data?.message || err.message));
+      }
+    };
+    const removeCardImage = (blockIdx, cardIdx) => {
+      setContentBlocks(prev => prev.map((b, i) => {
+        if (i !== blockIdx) return b;
+        const cards = [...(b.cards || [])];
+        cards[cardIdx] = { ...cards[cardIdx], image: null };
+        return { ...b, cards };
+      }));
+    };
     const addBlock = (type) => {
       setContentBlocks(prev => [...prev, {
         type,
@@ -1429,6 +1468,29 @@ function EditQuestion() {
                                 updateBlock(bIdx, { cards });
                               }} placeholder="عنوان البطاقة" />
                             </Suspense>
+                            {/* Card Image Upload */}
+                            <div style={{ marginTop: 6, marginBottom: 6 }}>
+                              {card.image?.url ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <img src={card.image.url.startsWith('http') ? card.image.url : `${API_BASE_URL}${card.image.url}`}
+                                    alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #99f6e4' }} />
+                                  <button type="button" onClick={() => removeCardImage(bIdx, cIdx)}
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, padding: '2px 6px', fontSize: 10, cursor: 'pointer' }}>
+                                    حذف الصورة
+                                  </button>
+                                </div>
+                              ) : (
+                                <div>
+                                  <input type="file" id={`editCardImg-${bIdx}-${cIdx}`} accept="image/*"
+                                    onChange={(e) => { const file = e.target.files[0]; if (file) handleUploadCardImage(bIdx, cIdx, file); e.target.value = ''; }}
+                                    style={{ display: 'none' }} />
+                                  <label htmlFor={`editCardImg-${bIdx}-${cIdx}`}
+                                    style={{ display: 'inline-block', padding: '3px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, border: '1px solid #99f6e4', backgroundColor: '#f0fdfa', color: '#134e4a', cursor: 'pointer' }}>
+                                    {card._uploadingImage ? 'جاري الرفع...' : '🖼️ إضافة صورة'}
+                                  </label>
+                                </div>
+                              )}
+                            </div>
                             {(card.texts || []).map((entry, tIdx) => (
                               <div key={tIdx} style={{ marginTop: 4 }}>
                                 <input type="text" value={entry.label || ''} onChange={(e) => {
