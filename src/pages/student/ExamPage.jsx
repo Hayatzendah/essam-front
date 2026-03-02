@@ -209,7 +209,8 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
                         <img
                           src={card.image.url.startsWith('http') ? card.image.url : toApiUrl(card.image.url)}
                           alt=""
-                          style={{ width: '100%', maxWidth: 300, height: 'auto', objectFit: 'contain', borderRadius: 6 }}
+                          className="w-20 h-20 sm:w-36 sm:h-36 lg:w-44 lg:h-44"
+                          style={{ objectFit: 'contain', borderRadius: 6 }}
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       </div>
