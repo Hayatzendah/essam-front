@@ -201,16 +201,15 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
               {cards.map((card, cardIdx) => {
                 const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[cardIdx % CARD_COLORS_LIST.length];
                 return (
-                  <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-3 sm:p-4 exam-card-content`} style={{ overflow: 'visible' }}>
-                    <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-1.5 rich-text-content`}
+                  <div key={cardIdx} className={`${color.bg} ${color.border} border-2 rounded-xl p-4 sm:p-5 exam-card-content`} style={{ overflow: 'visible' }}>
+                    <h5 className={`text-xs sm:text-sm font-bold ${color.title} mb-2 sm:mb-3 rich-text-content`}
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(card.title || '')) }} />
                     {card.image?.url && (
                       <div className="flex justify-center mb-2">
                         <img
                           src={card.image.url.startsWith('http') ? card.image.url : toApiUrl(card.image.url)}
                           alt=""
-                          className="w-20 h-20 sm:w-36 sm:h-36 lg:w-44 lg:h-44"
-                          style={{ objectFit: 'contain', borderRadius: 6 }}
+                          style={{ width: '100%', maxWidth: 300, height: 'auto', objectFit: 'contain', borderRadius: 6 }}
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       </div>
