@@ -209,7 +209,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
                         <img
                           src={card.image.url.startsWith('http') ? card.image.url : toApiUrl(card.image.url)}
                           alt=""
-                          style={{ width: 100, height: 100, objectFit: 'contain', borderRadius: 6 }}
+                          style={{ width: '100%', maxWidth: 300, height: 'auto', objectFit: 'contain', borderRadius: 6 }}
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       </div>
@@ -2253,12 +2253,11 @@ function ExamPage() {
                           }
 
                           const isAllQuestionsMode = !selectedSectionKey && !selectedExercise;
+                          // عرض بطاقة العنوان (Übung X) لأول سؤال من كل تمرين دائماً — حتى لو التمرين بدون صوت/فقرة/بطاقات (نفس السلوك في كل الأقسام)
                           let showExerciseHeader = false;
                           if (isAllQuestionsMode && exerciseInfo?.exerciseId && !shownExerciseIds.has(exerciseInfo.exerciseId)) {
-                            if (exerciseInfo.audioUrl || exerciseInfo.readingPassage || (exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0) || (exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0)) {
-                              showExerciseHeader = true;
-                              shownExerciseIds.add(exerciseInfo.exerciseId);
-                            }
+                            showExerciseHeader = true;
+                            shownExerciseIds.add(exerciseInfo.exerciseId);
                           }
 
                           // صوت السؤال (من question.media أو mediaSnapshot)
