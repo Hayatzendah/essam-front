@@ -73,7 +73,7 @@ interface Section {
 
 interface ExamFormState {
   // Common fields
-  examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | '';
+  examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '';
   title: string;
   level: string;
   duration: number | ''; // in minutes (optional)
@@ -188,6 +188,17 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         ],
       }));
     }
+    // Initialize Lesen & Hören / Dialoge with one default section
+    if ((formData.examType === 'lesen_hoeren_exam' || formData.examType === 'dialoge_exam') && formData.sections.length === 0) {
+      const defaultTitle = formData.examType === 'lesen_hoeren_exam' ? 'Lesen & Hören – Teil 1' : 'Dialoge – Teil 1';
+      setFormData((prev) => ({
+        ...prev,
+        mainSkill: formData.examType === 'lesen_hoeren_exam' ? 'lesen' : 'sprechen',
+        sections: [
+          { section: defaultTitle, title: defaultTitle, skill: formData.examType === 'lesen_hoeren_exam' ? 'lesen' : 'sprechen', teil: 1, teilNumber: 1, quota: 5 },
+        ],
+      }));
+    }
     
     // Reset grammar level manual change flag when exam type changes
     if (formData.examType === 'grammar_exam') {
@@ -211,11 +222,15 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           const exam = await examsAPI.getById(examId);
           
           // Determine exam type from examCategory or provider
-          let examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | '' = '';
+          let examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '' = '';
           if (exam.examCategory === 'grammar_exam' || exam.provider === 'Grammatik') {
             examType = 'grammar_exam';
           } else if (exam.examCategory === 'leben_exam' || exam.provider === 'leben_in_deutschland' || exam.mainSkill === 'leben_test') {
             examType = 'leben_exam';
+          } else if (exam.examCategory === 'lesen_hoeren_exam') {
+            examType = 'lesen_hoeren_exam';
+          } else if (exam.examCategory === 'dialoge_exam') {
+            examType = 'dialoge_exam';
           } else if (exam.provider && exam.provider !== 'Grammatik' && exam.provider !== 'leben_in_deutschland') {
             examType = 'provider_exam';
           }
@@ -615,6 +630,21 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
       }
     }
 
+    // Lesen & Hören / Dialoge validation (الباكند يسمح بدون أقسام — نتحقق فقط من الأقسام المضافة)
+    if (formData.examType === 'lesen_hoeren_exam' || formData.examType === 'dialoge_exam') {
+      for (let i = 0; i < formData.sections.length; i++) {
+        const section = formData.sections[i];
+        if (!(section.section || section.title || '').trim()) {
+          setError(`عنوان القسم ${i + 1} مطلوب`);
+          return;
+        }
+        if ((section.quota ?? 0) <= 0) {
+          setError(`عدد الأسئلة للقسم ${i + 1} يجب أن يكون أكبر من صفر`);
+          return;
+        }
+      }
+    }
+
     // Leben Exam validation
     if (formData.examType === 'leben_exam') {
       if (formData.sections.length === 0) {
@@ -746,6 +776,23 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             payload.sections = validSections;
             console.log('📤 Sections payload:', JSON.stringify(validSections, null, 2));
           }
+        }
+        payload.randomizeQuestions = true;
+      }
+
+      // Add Lesen & Hören / Dialoge specific fields (sections like provider, no provider enum)
+      if (formData.examType === 'lesen_hoeren_exam' || formData.examType === 'dialoge_exam') {
+        payload.examCategory = formData.examType;
+        if (formData.sections.length > 0) {
+          payload.sections = formData.sections
+            .filter((s) => ((s.section || s.title || '').trim()).length > 0)
+            .map((s, index) => ({
+              name: (s.section || s.title || '').trim(),
+              title: (s.section || s.title || '').trim(),
+              skill: (s.skill || formData.mainSkill || 'lesen').toLowerCase(),
+              teil: safeInt1(s.teil ?? s.teilNumber ?? index + 1),
+              quota: safeInt1(s.quota ?? 1),
+            }));
         }
         payload.randomizeQuestions = true;
       }
@@ -1095,6 +1142,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             <option value="grammar_exam">Grammar Exam (قواعد)</option>
             <option value="provider_exam">Provider Exam (Prüfungen – Goethe/TELC…)</option>
             <option value="leben_exam">Deutschland in Leben Test</option>
+            <option value="lesen_hoeren_exam">Lesen &amp; Hören</option>
+            <option value="dialoge_exam">Dialoge</option>
           </select>
           {isEditMode && (
             <small style={{ display: 'block', marginTop: '4px', color: '#6b7280', fontSize: '12px' }}>
@@ -1835,6 +1884,130 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                     </select>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Lesen & Hören / Dialoge Exam – Sections */}
+        {(formData.examType === 'lesen_hoeren_exam' || formData.examType === 'dialoge_exam') && (
+          <div style={sectionStyle}>
+            <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
+              {formData.examType === 'lesen_hoeren_exam' ? 'أقسام Lesen & Hören' : 'أقسام Dialoge'}
+            </h2>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <label style={labelStyle}>الأقسام / Sections *</label>
+                <button
+                  type="button"
+                  onClick={addSection}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                >
+                  + إضافة Section
+                </button>
+              </div>
+              {formData.sections.map((section, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '6px',
+                    border: '1px solid #d1d5db',
+                    marginBottom: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Section {index + 1}</h3>
+                    <button
+                      type="button"
+                      onClick={() => removeSection(index)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                      }}
+                    >
+                      حذف
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>عنوان القسم / Section Title *</label>
+                      <input
+                        type="text"
+                        value={section.section || section.title || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          handleSectionChange(index, 'section', value);
+                          handleSectionChange(index, 'title', value);
+                        }}
+                        placeholder={formData.examType === 'lesen_hoeren_exam' ? 'مثال: Lesen – Teil 1' : 'مثال: Dialog – Teil 1'}
+                        required
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>المهارة / Skill</label>
+                      <select
+                        value={section.skill || formData.mainSkill || 'lesen'}
+                        onChange={(e) => handleSectionChange(index, 'skill', e.target.value)}
+                        style={inputStyle}
+                      >
+                        {SKILLS.map((skill) => (
+                          <option key={skill.value} value={skill.value}>
+                            {skill.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>رقم Teil *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={section.teil ?? section.teilNumber ?? index + 1}
+                        onChange={(e) => {
+                          const value = Math.max(1, Number(e.target.value) || index + 1);
+                          handleSectionChange(index, 'teil', value);
+                          handleSectionChange(index, 'teilNumber', value);
+                        }}
+                        required
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b7280' }}>عدد الأسئلة / Quota *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={section.quota ?? 1}
+                        onChange={(e) => handleSectionChange(index, 'quota', Math.max(1, Number(e.target.value) || 1))}
+                        required
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {formData.sections.length === 0 && (
+                <p style={{ color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                  لا توجد أقسام. اضغط "إضافة Section" لإضافة قسم جديد.
+                </p>
               )}
             </div>
           </div>

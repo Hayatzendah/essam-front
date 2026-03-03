@@ -24,6 +24,8 @@ const FALLBACK_SECTION_OPTIONS = [
   { key: 'pruefungen', label: 'Prüfungen' },
   { key: 'leben_in_deutschland', label: 'Leben in Deutschland' },
   { key: 'derdiedas', label: 'Der / Die / Das' },
+  { key: 'lesen_hoeren', label: 'Lesen & Hören' },
+  { key: 'dialoge', label: 'Dialoge' },
 ];
 
 // Sortable Level Row

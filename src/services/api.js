@@ -424,10 +424,11 @@ export const getExams = async ({ examCategory, provider, level, mainSkill, page 
   return response.data;
 };
 
-// Legacy function - keep for backward compatibility
-export const getPublicExams = async ({ level, provider, mainSkill, page = 1, limit = 20 }) => {
+// Legacy function - keep for backward compatibility (supports examCategory for Lesen & Hören, Dialoge)
+export const getPublicExams = async ({ level, provider, mainSkill, examCategory, page = 1, limit = 20 }) => {
   const params = { level, provider, page, limit };
   if (mainSkill) params.mainSkill = mainSkill;
+  if (examCategory) params.examCategory = examCategory;
   console.log('📝 Fetching public exams with params:', params);
   const response = await api.get('/exams/public', { params });
   console.log('📝 Public exams response:', response.data);
