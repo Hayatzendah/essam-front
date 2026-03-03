@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getGrammarTopics } from "../services/api";
 import { useLevels } from "../hooks/useLevels";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 // أيقونات افتراضية للمواضيع
 const DEFAULT_ICONS = ["📚", "✏️", "📝", "🎯", "🔤", "📖", "🧩", "🔁", "🔗", "🧱"];
@@ -57,9 +58,13 @@ export default function GrammatikPage() {
           >
             ← العودة للرئيسية
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            Deutsch Learning App
-          </span>
+          {localStorage.getItem("accessToken") ? (
+            <UserProfileDropdown />
+          ) : (
+            <span className="text-xs font-semibold text-red-600">
+              Deutsch Learning App
+            </span>
+          )}
         </div>
 
         {/* العنوان الرئيسي */}

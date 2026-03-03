@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getExamDetails, createAttempt, fixExamSections } from "../services/api";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 export default function ExamDetailsPage() {
   const { examId } = useParams();
@@ -171,9 +172,13 @@ export default function ExamDetailsPage() {
           >
             ← العودة للامتحانات
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            Deutsch Learning App
-          </span>
+          {localStorage.getItem("accessToken") ? (
+            <UserProfileDropdown />
+          ) : (
+            <span className="text-xs font-semibold text-red-600">
+              Deutsch Learning App
+            </span>
+          )}
         </div>
 
         {/* تفاصيل الامتحان */}

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVocabularyTopics } from "../services/api";
 import { useLevels } from "../hooks/useLevels";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 export default function WortschatzPage() {
   const { levelNames } = useLevels('wortschatz');
@@ -53,9 +54,13 @@ export default function WortschatzPage() {
           >
             ← العودة للرئيسية
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            Deutsch Learning App
-          </span>
+          {localStorage.getItem("accessToken") ? (
+            <UserProfileDropdown />
+          ) : (
+            <span className="text-xs font-semibold text-red-600">
+              Deutsch Learning App
+            </span>
+          )}
         </div>
 
         {/* العنوان الرئيسي */}

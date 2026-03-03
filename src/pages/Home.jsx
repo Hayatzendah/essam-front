@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logoImage from "../images/logo.png";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 export default function Home() {
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const isLoggedIn = !!localStorage.getItem("accessToken");
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -21,12 +23,16 @@ export default function Home() {
               />
             </div>
 
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
-            >
-              تسجيل الدخول
-            </button>
+            {isLoggedIn ? (
+              <UserProfileDropdown />
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+              >
+                تسجيل الدخول
+              </button>
+            )}
           </div>
         </div>
       </header>
