@@ -541,7 +541,7 @@ function BulkCreateQuestions() {
     setResults(null);
 
     if (!examId) { setError('اختر الامتحان أولاً'); return; }
-    if (examHasSections && !sectionKey) { setError('اختر القسم أولاً'); return; }
+    // القسم اختياري: إن لم تختر قسماً يُضاف السؤال لقسم افتراضي أو قسم جديد
     if (exerciseMode === 'audio' && !listeningClipId) { setError('اختر أو ارفع ملف الاستماع أولاً'); return; }
 
     // الأسئلة الفعلية (تجاهل الأسئلة الفارغة تماماً)
@@ -710,14 +710,14 @@ function BulkCreateQuestions() {
           </div>
           {examHasSections && (
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#475569' }}>القسم (Section) *</label>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#475569' }}>القسم (Section)</label>
               <select
                 value={sectionKey}
                 onChange={(e) => { setSectionKey(e.target.value); setListeningClipId(null); }}
                 disabled={!examId}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 14 }}
               >
-                <option value="">-- اختر قسم --</option>
+                <option value="">-- اختر قسم (اختياري) --</option>
                 {sections.map(sec => (
                   <option key={sec.key || sec.sectionKey} value={sec.key || sec.sectionKey}>
                     {sec.title || sec.name || sec.key}
@@ -725,6 +725,9 @@ function BulkCreateQuestions() {
                 ))}
               </select>
             </div>
+          )}
+          {examId && !examHasSections && (
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>هذا الامتحان بدون أقسام — يمكنك إضافة الأسئلة مباشرة.</p>
           )}
         </div>
       </div>

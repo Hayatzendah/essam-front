@@ -131,8 +131,11 @@ export default function LesenHoerenPage() {
               </div>
             )}
             {!loading && !error && exams.length === 0 && (
-              <div className="text-center text-slate-500 text-sm mt-10 bg-slate-50 border border-slate-200 rounded-xl py-8">
-                لا توجد امتحانات منشورة لهذا المستوى حالياً. يمكنك إنشاء امتحان من نوع &quot;Lesen &amp; Hören&quot; من لوحة الإدارة.
+              <div className="text-center text-slate-600 text-sm mt-10 bg-slate-50 border border-slate-200 rounded-xl py-8 max-w-lg mx-auto">
+                <p className="font-medium text-slate-700 mb-2">لا توجد امتحانات منشورة لهذا المستوى حالياً.</p>
+                <p className="text-slate-500 text-xs">
+                  تظهر هنا فقط الامتحانات ذات الحالة &quot;منشور (Published)&quot;. إذا أنشأت امتحاناً واخترت &quot;مسودة (Draft)&quot; فغيّر الحالة إلى &quot;منشور&quot; من تعديل الامتحان في لوحة الإدارة.
+                </p>
               </div>
             )}
             {!loading && !error && exams.length > 0 && (

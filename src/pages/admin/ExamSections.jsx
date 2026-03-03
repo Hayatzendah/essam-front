@@ -429,16 +429,19 @@ function ExamSections() {
                         >
                           ✏️
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteSection(section.key);
-                          }}
-                          className="es-icon-btn es-delete-icon"
-                          title="حذف"
-                        >
-                          🗑️
-                        </button>
+                        {/* لا نعرض زر الحذف للقسم الافتراضي (امتحانات بدون أقسام) */}
+                        {section.key !== '_default' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSection(section.key);
+                            }}
+                            className="es-icon-btn es-delete-icon"
+                            title="حذف"
+                          >
+                            🗑️
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="es-section-bottom">

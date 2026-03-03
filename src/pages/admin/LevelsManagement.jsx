@@ -26,6 +26,7 @@ const FALLBACK_SECTION_OPTIONS = [
   { key: 'derdiedas', label: 'Der / Die / Das' },
   { key: 'lesen_hoeren', label: 'Lesen & Hören' },
   { key: 'dialoge', label: 'Dialoge' },
+  { key: 'grammatik_training', label: 'Grammatik-Training' },
 ];
 
 // Sortable Level Row

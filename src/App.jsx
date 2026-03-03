@@ -40,6 +40,7 @@ import DerDieDasQuiz from './pages/DerDieDasQuiz';
 import NounsManagement from './pages/admin/NounsManagement';
 import LesenHoerenPage from './pages/LesenHoerenPage';
 import DialogePage from './pages/DialogePage';
+import GrammatikTrainingPage from './pages/GrammatikTrainingPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -347,6 +348,7 @@ function App() {
         <Route path="/pruefungen/exam/:examId" element={<ExamDetailsPage />} />
         <Route path="/lesen-hoeren" element={<LesenHoerenPage />} />
         <Route path="/dialoge" element={<DialogePage />} />
+        <Route path="/grammatik-training" element={<GrammatikTrainingPage />} />
       </Routes>
     </Router>
   );

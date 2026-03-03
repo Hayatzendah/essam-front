@@ -219,6 +219,8 @@ function EditQuestion() {
   const [isContentOnly, setIsContentOnly] = useState(false);
   const [contentBlocks, setContentBlocks] = useState([]);
   const [savingContent, setSavingContent] = useState(false);
+  // فتح محرر المحتوى التعليمي من صفحة تعديل السؤال العادي (عند وجود بلوكات)
+  const [showContentBlocksEditor, setShowContentBlocksEditor] = useState(false);
 
   // ✅ Reading passage + cards (من BulkCreateQuestions)
   const [readingPassage, setReadingPassage] = useState('');
@@ -1248,8 +1250,8 @@ function EditQuestion() {
     );
   }
 
-  // ✅ محرر المحتوى التعليمي (contentOnly)
-  if (isContentOnly) {
+  // ✅ محرر المحتوى التعليمي (سؤال محتوى فقط، أو فتح من صفحة السؤال العادي)
+  if (isContentOnly || showContentBlocksEditor) {
     const updateBlock = (idx, updates) => {
       setContentBlocks(prev => prev.map((b, i) => i === idx ? { ...b, ...updates } : b));
     };
@@ -1369,7 +1371,11 @@ function EditQuestion() {
     return (
       <div className="create-question-page">
         <div className="page-header">
-          <button onClick={() => navigate(returnTo || '/admin/questions')} className="back-btn">← العودة</button>
+          {showContentBlocksEditor ? (
+            <button onClick={() => setShowContentBlocksEditor(false)} className="back-btn">← العودة لتعديل السؤال</button>
+          ) : (
+            <button onClick={() => navigate(returnTo || '/admin/questions')} className="back-btn">← العودة</button>
+          )}
           <h1>تعديل المحتوى التعليمي</h1>
         </div>
         <div className="create-question-container">
@@ -1639,6 +1645,27 @@ function EditQuestion() {
               />
             )}
           </div>
+
+          {/* ✅ المحتوى التعليمي (بلوكات) — عرض وتعديل عند وجود بلوكات */}
+          {contentBlocks.length > 0 && !showContentBlocksEditor && (
+            <div style={{ padding: 16, backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <label style={{ fontWeight: 600, fontSize: 14, color: '#1e40af' }}>
+                  المحتوى التعليمي ({contentBlocks.filter(b => (b.type || b.blockType) !== 'questions').length} بلوك)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowContentBlocksEditor(true)}
+                  style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #3b82f6', backgroundColor: '#dbeafe', color: '#1d4ed8', cursor: 'pointer' }}
+                >
+                  تعديل المحتوى التعليمي
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
+                فقرات، صور، صوت، بطاقات — تظهر قبل/بعد الأسئلة في الامتحان.
+              </p>
+            </div>
+          )}
 
           {/* ✅ فقرة القراءة (إذا موجودة) */}
           {(readingPassage || readingCards.length > 0) && (

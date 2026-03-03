@@ -73,7 +73,7 @@ interface Section {
 
 interface ExamFormState {
   // Common fields
-  examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '';
+  examType: 'grammar_exam' | 'grammatik_training_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '';
   title: string;
   level: string;
   duration: number | ''; // in minutes (optional)
@@ -201,9 +201,9 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
     }
     
     // Reset grammar level manual change flag when exam type changes
-    if (formData.examType === 'grammar_exam') {
+    if (formData.examType === 'grammar_exam' || formData.examType === 'grammatik_training_exam') {
       setGrammarLevelManuallyChanged(false);
-      // Initialize grammarLevel from main level when switching to grammar_exam
+      // Initialize grammarLevel from main level when switching to grammar / Grammatik-Training
       setFormData((prev) => ({
         ...prev,
         grammarLevel: prev.level,
@@ -222,8 +222,10 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           const exam = await examsAPI.getById(examId);
           
           // Determine exam type from examCategory or provider
-          let examType: 'grammar_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '' = '';
-          if (exam.examCategory === 'grammar_exam' || exam.provider === 'Grammatik') {
+          let examType: 'grammar_exam' | 'grammatik_training_exam' | 'provider_exam' | 'leben_exam' | 'lesen_hoeren_exam' | 'dialoge_exam' | '' = '';
+          if (exam.examCategory === 'grammatik_training_exam') {
+            examType = 'grammatik_training_exam';
+          } else if (exam.examCategory === 'grammar_exam' || exam.provider === 'Grammatik') {
             examType = 'grammar_exam';
           } else if (exam.examCategory === 'leben_exam' || exam.provider === 'leben_in_deutschland' || exam.mainSkill === 'leben_test') {
             examType = 'leben_exam';
@@ -323,7 +325,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           });
           
           // Load grammar topics if grammar exam
-          if (examType === 'grammar_exam' && exam.grammarLevel) {
+          if ((examType === 'grammar_exam' || examType === 'grammatik_training_exam') && exam.grammarLevel) {
             const fetchTopics = async () => {
               setLoadingTopics(true);
               try {
@@ -359,7 +361,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
   const [grammarLevelManuallyChanged, setGrammarLevelManuallyChanged] = useState(false);
   
   useEffect(() => {
-    if (formData.examType === 'grammar_exam' && !grammarLevelManuallyChanged) {
+    if ((formData.examType === 'grammar_exam' || formData.examType === 'grammatik_training_exam') && !grammarLevelManuallyChanged) {
       setFormData((prev) => ({
         ...prev,
         grammarLevel: prev.level,
@@ -370,7 +372,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
 
   // Fetch grammar topics when grammar level changes
   useEffect(() => {
-    if (formData.examType === 'grammar_exam' && formData.grammarLevel) {
+    if ((formData.examType === 'grammar_exam' || formData.examType === 'grammatik_training_exam') && formData.grammarLevel) {
       const fetchTopics = async () => {
         setLoadingTopics(true);
         setError(''); // Clear any previous errors
@@ -388,7 +390,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         }
       };
       fetchTopics();
-    } else if (formData.examType !== 'grammar_exam') {
+    } else if (formData.examType !== 'grammar_exam' && formData.examType !== 'grammatik_training_exam') {
       // Clear topics when switching away from grammar exam
       setGrammarTopics([]);
     }
@@ -583,8 +585,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
       return;
     }
 
-    // Grammar Exam validation
-    if (formData.examType === 'grammar_exam') {
+    // Grammar Exam / Grammatik-Training validation
+    if (formData.examType === 'grammar_exam' || formData.examType === 'grammatik_training_exam') {
       if (!formData.grammarTopicId) {
         setError('يجب اختيار موضوع القواعد');
         return;
@@ -601,28 +603,19 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             return;
           }
         } else {
-          // سكاشن مع أسئلة: نحتاج sections
-          if (formData.sections.length === 0) {
-            setError('يجب إضافة قسم واحد على الأقل');
-            return;
-          }
+          // أقسام اختيارية: إذا وُجدت نتحقق من صحة كل قسم
           for (let i = 0; i < formData.sections.length; i++) {
             const section = formData.sections[i];
-            if (!section.section.trim()) {
+            if (!(section.section || '').trim()) {
               setError(`عنوان القسم ${i + 1} مطلوب`);
               return;
             }
           }
         }
       } else if (formData.mainSkill !== 'leben_test') {
-        // للمهارات الأخرى: نحتاج sections
-        if (formData.sections.length === 0) {
-          setError('يجب إضافة قسم واحد على الأقل');
-          return;
-        }
         for (let i = 0; i < formData.sections.length; i++) {
           const section = formData.sections[i];
-          if (!section.section.trim()) {
+          if (!(section.section || '').trim()) {
             setError(`عنوان القسم ${i + 1} مطلوب`);
             return;
           }
@@ -645,12 +638,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
       }
     }
 
-    // Leben Exam validation
+    // Leben Exam validation (الأقسام اختيارية — نتحقق من الأقسام المضافة فقط)
     if (formData.examType === 'leben_exam') {
-      if (formData.sections.length === 0) {
-        setError('يجب إضافة قسم واحد على الأقل');
-        return;
-      }
       for (let i = 0; i < formData.sections.length; i++) {
         const section = formData.sections[i];
         const sectionName = section.name || section.section;
@@ -706,7 +695,19 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
       // Add Grammar Exam specific fields
       if (formData.examType === 'grammar_exam') {
         const selectedTopic = grammarTopics.find(t => t._id === formData.grammarTopicId);
+        payload.examCategory = 'grammar_exam';
         payload.provider = 'Grammatik';
+        payload.grammarTopicId = formData.grammarTopicId;
+        payload.grammarLevel = formData.grammarLevel;
+        payload.totalQuestions = formData.totalQuestions;
+        payload.questionTags = questionTagsArray.length > 0 ? questionTagsArray : (selectedTopic?.tags || []);
+        payload.randomizeQuestions = true;
+      }
+      // Add Grammatik-Training specific fields (نفس فورم القواعد + مواضيع)
+      if (formData.examType === 'grammatik_training_exam') {
+        const selectedTopic = grammarTopics.find(t => t._id === formData.grammarTopicId);
+        payload.examCategory = 'grammatik_training_exam';
+        payload.provider = 'Grammatik-Training';
         payload.grammarTopicId = formData.grammarTopicId;
         payload.grammarLevel = formData.grammarLevel;
         payload.totalQuestions = formData.totalQuestions;
@@ -1140,6 +1141,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
           >
             <option value="">-- اختر نوع الامتحان --</option>
             <option value="grammar_exam">Grammar Exam (قواعد)</option>
+            <option value="grammatik_training_exam">Grammatik-Training</option>
             <option value="provider_exam">Provider Exam (Prüfungen – Goethe/TELC…)</option>
             <option value="leben_exam">Deutschland in Leben Test</option>
             <option value="lesen_hoeren_exam">Lesen &amp; Hören</option>
@@ -1269,10 +1271,10 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         </div>
 
         {/* Grammar Exam Settings */}
-        {formData.examType === 'grammar_exam' && (
+        {(formData.examType === 'grammar_exam' || formData.examType === 'grammatik_training_exam') && (
           <div style={sectionStyle}>
             <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
-              إعدادات امتحان القواعد
+              {formData.examType === 'grammatik_training_exam' ? 'إعدادات Grammatik-Training' : 'إعدادات امتحان القواعد'}
             </h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

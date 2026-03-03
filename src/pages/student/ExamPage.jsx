@@ -660,7 +660,7 @@ function ExamPage() {
   // هل الامتحان يحتوي على أقسام حقيقية (غير _default)؟
   const [examHasRealSections, setExamHasRealSections] = useState(true);
 
-  // Fetch sections overview when attempt loads
+  // Fetch sections overview when attempt loads (+ fallback لامتحانات بدون أقسام: جلب _default)
   useEffect(() => {
     if (attempt?.examId || attempt?.exam?.id || attempt?.exam?._id) {
       const examId = attempt.examId || attempt.exam?.id || attempt.exam?._id;
@@ -672,17 +672,41 @@ function ExamPage() {
           if (sections.length > 0) {
             setSectionsOverview(sections);
             if (hasReal) {
-              // العرض الافتراضي: أول قسم (بدون "كل الأسئلة")
               setSelectedSectionKey((prev) => (prev == null ? sections[0].key : prev));
             } else {
-              // امتحان بدون أقسام: اختيار _default تلقائياً
               setSelectedSectionKey(sections[0].key);
             }
+          } else {
+            // امتحان بدون أقسام في الـ overview: نجرب جلب قسم _default (قد يكون المحتوى هناك)
+            examsAPI.getSectionQuestions(examId, '_default')
+              .then((sectionData) => {
+                const exs = sectionData?.exercises || [];
+                if (exs.length > 0) {
+                  setSectionsOverview([{ key: '_default', title: 'المحتوى', order: 0 }]);
+                  setExamHasRealSections(false);
+                  setSelectedSectionKey('_default');
+                  setSectionExercises(prev => ({ ...prev, _default: sectionData }));
+                }
+              })
+              .catch(() => {});
           }
         })
         .catch((err) => {
           console.log('No sections for this exam:', err.response?.status);
-          // Not an error - exam may not have sections
+          const examId = attempt?.examId || attempt?.exam?.id || attempt?.exam?._id;
+          if (examId) {
+            examsAPI.getSectionQuestions(examId, '_default')
+              .then((sectionData) => {
+                const exs = sectionData?.exercises || [];
+                if (exs.length > 0) {
+                  setSectionsOverview([{ key: '_default', title: 'المحتوى', order: 0 }]);
+                  setExamHasRealSections(false);
+                  setSelectedSectionKey('_default');
+                  setSectionExercises(prev => ({ ...prev, _default: sectionData }));
+                }
+              })
+              .catch(() => {});
+          }
         });
     }
   }, [attempt?.examId, attempt?.exam?.id]);
@@ -772,6 +796,16 @@ function ExamPage() {
       });
   }, [selectedSectionKey, attempt]);
 
+  // ✅ امتحان بدون أقسام: إذا قسم واحد وتمرين واحد → اختيار التمرين تلقائياً لعرض المحتوى مباشرة
+  useEffect(() => {
+    if (!selectedSectionKey || selectedExercise) return;
+    const data = sectionExercises[selectedSectionKey];
+    const exercises = data?.exercises || [];
+    if (exercises.length === 1 && (exercises[0].contentBlocks?.length > 0 || exercises[0].audioUrl || exercises[0].readingPassage || (exercises[0].readingCards?.length > 0))) {
+      setSelectedExercise(exercises[0]);
+    }
+  }, [selectedSectionKey, sectionExercises, selectedExercise]);
+
   // ✅ تصفية attempt.items لإزالة الأسئلة المحذوفة التي لم تعد في أقسام الامتحان
   useEffect(() => {
     if (!attempt?.items || !sectionsOverview || sectionsOverview.length === 0) return;
@@ -844,14 +878,16 @@ function ExamPage() {
     return ids;
   }, [sectionsOverview, sectionExercises]);
 
-  // ✅ خريطة questionId → بيانات التمرين (صوت، قراءة) لعرضها في "كل الأسئلة"
+  // ✅ خريطة questionId → بيانات التمرين (صوت، قراءة، contentBlocks) لعرضها في "كل الأسئلة"
+  // استخدام String(questionId) كمفتاح لضمان التطابق (الـ API قد يعيد ObjectId أو string)
   const questionExerciseMap = useMemo(() => {
     const map = new Map();
     Object.values(sectionExercises).forEach((sectionData) => {
       (sectionData.exercises || []).forEach((exercise) => {
         (exercise.questions || []).forEach((q) => {
-          if (q.questionId) {
-            map.set(q.questionId, {
+          const qid = q.questionId != null ? String(q.questionId) : '';
+          if (qid) {
+            map.set(qid, {
               audioUrl: exercise.audioUrl,
               readingPassage: exercise.readingPassage,
               readingPassageBgColor: exercise.readingPassageBgColor,
@@ -1608,7 +1644,8 @@ function ExamPage() {
   const hasSections = examHasRealSections && sectionsOverview && sectionsOverview.length > 0;
   const hasExercises = currentSectionData?.exercises?.length > 0;
   // هل تم تحميل بيانات جميع الأقسام؟ (لانتظار اكتمال التحميل قبل عرض "كل الأسئلة")
-  const allSectionsLoaded = hasSections && sectionsOverview.every((s) => sectionExercises[s.key]);
+  // يشمل أيضاً الامتحانات بدون أقسام (_default section)
+  const allSectionsLoaded = sectionsOverview && sectionsOverview.length > 0 && sectionsOverview.every((s) => sectionExercises[s.key]);
   // محتوى تعليمي: لا نعرض زر تسليم الامتحان ولا نذكر التسليم في التعليمات
   const isEducational = !!(attempt?.exam?.isEducational);
 
@@ -1686,7 +1723,8 @@ function ExamPage() {
         .filter((item) => !item.contentOnly);
     }
     // إذا كان قسم مختار → عرض أسئلة القسم (تصفية حسب sectionKey أو حسب معرفات الأسئلة من API القسم)
-    if (hasSections && selectedSectionKey && attempt?.items) {
+    // يشمل أيضاً الامتحانات بدون أقسام (selectedSectionKey = '_default')
+    if (selectedSectionKey && attempt?.items) {
       if (sectionQuestionIds && sectionQuestionIds.size > 0) {
         // أسئلة الـ attempt الموجودة في هذا القسم (المصدر الأساسي — يحتفظ ببيانات الطالب)
         const byIds = attempt.items
@@ -1764,7 +1802,8 @@ function ExamPage() {
         .filter((item) => !item.contentOnly);
     }
     // عرض كل الأسئلة: مباشرة من تعريف الأقسام (Teil 1 → Teil 2 → ...)
-    if (hasSections) {
+    // يشمل أيضاً الامتحانات بدون أقسام (sectionsOverview يحتوي على _default)
+    if (sectionsOverview && sectionsOverview.length > 0) {
       if (!allSectionsLoaded) return []; // الأقسام لا تزال تُحمّل → الـ spinner يظهر
       const allItems = [];
       const seenQIds = new Set();
@@ -2191,10 +2230,15 @@ function ExamPage() {
                     {selectedExercise.readingCards && selectedExercise.readingCards.length > 0 && (
                       <ReadingCardsGrid cards={selectedExercise.readingCards} cardsLayout={selectedExercise.cardsLayout} />
                     )}
-                    {selectedExercise.contentBlocks && selectedExercise.contentBlocks.length > 0 &&
-                      !selectedExercise.contentBlocks.some(b => b.type === 'questions') && (
-                        <ContentBlocksRenderer blocks={selectedExercise.contentBlocks} />
-                      )}
+                    {/* عرض كل المحتوى في الأعلى فقط عندما لا يوجد بلوك "questions" (لا interleaving)؛ وإلا يُعرض المحتوى مرة واحدة فقط قبل/بعد كل سؤال عبر blockDist */}
+                    {selectedExercise.contentBlocks && selectedExercise.contentBlocks.length > 0 && (() => {
+                      const blockType = (b) => b.blockType || b.type;
+                      const hasQuestionsBlock = selectedExercise.contentBlocks.some(b => blockType(b) === 'questions');
+                      if (hasQuestionsBlock) return null;
+                      const blocksWithoutQuestions = selectedExercise.contentBlocks.filter(b => blockType(b) !== 'questions');
+                      if (blocksWithoutQuestions.length === 0) return null;
+                      return <ContentBlocksRenderer blocks={blocksWithoutQuestions} />;
+                    })()}
                   </div>
                 )}
 
@@ -2250,7 +2294,7 @@ function ExamPage() {
 
                           // ✅ في "كل الأسئلة": عرض صوت/قراءة التمرين فوق أول سؤال لكل تمرين
                           const qId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
-                          let exerciseInfo = qId ? questionExerciseMap.get(qId) : null;
+                          let exerciseInfo = qId ? questionExerciseMap.get(String(qId)) : null;
 
                           // ✅ للعناصر الوهمية (_virtualExercise): نبني exerciseInfo من بيانات التمرين مباشرة
                           if (!exerciseInfo && item._virtualExercise) {
@@ -2341,9 +2385,13 @@ function ExamPage() {
                                     {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
                                       <ReadingCardsGrid cards={exerciseInfo.readingCards} cardsLayout={exerciseInfo.cardsLayout} />
                                     )}
-                                    {exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (
-                                      <ContentBlocksRenderer blocks={exerciseInfo.contentBlocks} />
-                                    )}
+                                    {/* في "كل الأسئلة" لا يوجد blockDist (selectedExercise = null) فنعرض كل المحتوى مرة واحدة في العنوان */}
+                                    {!blockDist && exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (() => {
+                                      const blockType = (b) => b.blockType || b.type;
+                                      const blocksNoQ = exerciseInfo.contentBlocks.filter(b => blockType(b) !== 'questions');
+                                      if (blocksNoQ.length === 0) return null;
+                                      return <ContentBlocksRenderer blocks={blocksNoQ} />;
+                                    })()}
                                   </div>
                                 )}
                                 {blockDist && blockDist.beforeMap[displayIndex] && (
@@ -2359,8 +2407,8 @@ function ExamPage() {
                               {blockDist && blockDist.beforeMap[displayIndex] && (
                                 <ContentBlocksRenderer blocks={blockDist.beforeMap[displayIndex]} />
                               )}
-                              {/* ✅ عنوان التمرين + صوت/قراءة مشتركة في "كل الأسئلة" */}
-                              {showExerciseHeader && (
+                              {/* ✅ عنوان التمرين + صوت/قراءة/بلوكات مشتركة في "كل الأسئلة" */}
+                              {showExerciseHeader && exerciseInfo && (
                                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
                                   <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
                                     Übung {exerciseInfo.exerciseIndex}
@@ -2389,9 +2437,13 @@ function ExamPage() {
                                   {exerciseInfo.readingCards && exerciseInfo.readingCards.length > 0 && (
                                     <ReadingCardsGrid cards={exerciseInfo.readingCards} cardsLayout={exerciseInfo.cardsLayout} />
                                   )}
-                                  {exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (
-                                    <ContentBlocksRenderer blocks={exerciseInfo.contentBlocks} />
-                                  )}
+                                  {/* في "كل الأسئلة" لا يوجد blockDist فنعرض كل المحتوى مرة واحدة في العنوان؛ مع blockDist نعتمد على beforeMap/trailing فقط */}
+                                  {!blockDist && exerciseInfo.contentBlocks && exerciseInfo.contentBlocks.length > 0 && (() => {
+                                    const blockType = (b) => b.blockType || b.type;
+                                    const blocksNoQ = exerciseInfo.contentBlocks.filter(b => blockType(b) !== 'questions');
+                                    if (blocksNoQ.length === 0) return null;
+                                    return <ContentBlocksRenderer blocks={blocksNoQ} />;
+                                  })()}
                                 </div>
                               )}
 
