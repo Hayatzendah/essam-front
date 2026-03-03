@@ -657,6 +657,9 @@ function ExamPage() {
     }
   }, [attemptId]);
 
+  // هل الامتحان يحتوي على أقسام حقيقية (غير _default)؟
+  const [examHasRealSections, setExamHasRealSections] = useState(true);
+
   // Fetch sections overview when attempt loads
   useEffect(() => {
     if (attempt?.examId || attempt?.exam?.id || attempt?.exam?._id) {
@@ -664,10 +667,17 @@ function ExamPage() {
       examsAPI.getSectionsOverview(examId)
         .then((data) => {
           const sections = data.sections || data || [];
+          const hasReal = data.hasSections !== false;
+          setExamHasRealSections(hasReal);
           if (sections.length > 0) {
             setSectionsOverview(sections);
-            // العرض الافتراضي: أول قسم (بدون "كل الأسئلة")
-            setSelectedSectionKey((prev) => (prev == null ? sections[0].key : prev));
+            if (hasReal) {
+              // العرض الافتراضي: أول قسم (بدون "كل الأسئلة")
+              setSelectedSectionKey((prev) => (prev == null ? sections[0].key : prev));
+            } else {
+              // امتحان بدون أقسام: اختيار _default تلقائياً
+              setSelectedSectionKey(sections[0].key);
+            }
           }
         })
         .catch((err) => {
@@ -1594,7 +1604,8 @@ function ExamPage() {
   const isSubmitted = attempt.status === 'submitted';
 
   // Sections sidebar logic (currentSectionData و sectionQuestionIds معرّفان أعلاه قبل أي return)
-  const hasSections = sectionsOverview && sectionsOverview.length > 0;
+  // hasSections: فقط إذا كان الامتحان يحتوي على أقسام حقيقية (غير _default)
+  const hasSections = examHasRealSections && sectionsOverview && sectionsOverview.length > 0;
   const hasExercises = currentSectionData?.exercises?.length > 0;
   // هل تم تحميل بيانات جميع الأقسام؟ (لانتظار اكتمال التحميل قبل عرض "كل الأسئلة")
   const allSectionsLoaded = hasSections && sectionsOverview.every((s) => sectionExercises[s.key]);

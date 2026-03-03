@@ -266,6 +266,31 @@ export const examsAPI = {
     return response.data;
   },
 
+  // إنشاء أسئلة بدون قسم (للامتحانات بدون أقسام)
+  bulkCreateQuestionsNoSection: async (examId, listeningClipId, questions, readingPassage, readingCards, cardsLayout, contentBlocks, readingPassageBgColor) => {
+    const payload = { questions };
+    if (listeningClipId) {
+      payload.listeningClipId = listeningClipId;
+    }
+    if (readingPassage) {
+      payload.readingPassage = readingPassage;
+    }
+    if (readingPassageBgColor) {
+      payload.readingPassageBgColor = readingPassageBgColor;
+    }
+    if (readingCards && readingCards.length > 0) {
+      payload.readingCards = readingCards;
+    }
+    if (cardsLayout) {
+      payload.cardsLayout = cardsLayout;
+    }
+    if (contentBlocks && contentBlocks.length > 0) {
+      payload.contentBlocks = contentBlocks;
+    }
+    const response = await api.post(`/exams/${examId}/questions/bulk-create`, payload);
+    return response.data;
+  },
+
   // ========== واجهة الطالب - أقسام الامتحان ==========
 
   // جلب نظرة عامة على أقسام الامتحان (للشريط الجانبي + التقدم)

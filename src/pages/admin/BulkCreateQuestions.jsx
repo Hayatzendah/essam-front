@@ -104,9 +104,13 @@ function BulkCreateQuestions() {
   useEffect(() => {
     if (!examId) { setSections([]); setSectionKey(''); return; }
     examsAPI.getSections(examId).then(data => {
-      setSections(Array.isArray(data) ? data : data?.sections || []);
+      const secs = Array.isArray(data) ? data : data?.sections || [];
+      setSections(secs);
     }).catch(() => setSections([]));
   }, [examId]);
+
+  // هل الامتحان يحتوي على أقسام حقيقية؟
+  const examHasSections = sections.length > 0;
 
   // Fetch clips when section changes
   useEffect(() => {
@@ -537,7 +541,7 @@ function BulkCreateQuestions() {
     setResults(null);
 
     if (!examId) { setError('اختر الامتحان أولاً'); return; }
-    if (!sectionKey) { setError('اختر القسم أولاً'); return; }
+    if (examHasSections && !sectionKey) { setError('اختر القسم أولاً'); return; }
     if (exerciseMode === 'audio' && !listeningClipId) { setError('اختر أو ارفع ملف الاستماع أولاً'); return; }
 
     // الأسئلة الفعلية (تجاهل الأسئلة الفارغة تماماً)
@@ -629,14 +633,23 @@ function BulkCreateQuestions() {
       const sendBgColor = exerciseMode === 'reading' ? (readingPassageBgColor?.trim() || null) :
                           exerciseMode === 'writing' ? (writingPassageBgColor?.trim() || null) : null;
 
-      const result = await examsAPI.bulkCreateQuestions(
-        examId, sectionKey, sendClipId, payload,
-        sendPassage,
-        sendCards,
-        sendCardsLayout,
-        validContentBlocks.length > 0 ? validContentBlocks : null,
-        sendBgColor
-      );
+      const result = examHasSections
+        ? await examsAPI.bulkCreateQuestions(
+            examId, sectionKey, sendClipId, payload,
+            sendPassage,
+            sendCards,
+            sendCardsLayout,
+            validContentBlocks.length > 0 ? validContentBlocks : null,
+            sendBgColor
+          )
+        : await examsAPI.bulkCreateQuestionsNoSection(
+            examId, sendClipId, payload,
+            sendPassage,
+            sendCards,
+            sendCardsLayout,
+            validContentBlocks.length > 0 ? validContentBlocks : null,
+            sendBgColor
+          );
       setResults(result);
       const msg = payload.length > 0
         ? `تم إنشاء ${result.success} سؤال بنجاح${result.failed > 0 ? ` (${result.failed} فشل)` : ''}`
@@ -677,9 +690,9 @@ function BulkCreateQuestions() {
       {/* Step 1: Exam + Section */}
       <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <h3 style={{ fontSize: 15, fontWeight: 'bold', color: '#334155', marginBottom: 16 }}>
-          1. اختر الامتحان والقسم
+          1. {examHasSections ? 'اختر الامتحان والقسم' : 'اختر الامتحان'}
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: examHasSections ? '1fr 1fr' : '1fr', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#475569' }}>الامتحان *</label>
             <select
@@ -695,27 +708,29 @@ function BulkCreateQuestions() {
               ))}
             </select>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#475569' }}>القسم (Section) *</label>
-            <select
-              value={sectionKey}
-              onChange={(e) => { setSectionKey(e.target.value); setListeningClipId(null); }}
-              disabled={!examId}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 14 }}
-            >
-              <option value="">-- اختر قسم --</option>
-              {sections.map(sec => (
-                <option key={sec.key || sec.sectionKey} value={sec.key || sec.sectionKey}>
-                  {sec.title || sec.name || sec.key}
-                </option>
-              ))}
-            </select>
-          </div>
+          {examHasSections && (
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#475569' }}>القسم (Section) *</label>
+              <select
+                value={sectionKey}
+                onChange={(e) => { setSectionKey(e.target.value); setListeningClipId(null); }}
+                disabled={!examId}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 14 }}
+              >
+                <option value="">-- اختر قسم --</option>
+                {sections.map(sec => (
+                  <option key={sec.key || sec.sectionKey} value={sec.key || sec.sectionKey}>
+                    {sec.title || sec.name || sec.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Step 2: Audio Clip (Optional) */}
-      {examId && sectionKey && (
+      {examId && (sectionKey || !examHasSections) && (
         <div style={{ background: 'white', border: `2px solid ${useAudio ? '#0ea5e9' : '#94a3b8'}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 'bold', color: useAudio ? '#0369a1' : '#64748b', margin: 0 }}>
@@ -1949,7 +1964,7 @@ function BulkCreateQuestions() {
       )}
 
       {/* Step 3: Questions (لا يظهر لمهام الكتابة — تُدار من صفحة مهام الكتابة) */}
-      {exerciseMode !== 'schreiben_tasks' && (listeningClipId || (exerciseMode !== 'audio' && examId && sectionKey)) && (
+      {exerciseMode !== 'schreiben_tasks' && (listeningClipId || (exerciseMode !== 'audio' && examId && (sectionKey || !examHasSections))) && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 'bold', color: '#334155' }}>
@@ -2152,7 +2167,7 @@ function BulkCreateQuestions() {
       )}
 
       {/* Submit button */}
-      {(listeningClipId || (!useAudio && examId && sectionKey)) && (
+      {(listeningClipId || (!useAudio && examId && (sectionKey || !examHasSections))) && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <button
             onClick={handleSubmit}
