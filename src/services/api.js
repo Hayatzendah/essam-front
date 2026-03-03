@@ -82,13 +82,17 @@ api.interceptors.response.use(
       // معالجة خاصة لخطأ 401 (Unauthorized) - Token منتهي أو غير صالح
       if (error.response.status === 401) {
         console.error('🔒 401 Unauthorized - Token منتهي أو غير صالح');
+        // قراءة دور المستخدم قبل مسح البيانات
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const isAdminOrTeacher = user.role === 'admin' || user.role === 'teacher';
         // حذف tokens
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        // إعادة توجيه للـ login (فقط إذا لم نكن في صفحة login)
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        // إعادة توجيه حسب الدور
+        const loginPath = isAdminOrTeacher ? '/adminessam-login' : '/login';
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/adminessam-login') {
+          window.location.href = loginPath;
         }
       }
 
@@ -205,6 +209,11 @@ export const authAPI = {
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
     }
+  },
+
+  changePassword: async (oldPassword, newPassword) => {
+    const response = await api.patch('/auth/change-password', { oldPassword, newPassword });
+    return response.data;
   },
 };
 

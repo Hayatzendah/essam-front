@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
+import AdminLogin from './pages/AdminLogin';
 import Register from './pages/Register';
+import AuthLayout from './components/AuthLayout';
 import Welcome from './pages/Welcome';
 import Home from './pages/Home';
 import CreateQuestion from './pages/admin/CreateQuestion';
@@ -43,22 +45,22 @@ function PrivateRoute({ children }) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location)}`} />;
   }
 
-  return children;
+  return <AuthLayout>{children}</AuthLayout>;
 }
 
 function AdminRoute({ children }) {
   const token = localStorage.getItem('accessToken');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  
+
   if (!token) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/adminessam-login" />;
   }
-  
+
   if (user.role !== 'admin' && user.role !== 'teacher') {
     return <Navigate to="/welcome" />;
   }
-  
-  return children;
+
+  return <AuthLayout>{children}</AuthLayout>;
 }
 
 function App() {
@@ -67,6 +69,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/adminessam-login" element={<AdminLogin />} />
         <Route path="/register" element={<Register />} />
         <Route
           path="/welcome"

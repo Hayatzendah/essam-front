@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import loginImage from '../images/41658.jpg';
@@ -11,6 +11,16 @@ function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  // إذا المستخدم مسجل دخول بالفعل، وجهه للصفحة المناسبة
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const dest = user.role === 'student' ? '/' : '/welcome';
+      navigate(dest, { replace: true });
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -19,12 +29,20 @@ function Login() {
     try {
       await authAPI.login(email, password);
 
+      // التحقق من الدور - هذه الصفحة مخصصة للطلاب فقط
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user.role === 'admin' || user.role === 'teacher') {
+        await authAPI.logout();
+        setError('هذه الصفحة مخصصة للطلاب فقط. استخدم صفحة دخول المعلم.');
+        setLoading(false);
+        return;
+      }
+
       // إذا في redirect parameter، روح عليه
       // وإلا حسب دور المستخدم: طالب -> /، أدمن/معلم -> /welcome
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
       const defaultRedirect = (user.role === 'student') ? '/' : '/welcome';
       const redirectTo = searchParams.get('redirect') || defaultRedirect;
-      navigate(redirectTo);
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       console.error('Login error:', err);
       if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {

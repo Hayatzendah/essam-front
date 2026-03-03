@@ -12,6 +12,16 @@ export const usersAPI = {
     const response = await api.patch('/users/me/state', { state });
     return response.data;
   },
+
+  // رفع صورة البروفايل
+  uploadProfilePicture: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.patch('/users/me/profile-picture', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };
 
 
