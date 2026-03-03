@@ -35,6 +35,9 @@ import SchreibenTasksManagement from './pages/admin/SchreibenTasksManagement';
 import SchreibenTaskEditor from './pages/admin/SchreibenTaskEditor';
 import SchreibenPage from './pages/student/SchreibenPage';
 import LevelsManagement from './pages/admin/LevelsManagement';
+import DerDieDasPage from './pages/DerDieDasPage';
+import DerDieDasQuiz from './pages/DerDieDasQuiz';
+import NounsManagement from './pages/admin/NounsManagement';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -209,6 +212,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/derdiedas"
+          element={
+            <AdminRoute>
+              <NounsManagement />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/admin/schreiben"
           element={
             <AdminRoute>
@@ -311,6 +322,22 @@ function App() {
           element={
             <PrivateRoute>
               <GrammarExercisePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/derdiedas"
+          element={
+            <PrivateRoute>
+              <DerDieDasPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/derdiedas/quiz/:level"
+          element={
+            <PrivateRoute>
+              <DerDieDasQuiz />
             </PrivateRoute>
           }
         />

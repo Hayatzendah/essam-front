@@ -186,6 +186,22 @@ export default function Home() {
             </p>
           </div>
 
+          {/* CARD 5 - Der/Die/Das */}
+          <div
+            onClick={() => navigate("/derdiedas")}
+            className="group cursor-pointer bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md border border-slate-200 dark:border-slate-700 p-6 transition-all hover:-translate-y-1 flex flex-col items-center text-center"
+          >
+            <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4 text-3xl">
+              🔤
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+              Der / Die / Das
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              تدرب على أدوات التعريف الألمانية حسب المستويات A1 – C2.
+            </p>
+          </div>
+
         </div>
       </section>
     </div>

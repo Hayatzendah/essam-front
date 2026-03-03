@@ -350,6 +350,42 @@ export const reorderVocabularyWords = async (wordIds) => {
   return response.data;
 };
 
+// ========== Der/Die/Das (Nouns) API ==========
+export const getNounsByLevel = async (level) => {
+  const response = await api.get('/nouns', { params: { level } });
+  return response.data;
+};
+
+export const getQuizNouns = async (level, count) => {
+  const response = await api.get('/nouns/quiz', { params: { level, count } });
+  return response.data;
+};
+
+export const getNounCounts = async () => {
+  const response = await api.get('/nouns/count');
+  return response.data;
+};
+
+export const createNoun = async (data) => {
+  const response = await api.post('/nouns', data);
+  return response.data;
+};
+
+export const createNounsBulk = async (level, nouns) => {
+  const response = await api.post('/nouns/bulk', { level, nouns });
+  return response.data;
+};
+
+export const updateNoun = async (id, data) => {
+  const response = await api.patch(`/nouns/${id}`, data);
+  return response.data;
+};
+
+export const deleteNoun = async (id) => {
+  const response = await api.delete(`/nouns/${id}`);
+  return response.data;
+};
+
 // 3. جلب أسئلة القواعد المتعلقة بالموضوع
 export const getGrammarQuestions = async ({ level, tags, page = '1', limit = '20' }) => {
   const response = await api.get('/questions/grammar', {
