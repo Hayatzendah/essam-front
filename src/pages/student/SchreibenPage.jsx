@@ -5,6 +5,30 @@ import { getSchreibenTasks, getSchreibenTask, checkSchreibenField } from '../../
 import { useLevels } from '../../hooks/useLevels';
 import './SchreibenPage.css';
 
+// ألوان خلفية الفقرة (للتعليمات العامة - نفس المحرر)
+const PARAGRAPH_BORDER_MAP = {
+  '': '#e2e8f0',
+  '#ffffff': '#d1d5db',
+  '#fefce8': '#fde68a',
+  '#f0fdf4': '#bbf7d0',
+  '#eff6ff': '#bfdbfe',
+  '#fef2f2': '#fecaca',
+  '#faf5ff': '#e9d5ff',
+  '#f5f5f5': '#d4d4d4',
+};
+
+// ألوان البطاقات (نفس مفاتيح المحرر)
+const CARD_COLORS_MAP = {
+  sky: { bg: '#f0f9ff', border: '#bae6fd', text: '#0c4a6e' },
+  emerald: { bg: '#ecfdf5', border: '#a7f3d0', text: '#064e3b' },
+  violet: { bg: '#f5f3ff', border: '#c4b5fd', text: '#4c1d95' },
+  rose: { bg: '#fff1f2', border: '#fecdd3', text: '#881337' },
+  amber: { bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
+  orange: { bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
+  indigo: { bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+  gray: { bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
+};
+
 // Provider labels mapping
 const providerLabels = {
   goethe: 'Goethe',
@@ -178,15 +202,21 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
         );
 
       case 'form':
+        const formTitle = data.title || '';
+        const formTitleIsHtml = typeof formTitle === 'string' && /<[a-z][\s\S]*>/i.test(formTitle);
         return (
           <div
             key={block.id || blockIndex}
             className="mb-4 p-5 bg-white rounded-xl border border-slate-200 min-w-0"
           >
-            {data.title && (
-              <h4 className="text-base font-semibold text-slate-800 mb-4">
-                {data.title}
-              </h4>
+            {formTitle && (
+              <div className="mb-4 text-base font-semibold text-slate-800">
+                {formTitleIsHtml ? (
+                  <div className="rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(formTitle)) }} />
+                ) : (
+                  <h4>{formTitle}</h4>
+                )}
+              </div>
             )}
             <div className="space-y-4">
               {(data.fields || []).map((field, fieldIndex) => {
@@ -236,6 +266,58 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
             </div>
           </div>
         );
+
+      case 'cards': {
+        const cards = data.cards || [];
+        const layout = data.cardsLayout || 'vertical';
+        if (cards.length === 0) return null;
+        return (
+          <div
+            key={block.id || blockIndex}
+            className="mb-4"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: layout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)',
+              gap: 12,
+            }}
+          >
+            {cards.map((card, idx) => {
+              const cardContent = card.content || '';
+              const cardTitle = card.title || '';
+              const contentIsHtml = typeof cardContent === 'string' && /<[a-z][\s\S]*>/i.test(cardContent);
+              const titleIsHtml = typeof cardTitle === 'string' && /<[a-z][\s\S]*>/i.test(cardTitle);
+              const colorKey = card.color || 'amber';
+              const theme = CARD_COLORS_MAP[colorKey] || CARD_COLORS_MAP.amber;
+              return (
+                <div
+                  key={idx}
+                  className="p-4 rounded-xl border min-w-0"
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                >
+                  {cardTitle && (
+                    <div className="text-sm font-semibold mb-2">
+                      {titleIsHtml ? (
+                        <div className="rich-text-content" style={{ wordBreak: 'normal', overflowWrap: 'break-word' }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(cardTitle)) }} />
+                      ) : (
+                        <h4>{cardTitle}</h4>
+                      )}
+                    </div>
+                  )}
+                  {contentIsHtml ? (
+                    <div
+                      className="text-sm leading-relaxed text-left rich-text-content"
+                      style={{ wordBreak: 'normal', overflowWrap: 'break-word' }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(cardContent)) }}
+                    />
+                  ) : (
+                    <p className="text-sm leading-relaxed text-left whitespace-pre-wrap">{cardContent}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
 
       default:
         return null;
@@ -342,16 +424,31 @@ const TaskDetailView = ({ task, taskId, onBack, hasQuestions, examAttemptId }) =
           </button>
         </div>
 
-        {/* Task Title */}
+        {/* Task Title - دعم HTML */}
         <div className="mb-6 text-left">
-          <h1 className="text-xl font-bold text-slate-900 mb-2">
-            ✍️ {task.title}
-          </h1>
+          <div className="text-xl font-bold text-slate-900 mb-2">
+            ✍️ {typeof task.title === 'string' && /<[a-z][\s\S]*>/i.test(task.title) ? (
+              <span className="rich-text-content" style={{ wordBreak: 'normal', overflowWrap: 'break-word' }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(task.title)) }} />
+            ) : (
+              task.title
+            )}
+          </div>
           {task.instructions && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl min-w-0">
-              <p className="text-sm text-amber-800 leading-relaxed text-left" style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
-                {task.instructions}
-              </p>
+            <div
+              className="p-4 rounded-xl min-w-0"
+              style={{
+                wordBreak: 'normal',
+                overflowWrap: 'break-word',
+                backgroundColor: task.instructionsBgColor || '#fffbeb',
+                border: `1px solid ${task.instructionsBgColor ? (PARAGRAPH_BORDER_MAP[task.instructionsBgColor] || task.instructionsBgColor) : '#fde68a'}`,
+                color: task.instructionsTextColor || undefined,
+              }}
+            >
+              {typeof task.instructions === 'string' && /<[a-z][\s\S]*>/i.test(task.instructions) ? (
+                <div className="text-sm leading-relaxed text-left rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(task.instructions)) }} />
+              ) : (
+                <p className="text-sm leading-relaxed text-left whitespace-pre-wrap" style={{ margin: 0 }}>{task.instructions}</p>
+              )}
             </div>
           )}
         </div>
@@ -456,7 +553,9 @@ const TasksListView = ({ tasks, onSelectTask, selectedLevel, setSelectedLevel, s
                 </div>
                 {task.instructions && (
                   <p className="text-sm text-slate-500 line-clamp-2">
-                    {task.instructions}
+                    {typeof task.instructions === 'string' && /<[a-z][\s\S]*>/i.test(task.instructions)
+                      ? task.instructions.replace(/<[^>]*>/g, '').trim().slice(0, 120)
+                      : task.instructions}
                   </p>
                 )}
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">

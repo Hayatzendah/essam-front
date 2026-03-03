@@ -224,7 +224,7 @@ function EditQuestion() {
   const [readingPassage, setReadingPassage] = useState('');
   const [readingPassageBgColor, setReadingPassageBgColor] = useState('');
   const [readingCards, setReadingCards] = useState([]);
-  const [cardsLayout, setCardsLayout] = useState('horizontal');
+  const [cardsLayout, setCardsLayout] = useState('vertical');
 
   // قائمة الولايات الألمانية
   const germanStates = [
@@ -489,11 +489,19 @@ function EditQuestion() {
       if (question.contentOnly) {
         setIsContentOnly(true);
       }
-      // تحميل بلوكات المحتوى (فقرة/صوت/بطاقات) سواء السؤال contentOnly أو سؤال عادي له فقرة قراءة
-      if (question.contentBlocks && Array.isArray(question.contentBlocks) && question.contentBlocks.length > 0) {
-        setContentBlocks(question.contentBlocks);
+      // تحميل بلوكات المحتوى (فقرة/صوت/بطاقات) — دعم مصفوفة أو JSON string من الـ API
+      let blocks = question.contentBlocks;
+      if (typeof blocks === 'string') {
+        try {
+          blocks = JSON.parse(blocks);
+        } catch (_) {
+          blocks = [];
+        }
+      }
+      if (Array.isArray(blocks) && blocks.length > 0) {
+        setContentBlocks(blocks);
       } else {
-        setContentBlocks([]);
+        setContentBlocks(Array.isArray(blocks) ? blocks : []);
       }
 
       // ✅ تحميل فقرة القراءة والبطاقات (من BulkCreateQuestions)
@@ -1145,7 +1153,22 @@ function EditQuestion() {
         questionData.readingPassage = readingPassage || null;
         questionData.readingPassageBgColor = readingPassageBgColor || null;
         questionData.readingCards = readingCards.filter(c => (c.title || '').trim() || (c.content || '').trim());
-        questionData.cardsLayout = cardsLayout || 'horizontal';
+        questionData.cardsLayout = cardsLayout || 'vertical';
+      }
+
+      // ✅ إرسال contentBlocks من النموذج الرئيسي حتى لا تُمسح عند التحديث
+      if (contentBlocks.length > 0) {
+        const cleanedBlocks = contentBlocks.map((b) => {
+          if (b.type === 'cards' && b.cards) {
+            return { ...b, cards: b.cards.map(({ _uploadingImage, ...card }) => card) };
+          }
+          if (b.type === 'audio') {
+            const { _audioFile, _audioPreview, _uploading, ...rest } = b;
+            return rest;
+          }
+          return b;
+        });
+        questionData.contentBlocks = cleanedBlocks;
       }
 
       console.log('Updating question data:', JSON.stringify(questionData, null, 2));
@@ -1317,7 +1340,7 @@ function EditQuestion() {
         ...(type === 'paragraph' && { text: '' }),
         ...(type === 'image' && { images: [] }),
         ...(type === 'audio' && { audioUrl: null }),
-        ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'horizontal' }),
+        ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'vertical' }),
       }]);
     };
     const removeBlock = (idx) => {
@@ -1462,8 +1485,25 @@ function EditQuestion() {
                   {/* Cards Block */}
                   {block.type === 'cards' && (
                     <div>
-                      <button type="button" onClick={() => updateBlock(bIdx, { cards: [...(block.cards || []), { title: '', texts: [{ label: '', content: '' }], color: '' }] })}
-                        style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #16a34a', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', marginBottom: 8 }}>+ بطاقة</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>ترتيب العرض:</span>
+                        <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #16a34a' }}>
+                          <button type="button" onClick={() => updateBlock(bIdx, { cardsLayout: 'horizontal' })}
+                            style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                              backgroundColor: (block.cardsLayout || 'vertical') === 'horizontal' ? '#16a34a' : '#dcfce7',
+                              color: (block.cardsLayout || 'vertical') === 'horizontal' ? '#fff' : '#166534' }}>
+                            ▤ أفقي
+                          </button>
+                          <button type="button" onClick={() => updateBlock(bIdx, { cardsLayout: 'vertical' })}
+                            style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, border: 'none', borderLeft: '1px solid #16a34a', cursor: 'pointer',
+                              backgroundColor: (block.cardsLayout || 'vertical') === 'vertical' ? '#16a34a' : '#dcfce7',
+                              color: (block.cardsLayout || 'vertical') === 'vertical' ? '#fff' : '#166534' }}>
+                            ▦ عمودي (3 في الصف)
+                          </button>
+                        </div>
+                        <button type="button" onClick={() => updateBlock(bIdx, { cards: [...(block.cards || []), { title: '', texts: [{ label: '', content: '' }], color: '' }] })}
+                          style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #16a34a', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer' }}>+ بطاقة</button>
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {(block.cards || []).map((card, cIdx) => (
                           <div key={cIdx} style={{ padding: 10, backgroundColor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 8 }}>
@@ -1670,7 +1710,7 @@ function EditQuestion() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
                     {readingCards.map((card, idx) => {
                       const CARD_COLORS = [
                         { key: 'teal', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },

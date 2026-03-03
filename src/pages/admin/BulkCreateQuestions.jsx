@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
 import axios from 'axios';
+import SchreibenTaskEditor from './SchreibenTaskEditor';
 
 const RichTextEditor = lazy(() => import('../../components/RichTextEditor'));
 const SimpleHtmlEditor = lazy(() => import('../../components/SimpleHtmlEditor'));
@@ -51,7 +52,7 @@ function BulkCreateQuestions() {
   const [sections, setSections] = useState([]);
   const [sectionKey, setSectionKey] = useState(preSectionKey);
 
-  // Exercise mode: 'audio' (Hören), 'reading' (Lesen), 'writing' (Schreiben), 'speaking' (Sprechen)
+  // Exercise mode: 'audio' | 'reading' | 'writing' | 'speaking' | 'schreiben_tasks' (مهام الكتابة)
   const [exerciseMode, setExerciseMode] = useState('audio');
   const useAudio = exerciseMode === 'audio'; // backward compat
 
@@ -68,7 +69,7 @@ function BulkCreateQuestions() {
   const [readingPassage, setReadingPassage] = useState('');
   const [readingPassageBgColor, setReadingPassageBgColor] = useState('');
   const [readingCards, setReadingCards] = useState([]);
-  const [cardsLayout, setCardsLayout] = useState('horizontal'); // 'horizontal' | 'vertical'
+  const [cardsLayout, setCardsLayout] = useState('vertical'); // 'horizontal' | 'vertical'
 
   // Content blocks (for speaking mode)
   const [contentBlocks, setContentBlocks] = useState([]);
@@ -357,7 +358,7 @@ function BulkCreateQuestions() {
       order: contentBlocks.length,
       ...(type === 'paragraph' && { text: '' }),
       ...(type === 'image' && { images: [] }),
-      ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'horizontal' }),
+      ...(type === 'cards' && { cards: [{ title: '', texts: [{ label: '', content: '' }], color: '' }], cardsLayout: 'vertical' }),
       ...(type === 'questions' && { questionCount: 1 }),
       ...(type === 'audio' && { audioUrl: null, audioFile: null, audioPreview: null }),
     };
@@ -769,10 +770,31 @@ function BulkCreateQuestions() {
               >
                 تحدث
               </button>
+              <button
+                type="button"
+                onClick={() => { setExerciseMode('schreiben_tasks'); setListeningClipId(null); setClipAudioUrl(null); setAudioFile(null); setAudioPreview(null); setReadingPassage(''); setReadingCards([]); setWritingPassage(''); setWritingCards([]); setContentBlocks([]); setInteractiveTextContent(''); setInteractiveBlanks([]); setInteractiveReorderParts([]); }}
+                style={{
+                  padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                  border: exerciseMode === 'schreiben_tasks' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                  backgroundColor: exerciseMode === 'schreiben_tasks' ? '#ede9fe' : 'white',
+                  color: exerciseMode === 'schreiben_tasks' ? '#5b21b6' : '#64748b',
+                }}
+              >
+                مهام الكتابة
+              </button>
             </div>
           </div>
 
-          {exerciseMode === 'reading' ? (
+          {exerciseMode === 'schreiben_tasks' ? (
+            <div style={{ marginTop: 8 }}>
+              <SchreibenTaskEditor
+                embedded
+                initialExamId={examId || undefined}
+                onSuccess={() => { setSuccess('تم إنشاء مهمة الكتابة بنجاح. يمكنك ربطها بالامتحان من صفحة الامتحان إن لم تُربط تلقائياً.'); setTimeout(() => setSuccess(''), 4000); }}
+                onCancel={() => setExerciseMode('audio')}
+              />
+            </div>
+          ) : exerciseMode === 'reading' ? (
             <div style={{ padding: 16, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#92400e' }}>
                 فقرة القراءة (اختياري)
@@ -871,7 +893,7 @@ function BulkCreateQuestions() {
                   </p>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
                   {readingCards.map((card, idx) => {
                     const ADMIN_CARD_COLORS = [
                       { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
@@ -1028,7 +1050,7 @@ function BulkCreateQuestions() {
                   </p>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: writingCardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: writingCardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
                   {writingCards.map((card, idx) => {
                     const WR_CARD_COLORS = [
                       { key: 'teal', label: 'أخضر فاتح', bg: '#f0fdfa', border: '#99f6e4', text: '#134e4a' },
@@ -1393,7 +1415,7 @@ function BulkCreateQuestions() {
                               + بطاقة
                             </button>
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: block.cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: block.cardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
                             {(block.cards || []).map((card, cIdx) => {
                               const selColor = ADMIN_CARD_COLORS.find(c => c.key === card.color) || ADMIN_CARD_COLORS[cIdx % ADMIN_CARD_COLORS.length];
                               return (
@@ -1670,7 +1692,7 @@ function BulkCreateQuestions() {
                             + بطاقة
                           </button>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: block.cardsLayout === 'horizontal' ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: block.cardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
                           {(block.cards || []).map((card, cIdx) => {
                             const selColor = ADMIN_CARD_COLORS.find(c => c.key === card.color) || ADMIN_CARD_COLORS[cIdx % ADMIN_CARD_COLORS.length];
                             return (
@@ -1926,8 +1948,8 @@ function BulkCreateQuestions() {
         </div>
       )}
 
-      {/* Step 3: Questions */}
-      {(listeningClipId || (exerciseMode !== 'audio' && examId && sectionKey)) && (
+      {/* Step 3: Questions (لا يظهر لمهام الكتابة — تُدار من صفحة مهام الكتابة) */}
+      {exerciseMode !== 'schreiben_tasks' && (listeningClipId || (exerciseMode !== 'audio' && examId && sectionKey)) && (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 'bold', color: '#334155' }}>

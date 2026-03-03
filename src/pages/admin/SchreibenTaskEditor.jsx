@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getSchreibenTask,
@@ -11,6 +11,8 @@ import {
 } from '../../services/api';
 import { useLevels } from '../../hooks/useLevels';
 
+const SimpleHtmlEditor = lazy(() => import('../../components/SimpleHtmlEditor'));
+
 // Field Types for form blocks
 const FIELD_TYPES = [
   { value: 'text_input', label: 'حقل نصي' },
@@ -22,50 +24,74 @@ const FIELD_TYPES = [
 // Generate unique block ID
 const generateBlockId = () => `block_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-// Block type component for Text
-const TextBlockEditor = ({ block, onChange, onRemove }) => (
-  <div style={{
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    padding: '16px',
-    marginBottom: '12px',
-  }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-      <span style={{ fontWeight: '600', color: '#475569' }}>📝 كتلة نصية</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        style={{
-          background: '#fee2e2',
-          color: '#dc2626',
-          border: 'none',
-          padding: '4px 12px',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '13px',
-        }}
-      >
-        حذف
-      </button>
+// ألوان جاهزة للفقرة والبطاقات (مثل باقي المحررات)
+const PARAGRAPH_COLORS = [
+  { value: '', label: 'أصفر', bg: '#fefce8', border: '#fde68a' },
+  { value: '#ffffff', label: 'أبيض', bg: '#ffffff', border: '#d1d5db' },
+  { value: '#f0fdf4', label: 'أخضر', bg: '#f0fdf4', border: '#bbf7d0' },
+  { value: '#eff6ff', label: 'أزرق', bg: '#eff6ff', border: '#bfdbfe' },
+  { value: '#fef2f2', label: 'أحمر', bg: '#fef2f2', border: '#fecaca' },
+  { value: '#faf5ff', label: 'بنفسجي', bg: '#faf5ff', border: '#e9d5ff' },
+  { value: '#f5f5f5', label: 'رمادي', bg: '#f5f5f5', border: '#d4d4d4' },
+];
+const CARD_COLORS = [
+  { key: 'sky', label: 'أزرق فاتح', bg: '#f0f9ff', border: '#bae6fd', text: '#0c4a6e' },
+  { key: 'emerald', label: 'أخضر', bg: '#ecfdf5', border: '#a7f3d0', text: '#064e3b' },
+  { key: 'violet', label: 'بنفسجي', bg: '#f5f3ff', border: '#c4b5fd', text: '#4c1d95' },
+  { key: 'rose', label: 'وردي', bg: '#fff1f2', border: '#fecdd3', text: '#881337' },
+  { key: 'amber', label: 'ذهبي', bg: '#fffbeb', border: '#fde68a', text: '#78350f' },
+  { key: 'orange', label: 'برتقالي', bg: '#fff7ed', border: '#fed7aa', text: '#7c2d12' },
+  { key: 'indigo', label: 'نيلي', bg: '#eef2ff', border: '#c7d2fe', text: '#3730a3' },
+  { key: 'gray', label: 'رمادي', bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
+];
+
+// Block type component for Text (محرر وورد + لون الفقرة)
+const TextBlockEditor = ({ block, onChange, onRemove }) => {
+  const bgColor = block.data?.bgColor ?? '';
+  const textColor = block.data?.textColor ?? '';
+  const resolvedBg = bgColor || '#f8fafc';
+  const resolvedBorder = PARAGRAPH_COLORS.find(c => c.value === bgColor)?.border || '#e2e8f0';
+  return (
+    <div style={{
+      background: '#f8fafc',
+      border: '1px solid #e2e8f0',
+      borderRadius: '8px',
+      padding: '16px',
+      marginBottom: '12px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ fontWeight: '600', color: '#475569' }}>📝 كتلة نصية</span>
+        <button type="button" onClick={onRemove} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
+          حذف
+        </button>
+      </div>
+      <label style={{ fontSize: 12, color: '#64748b', marginBottom: 6, display: 'block' }}>لون الخلفية:</label>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+        {PARAGRAPH_COLORS.map((c) => (
+          <button key={c.value || 'default'} type="button" title={c.label}
+            onClick={() => onChange({ ...block, data: { ...block.data, bgColor: c.value } })}
+            style={{
+              width: 22, height: 22, borderRadius: '50%', border: `2px solid ${bgColor === c.value ? '#3b82f6' : c.border}`,
+              backgroundColor: c.bg, cursor: 'pointer', boxShadow: bgColor === c.value ? '0 0 0 2px #93c5fd' : 'none',
+            }}
+          />
+        ))}
+        <input type="color" value={bgColor || '#fefce8'} onChange={(e) => onChange({ ...block, data: { ...block.data, bgColor: e.target.value } })}
+          title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+      </div>
+      <Suspense fallback={<div style={{ minHeight: 100, padding: 12, border: '1px solid #e2e8f0', borderRadius: 6 }}>جاري التحميل...</div>}>
+        <div style={{ backgroundColor: resolvedBg, border: `1px solid ${resolvedBorder}`, borderRadius: 8, padding: 12 }}>
+          <SimpleHtmlEditor
+            value={block.data?.content || ''}
+            onChange={(html) => onChange({ ...block, data: { ...block.data, content: html || '' } })}
+            placeholder="أدخل النص هنا..."
+            dir="ltr"
+          />
+        </div>
+      </Suspense>
     </div>
-    <textarea
-      value={block.data?.content || ''}
-      onChange={(e) => onChange({ ...block, data: { ...block.data, content: e.target.value } })}
-      placeholder="أدخل النص هنا..."
-      style={{
-        width: '100%',
-        minHeight: '100px',
-        padding: '12px',
-        border: '1px solid #d1d5db',
-        borderRadius: '6px',
-        fontSize: '14px',
-        resize: 'vertical',
-        direction: 'ltr',
-      }}
-    />
-  </div>
-);
+  );
+};
 
 // Block type component for Image
 const ImageBlockEditor = ({ block, onChange, onRemove }) => (
@@ -477,6 +503,82 @@ const FieldEditor = ({ field, onChange, onRemove, taskId, isEditing }) => {
   );
 };
 
+// Block type component for Cards (بطاقات + لون كل بطاقة + محرر عنوان)
+const CardsBlockEditor = ({ block, onChange, onRemove }) => {
+  const cards = block.data?.cards || [];
+  const cardsLayout = block.data?.cardsLayout || 'vertical';
+
+  const addCard = () => {
+    onChange({
+      ...block,
+      data: {
+        ...block.data,
+        cards: [...cards, { title: '', content: '', color: CARD_COLORS[cards.length % CARD_COLORS.length].key }],
+        cardsLayout,
+      },
+    });
+  };
+
+  const updateCard = (index, field, value) => {
+    const newCards = cards.map((c, i) => (i === index ? { ...c, [field]: value } : c));
+    onChange({ ...block, data: { ...block.data, cards: newCards, cardsLayout } });
+  };
+
+  const removeCard = (index) => {
+    const newCards = cards.filter((_, i) => i !== index);
+    onChange({ ...block, data: { ...block.data, cards: newCards, cardsLayout } });
+  };
+
+  const setLayout = (layout) => {
+    onChange({ ...block, data: { ...block.data, cards, cardsLayout: layout } });
+  };
+
+  return (
+    <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ fontWeight: '600', color: '#92400e' }}>📋 بطاقات</span>
+        <button type="button" onClick={onRemove} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>حذف</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button type="button" onClick={() => setLayout('horizontal')}
+          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, cursor: 'pointer', backgroundColor: cardsLayout === 'horizontal' ? '#eab308' : '#fef9c3', color: cardsLayout === 'horizontal' ? '#fff' : '#854d0e' }}>أفقي</button>
+        <button type="button" onClick={() => setLayout('vertical')}
+          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, cursor: 'pointer', backgroundColor: cardsLayout === 'vertical' ? '#eab308' : '#fef9c3', color: cardsLayout === 'vertical' ? '#fff' : '#854d0e' }}>عمودي</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: cardsLayout === 'horizontal' ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
+        {cards.map((card, idx) => {
+          const selColor = CARD_COLORS.find(c => c.key === (card.color || '')) || CARD_COLORS[idx % CARD_COLORS.length];
+          return (
+            <div key={idx} style={{ padding: 12, backgroundColor: selColor.bg, border: `2px solid ${selColor.border}`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                {CARD_COLORS.map(c => (
+                  <button key={c.key} type="button" title={c.label} onClick={() => updateCard(idx, 'color', c.key)}
+                    style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: c.bg, border: `2px solid ${card.color === c.key ? c.text : c.border}`, cursor: 'pointer', boxShadow: card.color === c.key ? `0 0 0 2px ${c.border}` : 'none' }} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: selColor.text, fontWeight: 600 }}>عنوان البطاقة (محرر وورد)</span>
+                  <Suspense fallback={<input type="text" placeholder="عنوان..." style={{ width: '100%', padding: 6, marginTop: 4 }} />}>
+                    <SimpleHtmlEditor value={card.title || ''} onChange={(html) => updateCard(idx, 'title', html || '')} placeholder="عنوان البطاقة..." dir="ltr" />
+                  </Suspense>
+                </div>
+                <button type="button" onClick={() => removeCard(idx)} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>حذف</button>
+              </div>
+              <Suspense fallback={<textarea rows={2} style={{ width: '100%', padding: 8, border: '1px solid #e2e8f0', borderRadius: 6 }} />}>
+                <SimpleHtmlEditor value={card.content || ''} onChange={(html) => updateCard(idx, 'content', html || '')} placeholder="محتوى البطاقة..." dir="ltr" />
+              </Suspense>
+            </div>
+          );
+        })}
+      </div>
+      <button type="button" onClick={addCard} style={{ width: '100%', padding: '10px', background: '#fef9c3', color: '#854d0e', border: '1px dashed #eab308', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500, marginTop: 8 }}>
+        + بطاقة جديدة
+      </button>
+    </div>
+  );
+};
+
 // Block type component for Form
 const FormBlockEditor = ({ block, onChange, onRemove, taskId, isEditing }) => {
   const fields = block.data?.fields || [];
@@ -529,21 +631,18 @@ const FormBlockEditor = ({ block, onChange, onRemove, taskId, isEditing }) => {
         </button>
       </div>
 
-      {/* Form title/description */}
-      <input
-        type="text"
-        value={block.data?.title || ''}
-        onChange={(e) => onChange({ ...block, data: { ...block.data, title: e.target.value } })}
-        placeholder="عنوان النموذج (اختياري)"
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          border: '1px solid #d1d5db',
-          borderRadius: '6px',
-          fontSize: '14px',
-          marginBottom: '12px',
-        }}
-      />
+      {/* Form title - محرر وورد */}
+      <div style={{ marginBottom: '12px' }}>
+        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>عنوان النموذج (اختياري)</span>
+        <Suspense fallback={<input type="text" placeholder="عنوان النموذج..." style={{ width: '100%', padding: 10, marginTop: 4, border: '1px solid #d1d5db', borderRadius: 6 }} />}>
+          <SimpleHtmlEditor
+            value={block.data?.title || ''}
+            onChange={(html) => onChange({ ...block, data: { ...block.data, title: html || '' } })}
+            placeholder="عنوان النموذج..."
+            dir="ltr"
+          />
+        </Suspense>
+      </div>
 
       {/* Fields */}
       <div style={{ marginBottom: '12px' }}>
@@ -581,9 +680,10 @@ const FormBlockEditor = ({ block, onChange, onRemove, taskId, isEditing }) => {
   );
 };
 
-function SchreibenTaskEditor() {
+function SchreibenTaskEditor({ embedded, initialExamId, onSuccess, onCancel }) {
   const navigate = useNavigate();
-  const { taskId } = useParams();
+  const { taskId: taskIdParam } = useParams();
+  const taskId = embedded ? null : taskIdParam;
   const isEditing = Boolean(taskId) && taskId !== 'new';
 
   const [loading, setLoading] = useState(false);
@@ -597,6 +697,8 @@ function SchreibenTaskEditor() {
   const [provider, setProvider] = useState('goethe');
   const [status, setStatus] = useState('draft');
   const [instructions, setInstructions] = useState('');
+  const [instructionsBgColor, setInstructionsBgColor] = useState('');
+  const [instructionsTextColor, setInstructionsTextColor] = useState('');
   const [contentBlocks, setContentBlocks] = useState([]);
 
   // Exam linking state
@@ -642,6 +744,8 @@ function SchreibenTaskEditor() {
       setProvider(task.provider || 'goethe');
       setStatus(task.status || 'draft');
       setInstructions(task.instructions || '');
+      setInstructionsBgColor(task.instructionsBgColor || '');
+      setInstructionsTextColor(task.instructionsTextColor || '');
 
       // Parse contentBlocks data from JSON strings to objects for editing
       const blocks = (task.contentBlocks || []).map(block => ({
@@ -674,6 +778,8 @@ function SchreibenTaskEditor() {
       newBlock.data = { title: '', fields: [] };
     } else if (type === 'image') {
       newBlock.data = { src: '', alt: '', caption: '' };
+    } else if (type === 'cards') {
+      newBlock.data = { cards: [], cardsLayout: 'vertical' };
     }
     setContentBlocks([...contentBlocks, newBlock]);
   };
@@ -769,9 +875,12 @@ function SchreibenTaskEditor() {
     }
   };
 
+  // Strip HTML tags for "empty" check
+  const stripHtml = (html) => (html || '').replace(/<[^>]*>/g, '').trim();
+
   // Save task
   const handleSave = async () => {
-    if (!title.trim()) {
+    if (!stripHtml(title)) {
       setError('يرجى إدخال عنوان المهمة');
       return;
     }
@@ -791,8 +900,10 @@ function SchreibenTaskEditor() {
           return (block.data?.title?.trim()) || (block.data?.fields?.length > 0);
         }
         if (block.type === 'image') {
-          // تأكد إن src موجود
           return block.data?.src?.trim().length > 0;
+        }
+        if (block.type === 'cards') {
+          return Array.isArray(block.data?.cards) && block.data.cards.length > 0;
         }
         return true;
       });
@@ -811,6 +922,8 @@ function SchreibenTaskEditor() {
         provider,
         status,
         instructions: instructions.trim(),
+        instructionsBgColor: instructionsBgColor || undefined,
+        instructionsTextColor: instructionsTextColor || undefined,
         contentBlocks: transformedBlocks,
       };
 
@@ -818,9 +931,21 @@ function SchreibenTaskEditor() {
         await updateSchreibenTask(taskId, taskData);
         setSuccess('تم حفظ التغييرات بنجاح!');
       } else {
-        await createSchreibenTask(taskData);
+        const created = await createSchreibenTask(taskData);
+        const createdId = created?.task?._id || created?.task?.id || created?._id || created?.id;
+        if (embedded && initialExamId && createdId) {
+          try {
+            await linkSchreibenExam(createdId, initialExamId);
+          } catch (e) {
+            console.warn('Link exam after create:', e);
+          }
+        }
         setSuccess('تم إنشاء المهمة بنجاح!');
-        setTimeout(() => navigate('/admin/schreiben'), 1500);
+        if (embedded && onSuccess) {
+          setTimeout(() => onSuccess(created), 800);
+        } else if (!embedded) {
+          setTimeout(() => navigate('/admin/schreiben'), 1500);
+        }
       }
 
       setTimeout(() => setSuccess(''), 3000);
@@ -841,8 +966,9 @@ function SchreibenTaskEditor() {
   }
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
-      {/* Header */}
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: embedded ? '0' : '20px' }}>
+      {/* Header - مخفي في الوضع المضمّن (من أسئلة متعددة) */}
+      {!embedded && (
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -877,6 +1003,7 @@ function SchreibenTaskEditor() {
           {isEditing ? 'تعديل مهمة الكتابة' : 'إنشاء مهمة كتابة جديدة'}
         </h1>
       </div>
+      )}
 
       {/* Messages */}
       {error && (
@@ -915,24 +1042,18 @@ function SchreibenTaskEditor() {
           المعلومات الأساسية
         </h2>
 
-        {/* Title */}
+        {/* Title - محرر وورد */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151' }}>
             عنوان المهمة *
           </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="مثال: كتابة رسالة إلى صديق"
-            style={{
-              width: '100%',
-              padding: '12px 14px',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              fontSize: '15px',
-            }}
-          />
+          <Suspense fallback={<input type="text" placeholder="جاري التحميل..." style={{ width: '100%', padding: 12, border: '1px solid #d1d5db', borderRadius: 8 }} />}>
+            <SimpleHtmlEditor
+              value={title}
+              onChange={(html) => setTitle(html || '')}
+              placeholder="مثال: كتابة رسالة إلى صديق"
+            />
+          </Suspense>
         </div>
 
         {/* Level, Provider, Status Row */}
@@ -993,25 +1114,39 @@ function SchreibenTaskEditor() {
           </div>
         </div>
 
-        {/* Instructions */}
+        {/* Instructions - محرر وورد + لون الفقرة */}
         <div>
           <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151' }}>
             التعليمات العامة
           </label>
-          <textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder="أدخل التعليمات العامة للمهمة..."
-            style={{
-              width: '100%',
-              minHeight: '100px',
-              padding: '12px 14px',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              fontSize: '15px',
-              resize: 'vertical',
-            }}
-          />
+          <label style={{ fontSize: 12, color: '#64748b', marginBottom: 6, display: 'block' }}>لون خلفية الفقرة:</label>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+            {PARAGRAPH_COLORS.map((c) => (
+              <button key={c.value || 'default'} type="button" title={c.label}
+                onClick={() => setInstructionsBgColor(c.value)}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%', border: `2px solid ${instructionsBgColor === c.value ? '#3b82f6' : c.border}`,
+                  backgroundColor: c.bg, cursor: 'pointer', boxShadow: instructionsBgColor === c.value ? '0 0 0 2px #93c5fd' : 'none',
+                }}
+              />
+            ))}
+            <input type="color" value={instructionsBgColor || '#fefce8'} onChange={(e) => setInstructionsBgColor(e.target.value)}
+              title="لون مخصص" style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }} />
+          </div>
+          <Suspense fallback={<textarea rows={4} style={{ width: '100%', padding: 12, border: '1px solid #d1d5db', borderRadius: 8 }} placeholder="جاري التحميل..." />}>
+            <div style={{
+              backgroundColor: instructionsBgColor ? (PARAGRAPH_COLORS.find(c => c.value === instructionsBgColor)?.bg || instructionsBgColor) : '#f8fafc',
+              border: `1px solid ${instructionsBgColor ? (PARAGRAPH_COLORS.find(c => c.value === instructionsBgColor)?.border || instructionsBgColor) : '#e2e8f0'}`,
+              borderRadius: 8,
+              padding: 12,
+            }}>
+              <SimpleHtmlEditor
+                value={instructions}
+                onChange={(html) => setInstructions(html || '')}
+                placeholder="أدخل التعليمات العامة للمهمة..."
+              />
+            </div>
+          </Suspense>
         </div>
       </div>
 
@@ -1101,12 +1236,20 @@ function SchreibenTaskEditor() {
                 onRemove={() => removeBlock(index)}
               />
             )}
+            {block.type === 'cards' && (
+              <CardsBlockEditor
+                block={block}
+                onChange={(updated) => updateBlock(index, updated)}
+                onRemove={() => removeBlock(index)}
+              />
+            )}
           </div>
         ))}
 
         {/* Add block buttons */}
         <div style={{
           display: 'flex',
+          flexWrap: 'wrap',
           gap: '12px',
           justifyContent: 'center',
           padding: '20px',
@@ -1143,6 +1286,21 @@ function SchreibenTaskEditor() {
             }}
           >
             📋 إضافة نموذج
+          </button>
+          <button
+            type="button"
+            onClick={() => addBlock('cards')}
+            style={{
+              padding: '10px 20px',
+              background: '#fef9c3',
+              color: '#854d0e',
+              border: '1px solid #fde68a',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '500',
+            }}
+          >
+            🃏 إضافة بطاقات
           </button>
         </div>
       </div>
@@ -1253,7 +1411,7 @@ function SchreibenTaskEditor() {
       }}>
         <button
           type="button"
-          onClick={() => navigate('/admin/schreiben')}
+          onClick={embedded && onCancel ? onCancel : () => navigate('/admin/schreiben')}
           style={{
             padding: '12px 24px',
             background: '#f3f4f6',
@@ -1265,7 +1423,7 @@ function SchreibenTaskEditor() {
             fontWeight: '500',
           }}
         >
-          إلغاء
+          {embedded ? 'إلغاء' : 'إلغاء'}
         </button>
         <button
           type="button"

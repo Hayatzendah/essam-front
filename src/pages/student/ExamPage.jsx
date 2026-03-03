@@ -114,12 +114,13 @@ const CARD_COLORS_LIST = Object.values(CARD_COLORS_MAP);
 
 function ReadingCardsGrid({ cards, cardsLayout }) {
   if (!cards || cards.length === 0) return null;
-  // أفقي (horizontal) = بطاقة بعرض كامل تحت بعض، عمودي (vertical) = بطاقات جنب بعض
-  const gridClass = cardsLayout === 'horizontal'
-    ? 'grid grid-cols-1 gap-3 mb-3 sm:mb-4'
-    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3 sm:mb-4';
+  // أفقي (horizontal) = بطاقة بعرض كامل تحت بعض، عمودي (vertical) = كل 3 بطاقات جنب بعض ثم الصف اللي بعد
+  const isHorizontal = cardsLayout === 'horizontal';
+  const gridStyle = isHorizontal
+    ? { display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 12 }
+    : { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 };
   return (
-    <div className={`${gridClass} exam-cards-grid`} dir="ltr" style={{ maxWidth: '100%' }}>
+    <div className="exam-cards-grid" dir="ltr" style={{ ...gridStyle, maxWidth: '100%' }}>
       {cards.map((card, idx) => {
         const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[idx % CARD_COLORS_LIST.length];
         return (
@@ -139,12 +140,14 @@ function ReadingCardsGrid({ cards, cardsLayout }) {
 // ✅ عرض بلوكات المحتوى المرنة (Sprechen وغيرها)
 function ContentBlocksRenderer({ blocks, renderQuestions }) {
   if (!blocks || blocks.length === 0) return null;
+  const blockType = (b) => b.blockType || b.type; // دعم blockType لو حُذف type عند الحفظ
   const sorted = [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   let questionOffset = 0;
   return (
     <div className="space-y-3 mb-3 sm:mb-4" dir="ltr">
       {sorted.map((block, idx) => {
-        if (block.type === 'questions' && renderQuestions) {
+        const bt = blockType(block);
+        if (bt === 'questions' && renderQuestions) {
           const count = block.questionCount || 1;
           const start = questionOffset;
           questionOffset += count;
@@ -154,7 +157,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             </div>
           );
         }
-        if (block.type === 'paragraph') {
+        if (bt === 'paragraph') {
           const bgColor = block.bgColor || '#fefce8';
           const borderColor = block.bgColor ? `${block.bgColor}cc` : '#fde68a';
           let raw = String(block.text || '').trim();
@@ -168,7 +171,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             </div>
           );
         }
-        if (block.type === 'image') {
+        if (bt === 'image') {
           const imgs = block.images || [];
           if (imgs.length === 0) return null;
           return (
@@ -190,14 +193,15 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             </div>
           );
         }
-        if (block.type === 'cards') {
+        if (bt === 'cards') {
           const cards = block.cards || [];
           if (cards.length === 0) return null;
-          const gridClass = block.cardsLayout === 'horizontal'
-            ? 'grid grid-cols-1 gap-3'
-            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3';
+          const isHorizontal = block.cardsLayout === 'horizontal';
+          const gridStyle = isHorizontal
+            ? { display: 'grid', gridTemplateColumns: '1fr', gap: 12 }
+            : { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 };
           return (
-            <div key={idx} className={`${gridClass} exam-cards-grid`} dir="ltr" style={{ maxWidth: '100%' }}>
+            <div key={idx} className="exam-cards-grid" dir="ltr" style={{ ...gridStyle, maxWidth: '100%' }}>
               {cards.map((card, cardIdx) => {
                 const color = (card.color && CARD_COLORS_MAP[card.color]) || CARD_COLORS_LIST[cardIdx % CARD_COLORS_LIST.length];
                 return (
@@ -230,7 +234,7 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
             </div>
           );
         }
-        if (block.type === 'audio') {
+        if (bt === 'audio') {
           const audioSrc = block.audioUrl
             ? (block.audioUrl.startsWith('http') ? block.audioUrl : toApiUrl(block.audioUrl))
             : null;
@@ -2201,7 +2205,8 @@ function ExamPage() {
 
                         // حساب توزيع بلوكات المحتوى بين الأسئلة (interleaving)
                         const exBlocks = selectedExercise?.contentBlocks || [];
-                        const hasQSlots = exBlocks.some(b => b.type === 'questions');
+                        const bt = (b) => b.blockType || b.type;
+                        const hasQSlots = exBlocks.some(b => bt(b) === 'questions');
                         let blockDist = null;
                         if (hasQSlots) {
                           const sorted = [...exBlocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -2209,7 +2214,7 @@ function ExamPage() {
                           let qOffset = 0;
                           let pending = [];
                           for (const block of sorted) {
-                            if (block.type === 'questions') {
+                            if (bt(block) === 'questions') {
                               if (pending.length > 0) {
                                 beforeMap[qOffset] = pending;
                                 pending = [];
