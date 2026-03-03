@@ -234,8 +234,14 @@ export default function NounsManagement() {
             لا توجد كلمات لهذا المستوى
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden" dir="rtl">
             <table className="w-full text-sm">
+              <colgroup>
+                <col className="w-[15%]" />
+                <col className="w-[30%]" />
+                <col className="w-[30%]" />
+                <col className="w-[25%]" />
+              </colgroup>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="text-right px-4 py-3 font-medium text-slate-600">
@@ -258,7 +264,7 @@ export default function NounsManagement() {
                     key={noun._id || noun.id}
                     className="border-b border-slate-100 hover:bg-slate-50"
                   >
-                    <td className="px-4 py-3">
+                    <td className="text-right px-4 py-3">
                       <span
                         className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
                           noun.article === "der"
@@ -275,7 +281,7 @@ export default function NounsManagement() {
                       {noun.singular}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{noun.plural}</td>
-                    <td className="px-4 py-3">
+                    <td className="text-right px-4 py-3">
                       <div className="flex gap-2">
                         <button
                           onClick={() => openEdit(noun)}

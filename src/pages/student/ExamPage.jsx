@@ -3870,7 +3870,7 @@ function ExamPage() {
                     )}
 
                     {/* زر تسليم الامتحان — يظهر فقط في وضع "كل الأسئلة" */}
-                    {hasSections && selectedSectionKey === null && !isEducational && totalQuestions > 0 && (
+                    {(!hasSections || selectedSectionKey === null) && !isEducational && totalQuestions > 0 && (
                       <div className="mt-8 mb-4 text-center">
                         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                           <p className="text-sm text-slate-600 mb-4">

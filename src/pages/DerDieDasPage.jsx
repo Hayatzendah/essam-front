@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLevels } from "../hooks/useLevels";
 import { getNounCounts } from "../services/api";
-import UserProfileDropdown from "../components/UserProfileDropdown";
+
 
 export default function DerDieDasPage() {
   const { levelNames } = useLevels("derdiedas");
@@ -42,13 +42,9 @@ export default function DerDieDasPage() {
           >
             ← العودة للرئيسية
           </button>
-          {localStorage.getItem("accessToken") ? (
-            <UserProfileDropdown />
-          ) : (
-            <span className="text-xs font-semibold text-purple-600">
-              Deutsch Learning App
-            </span>
-          )}
+          <span className="text-xs font-semibold text-purple-600">
+            Deutsch Learning App
+          </span>
         </div>
 
         {/* Title */}

@@ -18,14 +18,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const SECTION_OPTIONS = [
+const FALLBACK_SECTION_OPTIONS = [
   { key: 'grammatik', label: 'Grammatik' },
   { key: 'wortschatz', label: 'Wortschatz' },
   { key: 'pruefungen', label: 'Prüfungen' },
   { key: 'leben_in_deutschland', label: 'Leben in Deutschland' },
+  { key: 'derdiedas', label: 'Der / Die / Das' },
 ];
-
-const ALL_SECTIONS = SECTION_OPTIONS.map((s) => s.key);
 
 // Sortable Level Row
 const SortableLevelRow = ({ level, onEdit, onDelete }) => {
@@ -110,10 +109,14 @@ function LevelsManagement() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Dynamic sections from backend
+  const [sectionOptions, setSectionOptions] = useState([]);
+  const allSectionKeys = sectionOptions.map((s) => s.key);
+
   // Add form
   const [newName, setNewName] = useState('');
   const [newLabel, setNewLabel] = useState('');
-  const [newSections, setNewSections] = useState([...ALL_SECTIONS]);
+  const [newSections, setNewSections] = useState([]);
   const [adding, setAdding] = useState(false);
 
   // Edit state
@@ -151,6 +154,19 @@ function LevelsManagement() {
     fetchLevels();
   }, [fetchLevels]);
 
+  useEffect(() => {
+    levelsAPI.getSections()
+      .then((data) => {
+        const sections = Array.isArray(data) ? data : FALLBACK_SECTION_OPTIONS;
+        setSectionOptions(sections);
+        setNewSections(sections.map((s) => s.key));
+      })
+      .catch(() => {
+        setSectionOptions(FALLBACK_SECTION_OPTIONS);
+        setNewSections(FALLBACK_SECTION_OPTIONS.map((s) => s.key));
+      });
+  }, []);
+
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -161,7 +177,7 @@ function LevelsManagement() {
       await levelsAPI.create({ name: newName.trim(), label: newLabel.trim() || undefined, sections: newSections });
       setNewName('');
       setNewLabel('');
-      setNewSections([...ALL_SECTIONS]);
+      setNewSections([...allSectionKeys]);
       setSuccess('تم إضافة المستوى بنجاح');
       fetchLevels();
     } catch (err) {
@@ -193,7 +209,7 @@ function LevelsManagement() {
     setEditName(level.name);
     setEditLabel(level.label || '');
     setEditActive(level.isActive);
-    setEditSections(level.sections || [...ALL_SECTIONS]);
+    setEditSections(level.sections || [...allSectionKeys]);
   };
 
   const handleEditSave = async () => {
@@ -205,7 +221,7 @@ function LevelsManagement() {
       if (editName !== editingLevel.name) updates.name = editName;
       if (editLabel !== (editingLevel.label || '')) updates.label = editLabel || undefined;
       if (editActive !== editingLevel.isActive) updates.isActive = editActive;
-      const origSections = editingLevel.sections || ALL_SECTIONS;
+      const origSections = editingLevel.sections || allSectionKeys;
       if (JSON.stringify([...editSections].sort()) !== JSON.stringify([...origSections].sort())) {
         updates.sections = editSections;
       }
@@ -306,7 +322,7 @@ function LevelsManagement() {
           <div className="mb-3">
             <label className="block text-sm font-medium text-slate-700 mb-2">الأقسام</label>
             <div className="flex flex-wrap gap-3">
-              {SECTION_OPTIONS.map((opt) => (
+              {sectionOptions.map((opt) => (
                 <label key={opt.key} className="flex items-center gap-1.5 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -389,7 +405,7 @@ function LevelsManagement() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">الأقسام</label>
                   <div className="flex flex-wrap gap-3">
-                    {SECTION_OPTIONS.map((opt) => (
+                    {sectionOptions.map((opt) => (
                       <label key={opt.key} className="flex items-center gap-1.5 text-sm text-slate-700">
                         <input
                           type="checkbox"

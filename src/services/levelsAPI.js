@@ -37,4 +37,9 @@ export const levelsAPI = {
     const response = await api.get(`/levels/${id}/count`);
     return response.data;
   },
+
+  getSections: async () => {
+    const response = await api.get('/levels/sections');
+    return response.data;
+  },
 };
