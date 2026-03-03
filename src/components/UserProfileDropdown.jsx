@@ -131,7 +131,7 @@ function UserProfileDropdown() {
 
         {/* القائمة المنسدلة */}
         {open && (
-          <div className="absolute left-0 top-12 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-3 z-50">
+          <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-3 z-50">
             {/* معلومات المستخدم */}
             <div className="px-4 pb-3 border-b border-slate-100 flex items-center gap-3">
               <button
