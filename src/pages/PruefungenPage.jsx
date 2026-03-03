@@ -54,8 +54,8 @@ const PROVIDERS = [
     id: "ecl",
     name: "ECL",
     icon: "🇪🇺",
-    levels: "A1 – C1",
-    allowedLevels: ["A1", "A2", "B1", "B2", "C1"],
+    levels: "A2 – C1",
+    allowedLevels: ["A2", "B1", "B2", "C1"],
     description:
       "نظام امتحانات أوروبي يركّز على التواصل العملي في المواقف اليومية والرسمية، مع تقييم واضح لكل مهارة."
   }

@@ -164,7 +164,7 @@ export default function DerDieDasQuiz() {
 
   const getButtonClass = (article) => {
     const base =
-      "py-4 px-6 rounded-xl text-xl font-bold transition border-2 ";
+      "py-5 px-6 rounded-xl text-2xl font-bold transition border-2 ";
 
     if (phase === "feedback") {
       if (article === noun.article) {
@@ -184,7 +184,7 @@ export default function DerDieDasQuiz() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-5xl w-[80%] mx-auto px-4 py-8">
         {/* Progress */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -207,18 +207,18 @@ export default function DerDieDasQuiz() {
         </div>
 
         {/* Question Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-8 py-[8.19rem] text-center mb-8">
           <p className="text-sm text-slate-400 mb-4">اختر الأداة الصحيحة:</p>
           <div className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
             <span className="text-purple-400">___</span> {noun?.singular}
           </div>
-          <p className="text-lg text-slate-500">
+          <p className="text-2xl text-slate-500">
             die {noun?.plural}
           </p>
         </div>
 
         {/* Article Buttons */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-4 mb-8">
           {articles.map((article) => (
             <button
               key={article}
