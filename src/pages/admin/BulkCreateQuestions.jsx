@@ -93,10 +93,14 @@ function BulkCreateQuestions() {
   // Results
   const [results, setResults] = useState(null);
 
-  // Fetch exams
+  // Fetch exams (استبعاد مواضيع القواعد و Grammatik-Training — هي مواضيع وليست امتحانات للاختيار هنا)
   useEffect(() => {
     examsAPI.getAll().then(data => {
-      setExams(Array.isArray(data) ? data : data?.exams || data?.items || []);
+      const raw = Array.isArray(data) ? data : data?.exams || data?.items || [];
+      const filtered = raw.filter(
+        (e) => e.examCategory !== 'grammar_exam' && e.examCategory !== 'grammatik_training_exam'
+      );
+      setExams(filtered);
     }).catch(() => {});
   }, []);
 

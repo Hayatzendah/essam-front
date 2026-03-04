@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { examsAPI } from '../services/examsAPI';
 import { getGrammarTopics, createGrammarTopic, getSchreibenTasks } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
@@ -108,6 +108,7 @@ interface QuestionCreateFormProps {
 }
 
 const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
+  const location = useLocation();
   const { levelNames } = useLevels();
   const navigate = useNavigate();
   const isEditMode = !!examId;
@@ -171,6 +172,20 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
     sections: [],
     hasSections: true, // افتراضي: يحتوي على sections
   });
+
+  // تهيئة النوع والمستوى من الرابط عند القدوم من "إضافة موضوع" (Grammatik-Training)
+  useEffect(() => {
+    if (isEditMode || !location.state) return;
+    const state = location.state as { presetExamType?: string; presetLevel?: string };
+    if (state.presetExamType === 'grammatik_training_exam' && state.presetLevel) {
+      setFormData((prev) => ({
+        ...prev,
+        examType: 'grammatik_training_exam',
+        level: state.presetLevel || prev.level,
+        grammarLevel: state.presetLevel || prev.grammarLevel,
+      }));
+    }
+  }, [isEditMode, location.state]);
 
   // Initialize Leben exam with default section if needed
   useEffect(() => {
@@ -329,7 +344,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
             const fetchTopics = async () => {
               setLoadingTopics(true);
               try {
-                const data = await getGrammarTopics(exam.grammarLevel);
+                const provider = examType === 'grammatik_training_exam' ? 'Grammatik-Training' : 'Grammatik';
+                const data = await getGrammarTopics(exam.grammarLevel, { provider });
                 setGrammarTopics(data.items || data || []);
               } catch (err) {
                 console.error('Error fetching grammar topics:', err);
@@ -377,7 +393,8 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         setLoadingTopics(true);
         setError(''); // Clear any previous errors
         try {
-          const data = await getGrammarTopics(formData.grammarLevel as any);
+          const provider = formData.examType === 'grammatik_training_exam' ? 'Grammatik-Training' : 'Grammatik';
+          const data = await getGrammarTopics(formData.grammarLevel as any, { provider });
           const topics = Array.isArray(data) ? data : (data?.items || data?.topics || []);
           setGrammarTopics(topics);
           console.log('✅ Grammar topics loaded:', topics.length, 'topics');
@@ -713,6 +730,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         payload.totalQuestions = formData.totalQuestions;
         payload.questionTags = questionTagsArray.length > 0 ? questionTagsArray : (selectedTopic?.tags || []);
         payload.randomizeQuestions = true;
+        payload.status = 'published'; // يظهر مباشرة في صفحة Grammatik-Training للطالب
       }
 
       // Add Provider Exam specific fields
@@ -941,6 +959,18 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
         response = await examsAPI.create(payload);
         console.log('✅ Exam created successfully:', response);
         setSuccess(`تم إنشاء الامتحان بنجاح! (ID: ${response._id || response.id})`);
+        // بعد إنشاء امتحان Grammatik-Training نوجّه للإدارة مع تمرير الامتحان والمستوى لاختيارهما مباشرة
+        if (payload.examCategory === 'grammatik_training_exam') {
+          const createdExamId = response._id || response.id;
+          const createdLevel = payload.level || formData.level || 'A1';
+          setTimeout(() => {
+            navigate('/admin/grammatik-training', {
+              replace: true,
+              state: { createdExamId, createdLevel },
+            });
+          }, 1500);
+          return;
+        }
       }
 
       // Reset form after success (only in create mode)
@@ -1514,6 +1544,7 @@ const QuestionCreateForm = ({ examId }: QuestionCreateFormProps = {}) => {
                       try {
                         const topicPayload: any = {
                           level: formData.grammarLevel,
+                          provider: formData.examType === 'grammatik_training_exam' ? 'Grammatik-Training' : 'Grammatik',
                         };
 
                         if (newTopicData.title.trim()) {

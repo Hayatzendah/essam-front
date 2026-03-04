@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getGrammarTopics, getGrammarTopic, updateGrammarTopic, reorderGrammarTopics } from '../../services/api';
+import { getGrammarTopics, getGrammarTopic, updateGrammarTopic, reorderGrammarTopics, deleteGrammarTopic } from '../../services/api';
 import { PageBuilder } from '../../components/PageBuilder';
 import {
   DndContext,
@@ -23,7 +23,7 @@ import { useLevels } from '../../hooks/useLevels';
 import './GrammarTopicsContent.css';
 
 // Sortable Topic Card Component
-const SortableTopicCard = ({ topic, onMoveUp, onMoveDown, isFirst, isLast }) => {
+const SortableTopicCard = ({ topic, onMoveUp, onMoveDown, onDelete, isFirst, isLast }) => {
   const {
     attributes,
     listeners,
@@ -111,30 +111,49 @@ const SortableTopicCard = ({ topic, onMoveUp, onMoveDown, isFirst, isLast }) => 
           {topic.level}
         </span>
 
-        {/* Arrow Buttons for Mobile */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={isFirst}
-            style={isFirst ? disabledArrowStyle : arrowButtonStyle}
-            title="تحريك لأعلى"
-          >
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={isLast}
-            style={isLast ? disabledArrowStyle : arrowButtonStyle}
-            title="تحريك لأسفل"
-          >
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+        {/* Arrow Buttons + Delete */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={isFirst}
+              style={isFirst ? disabledArrowStyle : arrowButtonStyle}
+              title="تحريك لأعلى"
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={isLast}
+              style={isLast ? disabledArrowStyle : arrowButtonStyle}
+              title="تحريك لأسفل"
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(topic._id); }}
+              title="حذف الموضوع"
+              style={{
+                ...arrowButtonStyle,
+                color: '#dc2626',
+                borderColor: '#fca5a5',
+                backgroundColor: '#fef2f2',
+              }}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -159,6 +178,7 @@ function GrammarTopicsContent() {
   const [viewMode, setViewMode] = useState('content'); // 'content' or 'reorder'
   const [selectedLevel, setSelectedLevel] = useState('A1');
   const [reorderLoading, setReorderLoading] = useState(false);
+  const [deletingTopicId, setDeletingTopicId] = useState(null);
 
   // DnD sensors - with touch support for mobile
   const sensors = useSensors(
@@ -284,6 +304,32 @@ function GrammarTopicsContent() {
       } finally {
         setReorderLoading(false);
       }
+    }
+  };
+
+  // Handle delete topic
+  const handleDeleteTopic = async (topicId) => {
+    const topic = topics.find(t => t._id === topicId);
+    if (!topic) return;
+    if (!window.confirm(`هل أنت متأكد من حذف موضوع "${topic.title}"؟ لا يمكن التراجع.`)) return;
+
+    setDeletingTopicId(topicId);
+    setError('');
+    try {
+      await deleteGrammarTopic(topicId);
+      setTopics(prev => prev.filter(t => t._id !== topicId));
+      if (selectedTopicId === topicId) {
+        setSelectedTopicId('');
+        setSelectedTopic(null);
+        setContentBlocks([]);
+      }
+      setSuccess('تم حذف الموضوع بنجاح');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error deleting topic:', err);
+      setError(err?.response?.data?.message || 'حدث خطأ أثناء حذف الموضوع');
+    } finally {
+      setDeletingTopicId(null);
     }
   };
 
@@ -617,6 +663,7 @@ function GrammarTopicsContent() {
                           topic={topic}
                           onMoveUp={() => handleManualMove(topic._id, 'up')}
                           onMoveDown={() => handleManualMove(topic._id, 'down')}
+                          onDelete={deletingTopicId ? null : handleDeleteTopic}
                           isFirst={index === 0}
                           isLast={index === filteredTopics.length - 1}
                         />
@@ -661,11 +708,30 @@ function GrammarTopicsContent() {
             </select>
           )}
           {selectedTopic && (
-            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '6px' }}>
-              <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-                <strong>المستوى:</strong> {selectedTopic.level} | 
-                <strong> الوصف:</strong> {selectedTopic.shortDescription || 'لا يوجد وصف'}
-              </p>
+            <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+              <div style={{ flex: 1, padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '6px' }}>
+                <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+                  <strong>المستوى:</strong> {selectedTopic.level} | 
+                  <strong> الوصف:</strong> {selectedTopic.shortDescription || 'لا يوجد وصف'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeleteTopic(selectedTopicId)}
+                disabled={!!deletingTopicId}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: deletingTopicId ? '#fecaca' : '#fef2f2',
+                  color: '#dc2626',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '6px',
+                  cursor: deletingTopicId ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                }}
+              >
+                {deletingTopicId === selectedTopicId ? 'جاري الحذف...' : 'حذف هذا الموضوع'}
+              </button>
             </div>
           )}
         </div>

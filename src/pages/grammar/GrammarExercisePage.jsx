@@ -17,6 +17,22 @@ export default function GrammarExercisePage() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
 
+  // منع التمرير التلقائي: فتح الصفحة من الأعلى وعدم النزول للأسفل عند بدء التمرين
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.history.scrollRestoration = 'manual';
+      window.scrollTo(0, 0);
+    }
+  }, [level, topicSlug]);
+
+  // بعد انتهاء التحميل وعرض الأسئلة، إبقاء الموضع عند الأعلى (التمرير يدوي فقط)
+  useEffect(() => {
+    if (!loading && attemptItems.length > 0) {
+      const t = setTimeout(() => window.scrollTo(0, 0), 0);
+      return () => clearTimeout(t);
+    }
+  }, [loading, attemptItems.length]);
+
   useEffect(() => {
     async function initializeExercise() {
       try {

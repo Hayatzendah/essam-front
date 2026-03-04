@@ -22,7 +22,7 @@ export default function GrammatikPage() {
         setLoading(true);
         setError("");
 
-        const data = await getGrammarTopics(activeLevel);
+        const data = await getGrammarTopics(activeLevel, { provider: 'Grammatik' });
 
         // إضافة أيقونات للمواضيع
         const topicsWithIcons = (data.items || data || []).map((topic, idx) => ({

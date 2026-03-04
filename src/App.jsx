@@ -38,9 +38,12 @@ import LevelsManagement from './pages/admin/LevelsManagement';
 import DerDieDasPage from './pages/DerDieDasPage';
 import DerDieDasQuiz from './pages/DerDieDasQuiz';
 import NounsManagement from './pages/admin/NounsManagement';
+import GrammatikTrainingManagement from './pages/admin/GrammatikTrainingManagement';
 import LesenHoerenPage from './pages/LesenHoerenPage';
 import DialogePage from './pages/DialogePage';
 import GrammatikTrainingPage from './pages/GrammatikTrainingPage';
+import GrammatikTrainingQuiz from './pages/GrammatikTrainingQuiz';
+import GrammatikTrainingTopicPage from './pages/GrammatikTrainingTopicPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -223,6 +226,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/grammatik-training"
+          element={
+            <AdminRoute>
+              <GrammatikTrainingManagement />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/admin/schreiben"
           element={
             <AdminRoute>
@@ -349,6 +360,9 @@ function App() {
         <Route path="/lesen-hoeren" element={<LesenHoerenPage />} />
         <Route path="/dialoge" element={<DialogePage />} />
         <Route path="/grammatik-training" element={<GrammatikTrainingPage />} />
+        <Route path="/grammatik-training/topic/:examId" element={<GrammatikTrainingTopicPage />} />
+        <Route path="/grammatik-training/quiz/topic/:examId" element={<GrammatikTrainingQuiz />} />
+        <Route path="/grammatik-training/quiz/:level" element={<GrammatikTrainingQuiz />} />
       </Routes>
     </Router>
   );

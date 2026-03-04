@@ -58,9 +58,10 @@ export function useLevels(section) {
     setLoading(false);
   }, []);
 
+  const levelsList = Array.isArray(levels) ? levels : [];
   const filteredLevels = section
-    ? levels.filter((l) => !l.sections || l.sections.includes(section))
-    : levels;
+    ? levelsList.filter((l) => !l.sections || l.sections.includes(section))
+    : levelsList;
 
   const levelNames = filteredLevels.length > 0
     ? filteredLevels.map((l) => l.name)

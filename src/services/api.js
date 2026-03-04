@@ -218,10 +218,10 @@ export const authAPI = {
 };
 
 // 1. جلب قائمة مواضيع القواعد
-export const getGrammarTopics = async (level = null) => {
-  console.log('📚 Fetching grammar topics', level ? `for level: ${level}` : '(all topics)');
+export const getGrammarTopics = async (level = null, options = {}) => {
+  console.log('📚 Fetching grammar topics', level ? `for level: ${level}` : '(all topics)', options.provider ? `provider: ${options.provider}` : '');
 
-  const params = level ? { level } : {};
+  const params = { ...(level ? { level } : {}), ...(options.provider ? { provider: options.provider } : {}) };
   const response = await api.get('/grammar/topics', { params });
 
   console.log('📚 Response:', response.data);
@@ -245,6 +245,12 @@ export const createGrammarTopic = async (topicData) => {
 // 4. تحديث موضوع قواعد محدد
 export const updateGrammarTopic = async (topicId, topicData) => {
   const response = await api.patch(`/grammar/topics/${topicId}`, topicData);
+  return response.data;
+};
+
+// 4b. حذف موضوع قواعد
+export const deleteGrammarTopic = async (topicId) => {
+  const response = await api.delete(`/grammar/topics/${topicId}`);
   return response.data;
 };
 
@@ -433,6 +439,15 @@ export const getPublicExams = async ({ level, provider, mainSkill, examCategory,
   const response = await api.get('/exams/public', { params });
   console.log('📝 Public exams response:', response.data);
   return response.data;
+};
+
+// أسئلة تدريب قواعد: إما مستوى + عدد (كل المواضيع) أو examId + عدد (موضوع واحد)
+export const getGrammatikTrainingQuizQuestions = async ({ level, examId, count }) => {
+  const params = { count: Math.min(50, Math.max(1, count || 10)) };
+  if (examId) params.examId = examId;
+  else params.level = level || 'A1';
+  const response = await api.get('/exams/public/grammatik-training/quiz', { params });
+  return Array.isArray(response.data) ? response.data : [];
 };
 
 // جلب المهارات المتاحة لمزود ومستوى معين
