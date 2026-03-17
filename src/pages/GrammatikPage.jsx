@@ -1,14 +1,16 @@
 // src/pages/GrammatikPage.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { BookOpen } from "lucide-react";
 import { getGrammarTopics } from "../services/api";
 import { useLevels } from "../hooks/useLevels";
-import UserProfileDropdown from "../components/UserProfileDropdown";
-
-// أيقونات افتراضية للمواضيع
-const DEFAULT_ICONS = ["📚", "✏️", "📝", "🎯", "🔤", "📖", "🧩", "🔁", "🔗", "🧱"];
+import { BRAND } from "../constants/brand";
+import { useTranslation } from "../contexts/LanguageContext";
+import AppHeader from "../components/AppHeader";
+import AppFooter from "../components/AppFooter";
 
 export default function GrammatikPage() {
+  const t = useTranslation();
   const { levelNames } = useLevels('grammatik');
   const [activeLevel, setActiveLevel] = useState("A1");
   const [topics, setTopics] = useState([]);
@@ -23,17 +25,10 @@ export default function GrammatikPage() {
         setError("");
 
         const data = await getGrammarTopics(activeLevel, { provider: 'Grammatik' });
-
-        // إضافة أيقونات للمواضيع
-        const topicsWithIcons = (data.items || data || []).map((topic, idx) => ({
-          ...topic,
-          icon: DEFAULT_ICONS[idx % DEFAULT_ICONS.length],
-        }));
-
-        setTopics(topicsWithIcons);
+        setTopics(data.items || data || []);
       } catch (err) {
         console.error(err);
-        setError("حدث خطأ أثناء تحميل مواضيع القواعد.");
+        setError(t("grammatik_error"));
       } finally {
         setLoading(false);
       }
@@ -43,124 +38,106 @@ export default function GrammatikPage() {
   }, [activeLevel]);
 
   const handleTopicClick = (topicSlug) => {
-    // لاحقاً هنعمل صفحة لعرض القاعدة والتمارين
     navigate(`/grammatik/${activeLevel}/${topicSlug}`);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        {/* شريط أعلى بسيط */}
-        <div className="flex items-center justify-between mb-8">
-          <button
-            onClick={() => navigate("/")}
-            className="text-sm text-slate-500 hover:text-slate-700"
-          >
-            ← العودة للرئيسية
-          </button>
-          {localStorage.getItem("accessToken") ? (
-            <UserProfileDropdown />
-          ) : (
-            <span className="text-xs font-semibold text-red-600">
-              Deutsch Learning App
-            </span>
-          )}
-        </div>
-
-        {/* العنوان الرئيسي */}
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+      <AppHeader />
+      <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
         <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
-            القواعد <span className="text-red-600">Grammatik</span>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-3">
+            <span style={{ color: BRAND.red }}>{t('grammatik_title')}</span>
           </h1>
-          <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
-            اختاري مستواك ثم موضوع القاعدة اللي حابة تتدربي عليه. بعد ما تفهمي
-            القاعدة، تقدري تحلي تمارين عليها من نفس المكان. ✨
+          <p className="text-slate-600 dark:text-slate-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+            {t('grammatik_subtitle')}
           </p>
         </div>
 
-        {/* Tabs للمستويات */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+        {/* Tabs للمستويات — نفس أسلوب Prüfungen */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
           {levelNames.map((level) => (
             <button
               key={level}
               type="button"
               onClick={() => setActiveLevel(level)}
-              className={`px-4 py-2 text-sm rounded-full border transition ${
+              className={`px-5 py-2.5 rounded-xl border-2 font-semibold text-base transition ${
                 activeLevel === level
-                  ? "bg-red-600 text-white border-red-600 shadow-sm"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-red-500 hover:text-red-600"
+                  ? "text-white border-transparent shadow-md"
+                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:border-[#DD0000] hover:text-[#DD0000]"
               }`}
+              style={activeLevel === level ? { background: BRAND.red } : {}}
             >
-              مستوى {level}
+              {level}
             </button>
           ))}
         </div>
 
-        {/* عنوان فرعي للمستوى */}
-        <div className="text-center mb-4">
-          <p className="text-xs text-slate-500">
-            يتم عرض مواضيع القواعد المناسبة لمستوى{" "}
-            <span className="font-semibold text-slate-800">{activeLevel}</span>.
+        <div className="text-center mb-8">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">
+            {t('grammatik_topicsFor')} {activeLevel}
+          </h2>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">
+            {t('grammatik_rulesAndExercises')}
           </p>
         </div>
 
-        {/* حالة التحميل */}
         {loading && (
-          <div className="text-center text-slate-500 text-sm mt-10">
-            جاري تحميل المواضيع…
+          <div className="text-center text-slate-500 dark:text-slate-400 text-base mt-10">
+            {t('grammatik_loading')}
           </div>
         )}
 
-        {/* حالة الخطأ */}
+        {/* حالة الخطأ — نفس أسلوب Prüfungen */}
         {error && !loading && (
-          <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl py-4">
-            {error}
+          <div className="text-center rounded-xl py-4 px-4 border-2 mb-10" style={{ color: BRAND.red, backgroundColor: `${BRAND.red}12`, borderColor: BRAND.red }}>
+            <p className="font-medium">{error}</p>
           </div>
         )}
 
-        {/* كروت المواضيع */}
+        {/* Keine Themen */}
         {!loading && !error && topics.length === 0 && (
-          <div className="text-center text-slate-500 text-sm mt-10">
-            لا توجد مواضيع مضافة لهذا المستوى حتى الآن.
+          <div className="text-center text-slate-500 dark:text-slate-400 text-base mt-10 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl py-8">
+            {t('grammatik_noTopics')}
           </div>
         )}
 
+        {/* كروت المواضيع — نفس البطاقات والخطوط والألوان مثل Prüfungen */}
         {!loading && !error && topics.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-12">
             {topics.map((topic) => (
               <button
                 key={topic.slug}
                 type="button"
                 onClick={() => handleTopicClick(topic.slug)}
-                className="group text-right bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
+                className="group text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
               >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center text-xl">
-                    {topic.icon}
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${BRAND.red}18` }}>
+                    <BookOpen className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: BRAND.red }} strokeWidth={1.8} />
                   </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                       {topic.title}
-                    </h2>
-                    <p className="text-[11px] text-slate-400">
-                      موضوع قواعد لمستوى {activeLevel}
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                      {t('grammatik_topicFor')} {activeLevel}
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 mb-3">
-                  {topic.shortDescription || topic.description}
+                <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 mb-4 leading-relaxed line-clamp-2">
+                  {topic.shortDescription || topic.description || ""}
                 </p>
-                <div className="flex items-center justify-between text-[11px] text-red-600">
-                  <span className="font-semibold group-hover:underline">
-                    عرض القاعدة والتدريب
-                  </span>
-                  <span>↗</span>
-                </div>
+                <span className="inline-flex items-center gap-1 text-base font-semibold group-hover:underline" style={{ color: BRAND.red }}>
+                  {t('grammatik_ruleAndPractice')}
+                  <span>›</span>
+                </span>
               </button>
             ))}
           </div>
         )}
       </div>
+      <AppFooter />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { examsAPI } from '../../services/examsAPI';
 import { authAPI } from '../../services/api';
 import ExercisesList from '../../components/exam/ExercisesList';
 import { sanitizeHtml, normalizeWordHtml, normalizePlainTextLineBreaks } from '../../utils/sanitizeHtml';
+import { useTranslation } from '../../contexts/LanguageContext';
 import './ExamPage.css';
 
 // ✅ دالة لـ shuffle array (ترتيب عشوائي)
@@ -71,6 +72,23 @@ const safeOptionsArray = (item) => {
     }
   } catch (_) { }
   return [];
+};
+
+// ✅ عنوان القسم للعرض مع الترجمة (يُستدعى مع t من useTranslation)
+const sectionDisplayTitle = (title, t) => {
+  if (!title || typeof title !== 'string') return title;
+  const s = title.trim();
+  if (s === 'Modelltest') return t('exam_modelTest');
+  if (/^كل\s*الأسئلة$/i.test(s) || /^كل\s*الاسئلة$/i.test(s)) return t('exam_modelTest');
+  if (s === 'أسئلة عامة' || s === 'Allgemeine Fragen') return t('exam_generalQuestions');
+  const hoerenTeilMatch = /^Hören\s+Teil\s*(\d+)$/i.exec(s);
+  if (hoerenTeilMatch) return `${t('exam_listeningPart')} ${hoerenTeilMatch[1]}`;
+  const tamreenMatch = /^تمرين\s*(\d+)$/.exec(s);
+  if (tamreenMatch) return `${t('exam_exercise')} ${tamreenMatch[1]}`;
+  const uebungMatch = /^Übung\s*([\d.]+)$/i.exec(s);
+  if (uebungMatch) return `${t('exam_exercise')} ${uebungMatch[1]}`;
+  if (/^Übung\s*(\d+)$/i.test(s)) return `${t('exam_exercise')} ${s.replace(/\D/g, '')}`;
+  return title;
 };
 
 // ✅ خيار وهمي (فارغ أو "-"/"—" أو "✓" فقط) — لا نعرضه للطالب
@@ -241,9 +259,6 @@ function ContentBlocksRenderer({ blocks, renderQuestions }) {
           if (!audioSrc) return null;
           return (
             <div key={idx} className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
-              <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">
-                🎵 ملف الاستماع
-              </span>
               <audio controls controlsList="nodownload" preload="metadata" src={audioSrc} className="w-full">
                 المتصفح لا يدعم تشغيل الملفات الصوتية
               </audio>
@@ -513,7 +528,7 @@ function SpeakingAnswerComponent({ itemIndex, item, answer, isSubmitted, onAnswe
       setRecordingTime(0);
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setError('لا يمكن الوصول إلى الميكروفون. يرجى التحقق من الصلاحيات.');
+      setError('Mikrofon nicht verfügbar. Bitte Berechtigungen prüfen.');
     }
   };
 
@@ -629,6 +644,7 @@ function ExamPage() {
   const navigate = useNavigate();
   const { attemptId } = useParams();
   const [searchParams] = useSearchParams();
+  const t = useTranslation();
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -671,9 +687,8 @@ function ExamPage() {
           setExamHasRealSections(hasReal);
           if (sections.length > 0) {
             setSectionsOverview(sections);
-            if (hasReal) {
-              setSelectedSectionKey((prev) => (prev == null ? sections[0].key : prev));
-            } else {
+            // عرض "Modelltest" (كل الأسئلة) افتراضياً عند بدء الامتحان
+            if (!hasReal) {
               setSelectedSectionKey(sections[0].key);
             }
           } else {
@@ -682,7 +697,7 @@ function ExamPage() {
               .then((sectionData) => {
                 const exs = sectionData?.exercises || [];
                 if (exs.length > 0) {
-                  setSectionsOverview([{ key: '_default', title: 'المحتوى', order: 0 }]);
+                  setSectionsOverview([{ key: '_default', title: 'Inhalt', order: 0 }]);
                   setExamHasRealSections(false);
                   setSelectedSectionKey('_default');
                   setSectionExercises(prev => ({ ...prev, _default: sectionData }));
@@ -699,7 +714,7 @@ function ExamPage() {
               .then((sectionData) => {
                 const exs = sectionData?.exercises || [];
                 if (exs.length > 0) {
-                  setSectionsOverview([{ key: '_default', title: 'المحتوى', order: 0 }]);
+                  setSectionsOverview([{ key: '_default', title: 'Inhalt', order: 0 }]);
                   setExamHasRealSections(false);
                   setSelectedSectionKey('_default');
                   setSectionExercises(prev => ({ ...prev, _default: sectionData }));
@@ -740,7 +755,7 @@ function ExamPage() {
     }
   }, [attempt]);
 
-  // ✅ بناء خريطة questionId → globalItemIndex للتمارين (مفتاح نصي للتطابق مع الـ API)
+  // ✅ بناء خريطة questionId → مفتاح الإجابة (رقم لـ attempt.items أو "q-{id}" لأسئلة الأقسام فقط)
   const questionIdToItemIndex = useMemo(() => {
     const map = new Map();
     if (attempt?.items) {
@@ -751,8 +766,20 @@ function ExamPage() {
         if (qId) map.set(String(qId), idx);
       });
     }
+    // أسئلة الأقسام التي ليست في attempt.items (مثلاً Hören Teil 2) تُخزَن إجاباتها تحت "q-{questionId}"
+    if (sectionExercises && typeof sectionExercises === 'object') {
+      Object.values(sectionExercises).forEach((sectionData) => {
+        (sectionData.exercises || []).forEach((ex) => {
+          (ex.questions || []).forEach((q) => {
+            if (!q.questionId || q.contentOnly) return;
+            const qId = String(q.questionId);
+            if (!map.has(qId)) map.set(qId, `q-${qId}`);
+          });
+        });
+      });
+    }
     return map;
-  }, [attempt?.items]);
+  }, [attempt?.items, sectionExercises]);
 
   // ✅ جلب التمارين لكل الأقسام عند تحميل الامتحان (لعرضها في "كل الأسئلة")
   useEffect(() => {
@@ -796,15 +823,8 @@ function ExamPage() {
       });
   }, [selectedSectionKey, attempt]);
 
-  // ✅ امتحان بدون أقسام: إذا قسم واحد وتمرين واحد → اختيار التمرين تلقائياً لعرض المحتوى مباشرة
-  useEffect(() => {
-    if (!selectedSectionKey || selectedExercise) return;
-    const data = sectionExercises[selectedSectionKey];
-    const exercises = data?.exercises || [];
-    if (exercises.length === 1 && (exercises[0].contentBlocks?.length > 0 || exercises[0].audioUrl || exercises[0].readingPassage || (exercises[0].readingCards?.length > 0))) {
-      setSelectedExercise(exercises[0]);
-    }
-  }, [selectedSectionKey, sectionExercises, selectedExercise]);
+  // ✅ إلغاء الاختيار التلقائي للتمرين الوحيد — حتى يظهر المستخدم قائمة التمارين (الدائرة) وينقر منها على السؤال
+  // (كان: إذا قسم وتمرين واحد → اختيار التمرين تلقائياً فكانت الأسئلة تظهر مباشرة بدون الدائرة)
 
   // ✅ تصفية attempt.items لإزالة الأسئلة المحذوفة التي لم تعد في أقسام الامتحان
   useEffect(() => {
@@ -1056,12 +1076,12 @@ function ExamPage() {
       const sectionsMap = new Map();
       formattedItems.forEach((item, idx) => {
         const sectionId = item.sectionId || 'default';
-        const section = item.section || { title: 'أسئلة عامة' };
+        const section = item.section || { title: t('exam_generalQuestions') };
 
         if (!sectionsMap.has(sectionId)) {
           sectionsMap.set(sectionId, {
             id: sectionId,
-            title: section.title || section.name || 'أسئلة عامة',
+            title: section.title || section.name || t('exam_generalQuestions'),
             items: []
           });
         }
@@ -1362,7 +1382,7 @@ function ExamPage() {
   const handleSubmit = async () => {
     // ✅ التحقق من أن المحاولة لم يتم تسليمها بالفعل
     if (attempt?.status === 'submitted') {
-      setError('تم تسليم هذا الامتحان بالفعل');
+      setError(t('exam_alreadySubmitted'));
       navigate(`/student/attempt/${attemptId}/results`);
       return;
     }
@@ -1375,7 +1395,7 @@ function ExamPage() {
       if (latestAttempt?.status === 'submitted') {
         console.warn('⚠️ Attempt was already submitted - refreshing state');
         setAttempt(latestAttempt);
-        setError('تم تسليم هذا الامتحان بالفعل');
+        setError(t('exam_alreadySubmitted'));
         navigate(`/student/attempt/${attemptId}/results`);
         return;
       }
@@ -1384,11 +1404,23 @@ function ExamPage() {
       // نستمر في submit حتى لو فشل refresh
     }
 
-    // عرض تأكيد
+    // عرض تأكيد بلغة الواجهة — استخدم العدد الكلي من كل الأقسام (ليس فقط attempt.items)
+    const answered = Object.keys(answers).length;
+    let total = attempt?.items?.length || 0;
+    if (sectionExercises && sectionsOverview?.length && sectionsOverview.every((s) => sectionExercises[s.key])) {
+      const seenIds = new Set();
+      Object.values(sectionExercises).forEach((sd) => {
+        (sd.exercises || []).forEach((ex) => {
+          (ex.questions || []).forEach((q) => {
+            if (q.questionId && !q.contentOnly) seenIds.add(String(q.questionId));
+          });
+        });
+      });
+      if (seenIds.size > 0) total = seenIds.size;
+    }
+    const countMsg = t('exam_confirmAnsweredCount').replace('%1', String(answered)).replace('%2', String(total));
     const confirmed = window.confirm(
-      `هل أنت متأكد من تسليم الامتحان؟\n\n` +
-      `عدد الأسئلة المجابة: ${Object.keys(answers).length} من ${attempt?.items?.length || 0}\n` +
-      `بعد التسليم لن تتمكن من تعديل الإجابات.`
+      t('exam_confirmSubmit') + '\n\n' + countMsg + '\n' + t('exam_confirmNoEditAfter')
     );
 
     if (!confirmed) {
@@ -1534,7 +1566,7 @@ function ExamPage() {
 
             if (refreshedAttempt?.status === 'submitted') {
               // المحاولة مقدمه بالفعل - الانتقال للنتائج
-              alert('⚠️ تم تسليم هذا الامتحان مسبقاً. سيتم عرض النتائج.');
+              alert('⚠️ ' + t('exam_alreadySubmittedAlert'));
               navigate(`/student/attempt/${attemptId}/results`);
               return;
             }
@@ -1593,7 +1625,7 @@ function ExamPage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-red-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-sm text-slate-600">جاري تحميل الامتحان...</p>
+          <p className="text-sm text-slate-600">{t('exam_loading')}</p>
         </div>
       </div>
     );
@@ -1607,14 +1639,14 @@ function ExamPage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="max-w-md mx-auto text-center">
           <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-6 mb-4">
-            <p className="font-semibold mb-2">❌ لا توجد أسئلة في هذا الامتحان</p>
-            <p className="text-xs text-slate-600">يرجى التواصل مع المدرس لإضافة الأسئلة</p>
+            <p className="font-semibold mb-2">❌ {t('exam_noQuestionsInExam')}</p>
+            <p className="text-xs text-slate-600">Bitte wenden Sie sich an die Lehrkraft.</p>
           </div>
           <button
             onClick={() => navigate(-1)}
             className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm"
           >
-            ← رجوع
+            ← {t('exam_back')}
           </button>
         </div>
       </div>
@@ -1698,6 +1730,17 @@ function ExamPage() {
             if (existingOptions.length === 0 && Array.isArray(q.options) && q.options.length > 0) {
               return { ...merged, options: q.options };
             }
+            // ✅ أسئلة Match: إذا الـ snapshot فاضي من أزواج/خيارات، استخدم بيانات القسم
+            const isMatch = (merged.qType || merged.type || '').toLowerCase() === 'match';
+            if (isMatch && (!merged.answerKeyMatch?.length) && (!merged.matchPairs?.length)) {
+              return {
+                ...merged,
+                ...(q.answerKeyMatch && { answerKeyMatch: q.answerKeyMatch }),
+                ...(q.matchPairs && { matchPairs: q.matchPairs }),
+                ...(q.optionsText && { optionsText: q.optionsText }),
+                ...(q.optionsSnapshot && { optionsSnapshot: q.optionsSnapshot }),
+              };
+            }
             return merged;
           }
           // عنصر غير موجود في attempt.items → استخدام بيانات السؤال من القسم للعرض
@@ -1713,6 +1756,10 @@ function ExamPage() {
             images: q.images || [],
             points: q.points,
             ...(q.contentOnly && { contentOnly: true }),
+            ...(q.answerKeyMatch && { answerKeyMatch: q.answerKeyMatch }),
+            ...(q.matchPairs && { matchPairs: q.matchPairs }),
+            ...(q.optionsText && { optionsText: q.optionsText }),
+            ...(q.optionsSnapshot && { optionsSnapshot: q.optionsSnapshot }),
             sectionKey,
             section: sectionKey ? { key: sectionKey } : undefined,
             _fromSection: true,
@@ -1759,6 +1806,10 @@ function ExamPage() {
                 options: q.options || [],
                 images: q.images || [],
                 points: q.points,
+                ...(q.answerKeyMatch && { answerKeyMatch: q.answerKeyMatch }),
+                ...(q.matchPairs && { matchPairs: q.matchPairs }),
+                ...(q.optionsText && { optionsText: q.optionsText }),
+                ...(q.optionsSnapshot && { optionsSnapshot: q.optionsSnapshot }),
                 sectionKey: selectedSectionKey,
                 section: { key: selectedSectionKey },
                 _fromSection: true,
@@ -1785,6 +1836,10 @@ function ExamPage() {
               options: q.options || [],
               images: q.images || [],
               points: q.points,
+              ...(q.answerKeyMatch && { answerKeyMatch: q.answerKeyMatch }),
+              ...(q.matchPairs && { matchPairs: q.matchPairs }),
+              ...(q.optionsText && { optionsText: q.optionsText }),
+              ...(q.optionsSnapshot && { optionsSnapshot: q.optionsSnapshot }),
               sectionKey: selectedSectionKey,
               section: { key: selectedSectionKey },
               _fromSection: true,
@@ -1857,6 +1912,10 @@ function ExamPage() {
                 options: q.options || [],
                 images: q.images || [],
                 points: q.points,
+                ...(q.answerKeyMatch && { answerKeyMatch: q.answerKeyMatch }),
+                ...(q.matchPairs && { matchPairs: q.matchPairs }),
+                ...(q.optionsText && { optionsText: q.optionsText }),
+                ...(q.optionsSnapshot && { optionsSnapshot: q.optionsSnapshot }),
                 sectionKey: section.key,
                 section: { key: section.key },
                 _fromSection: true,
@@ -1930,25 +1989,22 @@ function ExamPage() {
     <div className="exam-page min-h-screen bg-slate-50" data-exam-css-version="text-fix-v1">
       {/* الشريط العلوي */}
       <div className={`${hasSections ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-3 sm:px-4 pt-4 sm:pt-8 pb-2`}>
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className="flex items-center mb-3 sm:mb-4">
           <button
             onClick={() => navigate(-1)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
           >
-            ← رجوع
+            ← {t('exam_back')}
           </button>
-          <span className="text-xs font-semibold text-red-600 truncate max-w-[200px]">
-            {attempt.exam?.title || 'امتحان'}
-          </span>
         </div>
 
         {/* عنوان الامتحان */}
         <div className="mb-3 sm:mb-4">
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
-            {attempt.exam?.title || 'امتحان'}
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">
+            {attempt.exam?.title || t('exam_exam')}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600">
-            {totalQuestions} سؤال
+          <p className="text-sm sm:text-base text-slate-600">
+            {totalQuestions} {t('exam_questions')}
           </p>
         </div>
       </div>
@@ -1970,8 +2026,8 @@ function ExamPage() {
                       }`}
                   >
                     <span>📋</span>
-                    <span>كل الأسئلة</span>
-                    <span className="text-[10px] opacity-75">{answeredCount}/{totalQuestions}</span>
+                    <span>{t('exam_modelTest')}</span>
+                    <span className="text-[10px] opacity-75">{answeredCount} {t('exam_of')} {totalQuestions}</span>
                   </button>
                 )}
                 {sectionsOverview.map((section) => {
@@ -1989,9 +2045,9 @@ function ExamPage() {
                         }`}
                     >
                       <span>{SKILL_ICONS[section.skill] || '📄'}</span>
-                      <span className="max-w-[120px] text-left leading-tight">{section.title}</span>
+                      <span className="max-w-[120px] text-left leading-tight">{sectionDisplayTitle(section.title, t)}</span>
                       <span className="text-[10px] opacity-75">
-                        {progress.answered}/{progress.total}
+                        {progress.answered} {t('exam_of')} {progress.total}
                         {isComplete && ' ✓'}
                       </span>
                     </button>
@@ -2007,10 +2063,10 @@ function ExamPage() {
           {hasSections && (
             <aside className="hidden md:block w-64 flex-shrink-0 sticky top-4 self-start">
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50">
-                  <h3 className="text-sm font-bold text-slate-800">أقسام الامتحان</h3>
+                <div className="p-4 border-b border-slate-100 bg-slate-50 text-left rtl:text-right">
+                  <h3 className="text-sm font-bold text-slate-800">{t('exam_examSections')}</h3>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {answeredCount}/{totalQuestions} سؤال تمت الإجابة عليه
+                    {answeredCount} {t('exam_of')} {totalQuestions} {t('exam_answered')}
                   </p>
                 </div>
                 <div className="p-2 space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
@@ -2018,12 +2074,12 @@ function ExamPage() {
                   {!isEducational && (
                     <button
                       onClick={() => { setSelectedSectionKey(null); setSelectedExercise(null); }}
-                      className={`w-full text-right p-3 rounded-xl text-xs transition-all mb-1 ${selectedSectionKey === null
+                      className={`w-full text-left rtl:text-right p-3 rounded-xl text-xs transition-all mb-1 ${selectedSectionKey === null
                         ? 'bg-red-50 border border-red-200 text-red-700'
                         : 'hover:bg-slate-50 text-slate-600 border border-transparent'
                         }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 rtl:flex-row-reverse">
                         <div className="relative flex-shrink-0">
                           <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
                             <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
@@ -2039,10 +2095,10 @@ function ExamPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className={`font-semibold leading-tight ${selectedSectionKey === null ? 'text-red-700' : 'text-slate-800'}`}>
-                            كل الأسئلة
+                            {t('exam_modelTest')}
                           </div>
                           <div className="text-[10px] text-slate-400 mt-0.5">
-                            {answeredCount}/{totalQuestions} سؤال
+                            {answeredCount} {t('exam_of')} {totalQuestions} {t('exam_questions')}
                           </div>
                         </div>
                         {answeredCount === totalQuestions && totalQuestions > 0 && (
@@ -2064,12 +2120,12 @@ function ExamPage() {
                       <button
                         key={section.key}
                         onClick={() => { setSelectedSectionKey(section.key); setSelectedExercise(null); }}
-                        className={`w-full text-right p-3 rounded-xl text-xs transition-all ${isActive
+                        className={`w-full text-left rtl:text-right p-3 rounded-xl text-xs transition-all ${isActive
                           ? 'bg-red-50 border border-red-200 text-red-700'
                           : 'hover:bg-slate-50 text-slate-600 border border-transparent'
                           }`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 rtl:flex-row-reverse">
                           <div className="relative flex-shrink-0">
                             <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
                               <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
@@ -2087,17 +2143,17 @@ function ExamPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className={`font-semibold leading-tight ${isActive ? 'text-red-700' : 'text-slate-800'}`}>
-                              {section.title}
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              {progress.answered}/{progress.total} سؤال
+                              {sectionDisplayTitle(section.title, t)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {progress.answered} {t('exam_of')} {progress.total}
                               {section.timeLimitMin > 0 && ` • ${section.timeLimitMin}د`}
                             </div>
                           </div>
                           {sectionSummaries[section.key]?.data ? (
-                            <span className="text-green-500 text-sm flex-shrink-0" title="تم إنهاء القسم">✓</span>
+                            <span className="text-green-500 text-sm flex-shrink-0" title={t('exam_sectionComplete')}>✓</span>
                           ) : isComplete ? (
-                            <span className="text-yellow-500 text-sm flex-shrink-0" title="تمت الإجابة على الكل">●</span>
+                            <span className="text-yellow-500 text-sm flex-shrink-0" title={t('exam_allAnswered')}>●</span>
                           ) : null}
                         </div>
                       </button>
@@ -2121,13 +2177,13 @@ function ExamPage() {
             {/* رسالة إذا تم التسليم - إظهار فقط الرسالة بدون الأسئلة */}
             {isSubmitted ? (
               <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-xl p-6 text-center">
-                <p className="font-semibold mb-2 text-lg">⚠️ تم تسليم هذا الامتحان</p>
-                <p className="text-sm mb-4">لا يمكنك تعديل الإجابات</p>
+                <p className="font-semibold mb-2 text-lg">⚠️ {t('exam_submittedMessage')}</p>
+                <p className="text-sm mb-4">{t('exam_cannotChangeAnswers')}</p>
                 <button
                   onClick={() => navigate(`/student/attempt/${attemptId}/results`)}
                   className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm font-semibold"
                 >
-                  عرض النتائج
+                  {t('exam_showResults')}
                 </button>
               </div>
             ) : (
@@ -2146,15 +2202,15 @@ function ExamPage() {
                   const activeSection = sectionsOverview.find(s => s.key === selectedSectionKey);
                   if (!activeSection) return null;
                   return (
-                    <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4 flex items-center gap-2 sm:gap-3">
+                    <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4 flex items-center gap-2 sm:gap-3 text-left">
                       <span className="text-lg sm:text-xl">{SKILL_ICONS[activeSection.skill] || '📄'}</span>
                       <div>
-                        <h2 className="text-sm sm:text-base font-bold text-slate-900">{activeSection.title}</h2>
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900">{sectionDisplayTitle(activeSection.title, t)}</h2>
                         <p className="text-[10px] sm:text-xs text-slate-500">
                           {hasExercises
-                            ? `${currentSectionData.exercises.length} تمرين`
-                            : `${displayedItems.filter(i => !i.contentOnly).length} سؤال`}
-                          {activeSection.timeLimitMin > 0 && ` • ${activeSection.timeLimitMin} دقيقة`}
+                            ? `${currentSectionData.exercises.length} ${currentSectionData.exercises.length === 1 ? t('exam_exercise') : t('exam_exercises')}`
+                            : `${displayedItems.filter(i => !i.contentOnly).length} ${t('exam_questions')}`}
+                          {activeSection.timeLimitMin > 0 && ` • ${activeSection.timeLimitMin} Min.`}
                         </p>
                       </div>
                     </div>
@@ -2175,7 +2231,7 @@ function ExamPage() {
                 {loadingExercises && (
                   <div className="text-center py-8">
                     <div className="inline-block w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                    <p className="text-sm text-slate-500">جاري تحميل التمارين...</p>
+                    <p className="text-sm text-slate-500">{t('exam_loadingExercises')}</p>
                   </div>
                 )}
 
@@ -2186,22 +2242,19 @@ function ExamPage() {
                       onClick={() => setSelectedExercise(null)}
                       className="text-xs text-slate-500 hover:text-slate-700 transition-colors mb-3 inline-block"
                     >
-                      ← العودة لقائمة التمارين
+                      ← {t('exam_backToExercises')}
                     </button>
-                    <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4">
+                    <div className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 mb-3 sm:mb-4 text-left">
                       <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                        Übung {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}
+                        {t('exam_exercise')} {selectedExercise.exerciseIndex ?? selectedExercise.exerciseNumber}
                       </h2>
                       <p className="text-[10px] sm:text-xs text-slate-500 mt-1">
-                        {selectedExercise.questionCount || selectedExercise.questions?.length || 0} سؤال
+                        {selectedExercise.questionCount || selectedExercise.questions?.length || 0} {t('exam_questions')}
                       </p>
                     </div>
                     {/* مشغل صوت التمرين */}
                     {selectedExercise.audioUrl && (
                       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
-                        <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">
-                          🎵 ملف الاستماع
-                        </span>
                         <audio
                           controls
                           controlsList="nodownload"
@@ -2246,7 +2299,7 @@ function ExamPage() {
                 {hasSections && !selectedSectionKey && !allSectionsLoaded && (
                   <div className="text-center py-12">
                     <div className="inline-block w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                    <p className="text-sm text-slate-500">جاري تحميل جميع الأسئلة...</p>
+                    <p className="text-sm text-slate-500">{t('exam_loadingAllQuestions')}</p>
                   </div>
                 )}
 
@@ -2254,7 +2307,11 @@ function ExamPage() {
                 {!(hasSections && selectedSectionKey && hasExercises && !selectedExercise) && !loadingExercises && (hasSections ? allSectionsLoaded || !!selectedSectionKey : true) && (
                   <>
                     <div className="space-y-6 mb-6">
-                      {(() => {
+                      {(displayedItems.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500 rounded-xl bg-slate-50 border border-slate-200">
+                          <p className="text-sm font-medium">{t('exam_noQuestionsInSection')}</p>
+                        </div>
+                      ) : (() => {
                         // تتبع أي تمرين تم عرض صوته بالفعل (لعدم التكرار في "كل الأسئلة")
                         const shownExerciseIds = new Set();
 
@@ -2341,7 +2398,7 @@ function ExamPage() {
                             safePromptString(item.promptSnapshot) ||
                             safePromptString(item.prompt) ||
                             safePromptString(item.text) ||
-                            'لا يوجد نص للسؤال';
+                            t('exam_noQuestionText');
 
                           // قراءة options بأمان (لا نستدعي .map إلا على مصفوفات)
                           const options = safeOptionsArray(item);
@@ -2359,11 +2416,10 @@ function ExamPage() {
                                 {showExerciseHeader && (
                                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
                                     <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
-                                      Übung {exerciseInfo.exerciseIndex}
+                                      {t('exam_exercise')} {exerciseInfo.exerciseIndex ?? exerciseInfo.exerciseNumber}
                                     </h3>
                                     {exerciseInfo.audioUrl && (
                                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                        <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">🎵 ملف الاستماع</span>
                                         <audio controls controlsList="nodownload" preload="metadata" src={toApiUrl(exerciseInfo.audioUrl)} className="w-full">
                                           المتصفح لا يدعم تشغيل الملفات الصوتية
                                         </audio>
@@ -2411,11 +2467,10 @@ function ExamPage() {
                               {showExerciseHeader && exerciseInfo && (
                                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-3">
                                   <h3 className="text-sm sm:text-base font-bold text-slate-800 text-left" dir="ltr">
-                                    Übung {exerciseInfo.exerciseIndex}
+                                    {t('exam_exercise')} {exerciseInfo.exerciseIndex ?? exerciseInfo.exerciseNumber}
                                   </h3>
                                   {exerciseInfo.audioUrl && (
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                      <span className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 block">🎵 ملف الاستماع</span>
                                       <audio controls controlsList="nodownload" preload="metadata" src={toApiUrl(exerciseInfo.audioUrl)} className="w-full">
                                         المتصفح لا يدعم تشغيل الملفات الصوتية
                                       </audio>
@@ -2470,11 +2525,6 @@ function ExamPage() {
 
                                   return (
                                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs sm:text-sm font-semibold text-blue-700">
-                                          🎵 ملف صوتي خاص بالسؤال
-                                        </span>
-                                      </div>
                                       <audio src={mediaSrc} controls controlsList="nodownload" className="w-full">
                                         <source src={mediaSrc} type={correctMime} />
                                         المتصفح لا يدعم تشغيل الملفات الصوتية
@@ -2485,16 +2535,21 @@ function ExamPage() {
 
                                 {/* عرض السؤال */}
                                 <div className="exam-question-card bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6">
-                                  {/* رقم السؤال */}
-                                  <div className="flex items-center gap-2 mb-3 sm:mb-4 justify-end">
+                                  {/* رقم السؤال والنقطة — على اليسار فقط */}
+                                  <div className="flex items-center gap-2 mb-3 sm:mb-4 justify-start">
                                     <span className="text-xs font-semibold px-2 py-1 bg-red-600 text-white rounded">
-                                      سؤال {displayNumber}
+                                      {t('exam_question')} {displayNumber} {t('exam_of')} {totalQuestions}
                                     </span>
-                                    {item.points && (
-                                      <span className="text-[10px] text-slate-400">
-                                        {item.points} نقطة
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const pts = (qType === 'match' && (item.answerKeyMatch?.length || item.matchPairs?.length))
+                                        ? (item.answerKeyMatch?.length || item.matchPairs?.length)
+                                        : (item.points ?? item.question?.points ?? 1);
+                                      return pts > 0 ? (
+                                        <span className="text-[10px] text-slate-400">
+                                          {pts} {pts !== 1 ? t('exam_points') : t('exam_point')}
+                                        </span>
+                                      ) : null;
+                                    })()}
                                   </div>
 
                                   {/* Media (Audio/Image/Video) - من question.media.url مباشرة */}
@@ -3035,7 +3090,7 @@ function ExamPage() {
                                             {prompt}
                                           </h3>
                                           <p className="text-sm text-yellow-800">
-                                            ⚠️ البيانات التفاعلية غير متوفرة. يرجى التحقق من إعدادات السؤال في لوحة التحكم.
+                                            ⚠️ Interaktive Daten nicht verfügbar. Bitte Einstellungen in der Verwaltung prüfen.
                                           </p>
                                         </div>
                                       );
@@ -3079,7 +3134,7 @@ function ExamPage() {
                                             </div>
                                           )}
                                           <p className="text-sm text-slate-600">
-                                            ⚠️ لا يوجد نص تفاعلي متاح
+                                            ⚠️ Kein interaktiver Text verfügbar
                                           </p>
                                         </div>
                                       );
@@ -3185,7 +3240,7 @@ function ExamPage() {
                                                         }}
                                                         className="px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 min-w-[110px] text-base"
                                                       >
-                                                        <option value="">-- اختر --</option>
+                                                        <option value="">{t('exam_chooseOption')}</option>
                                                         {blankOptions.map((option, optionIndex) => (
                                                           <option key={optionIndex} value={option}>
                                                             {option}
@@ -3542,7 +3597,7 @@ function ExamPage() {
                                             <div className="w-3 h-3 rounded-full bg-red-600"></div>
                                           )}
                                         </div>
-                                        <span>صحيح</span>
+                                        <span>{t('exam_correct')}</span>
                                       </button>
                                       <button
                                         onClick={() => {
@@ -3564,7 +3619,7 @@ function ExamPage() {
                                             <div className="w-3 h-3 rounded-full bg-red-600"></div>
                                           )}
                                         </div>
-                                        <span>خطأ</span>
+                                        <span>{t('exam_incorrect')}</span>
                                       </button>
                                     </div>
                                   )}
@@ -3625,53 +3680,43 @@ function ExamPage() {
                                       // التحقق من الشكل: tuples [[left, right], ...] أو objects [{left, right}, ...]
                                       if (Array.isArray(pairs[0])) {
                                         // tuples: [[left, right], ...]
-                                        console.log('✅ Detected tuples format');
-                                        leftItems = pairs.map(([l]) => {
-                                          const val = String(l || '').trim();
-                                          console.log('  Left item:', val);
-                                          return val;
-                                        }).filter(Boolean);
-                                        rightItems = pairs.map(([, r]) => {
-                                          const val = String(r || '').trim();
-                                          console.log('  Right item:', val);
-                                          return val;
-                                        }).filter(Boolean);
+                                        leftItems = pairs.map(([l]) => String(l || '').trim()).filter(Boolean);
+                                        rightItems = pairs.map(([, r]) => String(r || '').trim()).filter(Boolean);
                                       } else if (typeof pairs[0] === 'object' && pairs[0] !== null) {
                                         // objects: [{left, right}, ...]
-                                        console.log('✅ Detected objects format');
-                                        leftItems = pairs.map(pair => {
-                                          const val = String(pair.left || pair[0] || '').trim();
-                                          console.log('  Left item:', val);
-                                          return val;
-                                        }).filter(Boolean);
-                                        rightItems = pairs.map(pair => {
-                                          const val = String(pair.right || pair[1] || '').trim();
-                                          console.log('  Right item:', val);
-                                          return val;
-                                        }).filter(Boolean);
-                                      } else {
-                                        console.warn('⚠️ Unknown pairs format:', pairs[0]);
+                                        leftItems = pairs.map(pair => String(pair.left || pair[0] || '').trim()).filter(Boolean);
+                                        rightItems = pairs.map(pair => String(pair.right || pair[1] || '').trim()).filter(Boolean);
                                       }
-                                    } else {
-                                      console.warn('⚠️ pairs is not a valid array or is empty:', pairs);
                                     }
 
-                                    console.log('📊 Extracted items:', {
+                                    // ✅ للطالب: استخدم optionsText أو optionsSnapshot إذا وُجدت (كل الخيارات + ترتيب عشوائي من الباك)
+                                    const matchOptionsFromApi = Array.isArray(item.optionsText) && item.optionsText.length > 0
+                                      ? item.optionsText.map((o) => (typeof o === 'string' ? o : (o?.text ?? o ?? '')))
+                                      : (Array.isArray(item.optionsSnapshot) && item.optionsSnapshot.length > 0)
+                                        ? item.optionsSnapshot.map((o) => (o && o.text) || '')
+                                        : [];
+                                    // لا نستخدم rightItems أبداً كما هي (ترتيب التوصيل الصحيح) — إما من الباك أو نخلط القيم اليمنى
+                                    let rightItemsForDropdown;
+                                    if (matchOptionsFromApi.length > 0) {
+                                      rightItemsForDropdown = matchOptionsFromApi;
+                                    } else {
+                                      const uniqueRights = [...new Set(rightItems.filter(Boolean))];
+                                      rightItemsForDropdown = [...uniqueRights].sort(() => Math.random() - 0.5);
+                                    }
+
+                                    console.log('📊 Match items:', {
                                       leftItems,
-                                      rightItems,
-                                      'leftItems length': leftItems.length,
-                                      'rightItems length': rightItems.length
+                                      rightItemsFromPairs: rightItems,
+                                      rightItemsForDropdown,
+                                      'from optionsText': matchOptionsFromApi.length > 0
                                     });
 
-                                    // ✅ القائمة اليمنى بترتيبها الأصلي (بدون shuffle)
-                                    const shuffledRight = [...rightItems];
-
-                                    // ✅ تحذير إذا لم يتم العثور على pairs
-                                    if (leftItems.length === 0 || rightItems.length === 0) {
-                                      console.warn('⚠️ Match question has no pairs!', {
+                                    // ✅ تحذير إذا لم يكن هناك يسار أو خيارات للقائمة
+                                    if (leftItems.length === 0 || rightItemsForDropdown.length === 0) {
+                                      console.warn('⚠️ Match question has no pairs or options!', {
                                         pairs,
                                         leftItems,
-                                        rightItems,
+                                        rightItemsForDropdown,
                                         'pairs type': typeof pairs,
                                         'pairs is array': Array.isArray(pairs),
                                         'pairs length': Array.isArray(pairs) ? pairs.length : 'N/A',
@@ -3680,7 +3725,7 @@ function ExamPage() {
                                       return (
                                         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                           <p className="text-sm text-yellow-800">
-                                            ⚠️ لا توجد أزواج مطابقة متاحة. يرجى التحقق من البيانات.
+                                            ⚠️ {t('exam_noMatchPairsCheck')}
                                           </p>
                                         </div>
                                       );
@@ -3693,7 +3738,7 @@ function ExamPage() {
                                       <div className="space-y-4">
                                         {/* Dropdowns للربط */}
                                         <div className="space-y-2">
-                                          <h4 className="text-sm font-semibold text-slate-700 mb-2">ربط المطابقة:</h4>
+                                          <h4 className="text-sm font-semibold text-slate-700 mb-2">{t('exam_matchPairs')}</h4>
                                           {leftItems.map((leftItem, leftIdx) => {
                                             const selectedRight = currentAnswer[leftIdx] || '';
 
@@ -3714,8 +3759,8 @@ function ExamPage() {
                                                   }}
                                                   className="flex-1 p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-red-500"
                                                 >
-                                                  <option value="">اختر...</option>
-                                                  {shuffledRight.map((rightItem, rightIdx) => (
+                                                  <option value="">{t('exam_chooseOption')}</option>
+                                                  {rightItemsForDropdown.map((rightItem, rightIdx) => (
                                                     <option key={rightIdx} value={rightItem}>
                                                       {rightItem}
                                                     </option>
@@ -3786,9 +3831,9 @@ function ExamPage() {
                                         <button
                                           onClick={() => handleCheckAnswer(itemIndex, item.questionId, itemOverride)}
                                           disabled={!answers[itemIndex] || checkedQuestions[itemIndex]?.checking}
-                                          className="px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed bg-blue-500 text-white hover:bg-blue-600"
+                                          className="px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed bg-red-600 text-white hover:bg-red-700"
                                         >
-                                          {checkedQuestions[itemIndex]?.checking ? 'جاري الفحص...' : 'تحقق'}
+                                          {checkedQuestions[itemIndex]?.checking ? t('exam_checking') : t('exam_check')}
                                         </button>
                                       )}
 
@@ -3799,9 +3844,9 @@ function ExamPage() {
                                           : 'bg-red-50 border-red-300 text-red-800'
                                           }`}>
                                           <div className="font-semibold mb-1">
-                                            {checkedQuestions[itemIndex].isCorrect ? '✓ إجابة صحيحة' : '✗ إجابة خاطئة'}
+                                            {checkedQuestions[itemIndex].isCorrect ? `✓ ${t('exam_correct')}` : `✗ ${t('exam_incorrect')}`}
                                             <span className="text-xs font-normal mr-2">
-                                              ({checkedQuestions[itemIndex].score}/{checkedQuestions[itemIndex].maxPoints} نقطة)
+                                              ({checkedQuestions[itemIndex].score} {t('exam_of')} {checkedQuestions[itemIndex].maxPoints} {checkedQuestions[itemIndex].maxPoints !== 1 ? t('exam_points') : t('exam_point')})
                                             </span>
                                           </div>
 
@@ -3810,16 +3855,40 @@ function ExamPage() {
                                             const ca = checkedQuestions[itemIndex].correctAnswer;
                                             const cqType = checkedQuestions[itemIndex].qType || qType;
                                             let correctText = '';
+                                            let matchFeedback = null;
 
                                             if ((cqType === 'mcq' || cqType === 'listen') && ca.correctOptionIndexes) {
                                               const opts = safeOptionsArray(item);
-                                              correctText = ca.correctOptionIndexes.map(i => opts[i] || `خيار ${i + 1}`).join('، ');
+                                              correctText = ca.correctOptionIndexes.map(i => opts[i] || `Option ${i + 1}`).join(', ');
                                             } else if (cqType === 'true_false' && ca.correctOptionIndexes) {
-                                              correctText = ca.correctOptionIndexes[0] === 0 ? 'صحيح' : 'خطأ';
+                                              correctText = ca.correctOptionIndexes[0] === 0 ? t('exam_correct') : t('exam_incorrect');
                                             } else if (cqType === 'fill' && ca.fillExact) {
                                               correctText = Array.isArray(ca.fillExact) ? ca.fillExact.join(' / ') : ca.fillExact;
                                             } else if (cqType === 'match' && ca.answerKeyMatch) {
-                                              correctText = ca.answerKeyMatch.map(p => `${p[0]} → ${p[1]}`).join('، ');
+                                              const userMatch = answers[itemIndex]?.studentAnswerMatch;
+                                              const norm = (s) => (s == null ? '' : String(s).trim());
+                                              matchFeedback = (
+                                                <div className="text-xs mt-1 space-y-1">
+                                                  <span className="font-medium">{t('exam_correctPerPoint')} </span>
+                                                  <div className="mt-1 flex flex-col gap-0.5">
+                                                    {ca.answerKeyMatch.map((p, idx) => {
+                                                      const left = Array.isArray(p) ? p[0] : (p.left || p[0]);
+                                                      const correctRight = Array.isArray(p) ? p[1] : (p.right || p[1]);
+                                                      const userRight = norm(userMatch?.[idx] ?? userMatch?.[String(idx)] ?? '');
+                                                      const isPairCorrect = norm(userRight) === norm(correctRight);
+                                                      const lineText = `${left} → ${correctRight}`;
+                                                      return (
+                                                        <div
+                                                          key={idx}
+                                                          className={`px-2 py-0.5 rounded ${isPairCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                                                        >
+                                                          {isPairCorrect ? '✓ ' : '✗ '}{lineText}
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              );
                                             } else if (cqType === 'reorder' && ca.answerKeyReorder) {
                                               correctText = ca.answerKeyReorder.join(' → ');
                                             } else if (cqType === 'interactive_text' && (ca.interactiveBlanks || ca.interactiveReorder)) {
@@ -3828,11 +3897,12 @@ function ExamPage() {
                                               }
                                             }
 
-                                            return correctText ? (
+                                            return matchFeedback || (correctText ? (
                                               <div className="text-xs mt-1">
-                                                <span className="font-medium">الإجابة الصحيحة: </span>{correctText}
+                                                <span className="font-medium">{t('life_solution')}: </span>
+                                                {correctText}
                                               </div>
-                                            ) : null;
+                                            ) : null);
                                           })()}
                                         </div>
                                       )}
@@ -3840,12 +3910,12 @@ function ExamPage() {
                                       {/* خطأ بالفحص */}
                                       {checkedQuestions[itemIndex]?.error && (
                                         <div className="mt-2 p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs">
-                                          حدث خطأ أثناء الفحص. حاول مرة أخرى.
+                                          {t('exam_errorChecking')}
                                           <button
                                             onClick={() => setCheckedQuestions(prev => { const n = { ...prev }; delete n[itemIndex]; return n; })}
                                             className="mr-2 underline"
                                           >
-                                            إعادة المحاولة
+                                            Erneut versuchen
                                           </button>
                                         </div>
                                       )}
@@ -3865,7 +3935,7 @@ function ExamPage() {
                         }
 
                         return items;
-                      })()}
+                      })() )}
                     </div>
 
                     {/* ✅ نتيجة القسم الحالي */}
@@ -3894,11 +3964,11 @@ function ExamPage() {
                               <div className="grid grid-cols-3 gap-3 text-center text-xs">
                                 <div className="bg-green-50 rounded-lg p-2">
                                   <div className="text-lg font-bold text-green-700">{s.correct}</div>
-                                  <div className="text-green-600">صحيحة</div>
+                                  <div className="text-green-600">{t('exam_correct')}</div>
                                 </div>
                                 <div className="bg-red-50 rounded-lg p-2">
                                   <div className="text-lg font-bold text-red-700">{s.wrong}</div>
-                                  <div className="text-red-600">خاطئة</div>
+                                  <div className="text-red-600">{t('exam_incorrect')}</div>
                                 </div>
                                 <div className="bg-slate-50 rounded-lg p-2">
                                   <div className="text-lg font-bold text-slate-700">{s.unanswered}</div>
@@ -3913,14 +3983,14 @@ function ExamPage() {
                               {/* تفاصيل كل سؤال */}
                               {s.questions && s.questions.length > 0 && (
                                 <div className="space-y-2 mt-3">
-                                  <p className="text-xs font-semibold text-slate-600">تفاصيل الأسئلة:</p>
+                                  <p className="text-xs font-semibold text-slate-600">{t('exam_questionsInDetail')}</p>
                                   {s.questions.map((q, qi) => (
                                     <div key={q.questionId || qi} className={`flex items-center justify-between text-xs p-2 rounded-lg border ${!q.hasAnswer ? 'bg-slate-50 border-slate-200' : q.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
                                       }`}>
-                                      <span className="font-medium">سؤال {qi + 1}</span>
+                                      <span className="font-medium">{t('exam_question')} {qi + 1}</span>
                                       <span>
-                                        {!q.hasAnswer ? '— لم تتم الإجابة' : q.isCorrect ? '✓ صحيح' : '✗ خطأ'}
-                                        <span className="text-slate-400 mr-1">({q.score}/{q.maxPoints})</span>
+                                        {!q.hasAnswer ? `— ${t('exam_notAnswered')}` : q.isCorrect ? `✓ ${t('exam_correct')}` : `✗ ${t('exam_incorrect')}`}
+                                        <span className="text-slate-400 mr-1">({q.score} {t('exam_of')} {q.maxPoints})</span>
                                       </span>
                                     </div>
                                   ))}
@@ -3937,13 +4007,13 @@ function ExamPage() {
                       <div className="mt-8 mb-4 text-center">
                         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                           <p className="text-sm text-slate-600 mb-4">
-                            أجبت على {answeredCount} من أصل {totalQuestions} سؤال
+                            {answeredCount} {t('exam_of')} {totalQuestions} {t('exam_questionsAnswered')}
                           </p>
                           <button
                             onClick={handleSubmit}
                             className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm"
                           >
-                            تسليم الامتحان
+                            {t('exam_submitExam')}
                           </button>
                         </div>
                       </div>

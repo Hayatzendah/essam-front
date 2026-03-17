@@ -2,14 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { usersAPI } from '../services/usersAPI';
-
-const ROLE_LABELS = {
-  student: 'طالب',
-  teacher: 'معلم',
-  admin: 'مدير',
-};
+import { useLanguage } from '../contexts/LanguageContext';
 
 function UserProfileDropdown() {
+  const { t, isRtl } = useLanguage();
   const [open, setOpen] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
@@ -56,19 +52,19 @@ function UserProfileDropdown() {
     setPasswordSuccess('');
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('كلمة المرور الجديدة وتأكيدها غير متطابقين');
+      setPasswordError(t('passwordMismatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordError('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+      setPasswordError(t('passwordTooShort'));
       return;
     }
 
     setPasswordLoading(true);
     try {
       const result = await authAPI.changePassword(oldPassword, newPassword);
-      setPasswordSuccess(result.message || 'تم تغيير كلمة المرور بنجاح');
+      setPasswordSuccess(result.message || t('passwordChangeSuccess'));
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -78,7 +74,7 @@ function UserProfileDropdown() {
       }, 2000);
     } catch (err) {
       setPasswordError(
-        err.response?.data?.message || 'فشل تغيير كلمة المرور'
+        err.response?.data?.message || t('passwordChangeFailed')
       );
     } finally {
       setPasswordLoading(false);
@@ -113,10 +109,10 @@ function UserProfileDropdown() {
   return (
     <>
       <div ref={dropdownRef} className="relative">
-        {/* زر البروفايل */}
+        {/* زر البروفايل — دائرة صغيرة بصورة الحساب أو الحرف الأول */}
         <button
           onClick={() => setOpen(!open)}
-          className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-slate-300 hover:border-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border-2 border-[#DD0000] hover:border-[#000000] transition-all focus:outline-none focus:ring-2 focus:ring-[#FFCE00] shadow-sm hover:shadow-md bg-[rgba(255,206,0,0.12)] dark:bg-slate-700 dark:border-[#DD0000] dark:hover:border-[#FFCE00]"
         >
           {user.profilePicture ? (
             <img
@@ -125,19 +121,19 @@ function UserProfileDropdown() {
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className="text-sm font-bold text-slate-600">{firstLetter}</span>
+            <span className="text-sm font-bold text-[#DD0000] dark:text-[#FFCE00]">{firstLetter}</span>
           )}
         </button>
 
         {/* القائمة المنسدلة */}
         {open && (
-          <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-3 z-50">
+          <div className={`absolute top-12 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border-2 border-[#DD0000]/30 dark:border-[#FFCE00]/40 py-3 z-50 ${isRtl ? 'left-0' : 'right-0'}`}>
             {/* معلومات المستخدم */}
-            <div className="px-4 pb-3 border-b border-slate-100 flex items-center gap-3">
+            <div className="px-4 pb-3 border-b border-slate-100 dark:border-slate-600 flex items-center gap-3">
               <button
                 onClick={handleProfilePictureClick}
-                className="relative w-12 h-12 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden border-2 border-slate-300 hover:border-blue-400 transition-colors group"
-                title="تغيير الصورة"
+                className="relative w-12 h-12 rounded-full bg-[rgba(255,206,0,0.08)] dark:bg-slate-700 flex-shrink-0 overflow-hidden border-2 border-[#DD0000]/50 hover:border-[#DD0000] transition-colors group"
+                title={t('changeProfilePicture')}
               >
                 {user.profilePicture ? (
                   <img
@@ -156,7 +152,7 @@ function UserProfileDropdown() {
                 </div>
                 {uploadingPicture && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-[#DD0000] border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
               </button>
@@ -167,32 +163,32 @@ function UserProfileDropdown() {
                 className="hidden"
                 onChange={handleFileChange}
               />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate" dir="ltr">
+              <div className="min-w-0 text-start">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate" dir="ltr">
                   {user.email || ''}
                 </p>
-                <p className="text-xs text-slate-500">
-                  {ROLE_LABELS[user.role] || user.role}
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('role_' + (user.role || 'student')) || user.role}
                 </p>
               </div>
             </div>
 
-            {/* الأزرار */}
+            {/* الأزرار — تحاذٍ من البداية (يسار في LTR، يمين في العربي) */}
             <div className="py-1">
               <button
                 onClick={() => {
                   setOpen(false);
                   setShowPasswordModal(true);
                 }}
-                className="w-full text-right px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                className="w-full text-start px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
               >
-                تغيير كلمة المرور
+                {t('changePassword')}
               </button>
               <button
                 onClick={handleLogout}
-                className="w-full text-right px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full text-start px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-slate-700/50 transition-colors"
               >
-                تسجيل الخروج
+                {t('logout')}
               </button>
             </div>
           </div>
@@ -203,17 +199,17 @@ function UserProfileDropdown() {
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">تغيير كلمة المرور</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('changePasswordTitle')}</h3>
 
             <form onSubmit={handlePasswordChange} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  كلمة المرور الحالية
+                  {t('currentPassword')}
                 </label>
                 <input
                   type="password"
                   required
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
                 />
@@ -221,13 +217,13 @@ function UserProfileDropdown() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  كلمة المرور الجديدة
+                  {t('newPassword')}
                 </label>
                 <input
                   type="password"
                   required
                   minLength={6}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
@@ -235,13 +231,13 @@ function UserProfileDropdown() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  تأكيد كلمة المرور الجديدة
+                  {t('confirmNewPassword')}
                 </label>
                 <input
                   type="password"
                   required
                   minLength={6}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
@@ -263,9 +259,9 @@ function UserProfileDropdown() {
                 <button
                   type="submit"
                   disabled={passwordLoading}
-                  className="flex-1 rounded-md bg-blue-600 text-white text-sm font-semibold py-2 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 rounded-md bg-red-600 text-white text-sm font-semibold py-2 hover:bg-red-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
                 >
-                  {passwordLoading ? 'جارٍ التغيير...' : 'تغيير'}
+                  {passwordLoading ? t('passwordChanging') : t('change')}
                 </button>
                 <button
                   type="button"
@@ -279,7 +275,7 @@ function UserProfileDropdown() {
                   }}
                   className="flex-1 rounded-md bg-slate-100 text-slate-700 text-sm font-semibold py-2 hover:bg-slate-200 transition-colors"
                 >
-                  إلغاء
+                  {t('cancel')}
                 </button>
               </div>
             </form>

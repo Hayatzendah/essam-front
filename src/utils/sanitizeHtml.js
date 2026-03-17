@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 
 // تنسيقات الوورد: وسوم شائعة من الوورد + محاذاة وحجم خط
 const PURIFY_CONFIG = {
-  ALLOWED_TAGS: ['p', 'div', 'br', 'strong', 'em', 'u', 's', 'b', 'i', 'span', 'font', 'ol', 'ul', 'li', 'h1', 'h2', 'h3', 'sub', 'sup'],
+  ALLOWED_TAGS: ['p', 'div', 'br', 'strong', 'em', 'u', 's', 'b', 'i', 'span', 'font', 'ol', 'ul', 'li', 'h1', 'h2', 'h3', 'sub', 'sup', 'hr'],
   ALLOWED_ATTR: ['style', 'class', 'dir', 'size', 'face', 'color', 'align'],
 };
 
@@ -12,6 +12,8 @@ const ALLOWED_STYLE_PROPS = new Set([
   'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
   'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
   'line-height', 'text-indent', 'direction', 'background-color',
+  'border', 'border-bottom', 'border-top', 'border-left', 'border-right',
+  'border-width', 'border-style', 'border-color', 'border-bottom-width', 'border-bottom-style', 'border-bottom-color',
 ]);
 
 function sanitizeStyleValue(value) {

@@ -182,6 +182,9 @@ function EditQuestion() {
     regexList: [],
     answerKeyBoolean: true,
     answerKeyMatch: [{ left: '', right: '' }],
+    matchLeftItems: [''],
+    matchRightItems: ['', ''],
+    matchCorrect: [0],
     answerKeyReorder: [],
     provider: 'deutschland-in-leben',
     section: '',
@@ -318,24 +321,31 @@ function EditQuestion() {
         options = [{ text: '', isCorrect: false }];
       }
 
-      // معالجة answerKeyMatch - قد تكون array من objects أو array من arrays
+      // معالجة answerKeyMatch → matchLeftItems, matchRightItems, matchCorrect (واجهة مرنة)
+      // استخدام matchRightOptions عند وجوده لضمان عدم فقدان عناصر اليمين (المضللة)
       let answerKeyMatch = [];
-      if (question.answerKeyMatch && Array.isArray(question.answerKeyMatch)) {
-        if (question.answerKeyMatch.length > 0 && Array.isArray(question.answerKeyMatch[0])) {
-          // إذا كانت array of arrays: [[left, right], ...]
-          answerKeyMatch = question.answerKeyMatch.map(pair => ({
-            left: pair[0] || '',
-            right: pair[1] || '',
-          }));
+      let matchLeftItems = [''];
+      let matchRightItems = ['', ''];
+      let matchCorrect = [0];
+      if (question.answerKeyMatch && Array.isArray(question.answerKeyMatch) && question.answerKeyMatch.length > 0) {
+        const pairs = question.answerKeyMatch[0] && Array.isArray(question.answerKeyMatch[0])
+          ? question.answerKeyMatch.map(pair => ({ left: pair[0] || '', right: pair[1] || '' }))
+          : question.answerKeyMatch.map(pair => ({ left: pair.left || pair[0] || '', right: pair.right || pair[1] || '' }));
+        answerKeyMatch = pairs;
+        matchLeftItems = pairs.map(p => p.left ?? '');
+        const rightsFromPairs = pairs.map(p => (p.right ?? '').trim()).filter(Boolean);
+        const hasRightOptions = question.matchRightOptions && Array.isArray(question.matchRightOptions) && question.matchRightOptions.length > 0;
+        if (hasRightOptions && question.matchRightOptions.length >= rightsFromPairs.length) {
+          matchRightItems = [...question.matchRightOptions.map(s => String(s ?? '').trim()), ''];
+          matchCorrect = pairs.map(({ right }) => {
+            const r = (right ?? '').trim();
+            const idx = question.matchRightOptions.findIndex((o) => String(o || '').trim() === r);
+            return idx >= 0 ? idx : 0;
+          });
         } else {
-          // إذا كانت array of objects: [{left, right}, ...]
-          answerKeyMatch = question.answerKeyMatch.map(pair => ({
-            left: pair.left || pair[0] || '',
-            right: pair.right || pair[1] || '',
-          }));
+          matchRightItems = pairs.length ? [...pairs.map(p => p.right ?? ''), ''] : ['', ''];
+          matchCorrect = pairs.map((_, i) => i);
         }
-      } else {
-        answerKeyMatch = [{ left: '', right: '' }];
       }
 
       // Normalize provider to lowercase for backend compatibility
@@ -461,6 +471,9 @@ function EditQuestion() {
         regexList: Array.isArray(question.regexList) ? question.regexList : [],
         answerKeyBoolean: question.answerKeyBoolean !== undefined ? question.answerKeyBoolean : true,
         answerKeyMatch: answerKeyMatch,
+        matchLeftItems,
+        matchRightItems,
+        matchCorrect,
         answerKeyReorder: Array.isArray(question.answerKeyReorder) ? question.answerKeyReorder : [],
         provider: normalizedProvider,
         section: question.section || '',
@@ -573,6 +586,12 @@ function EditQuestion() {
           updated.regexList = prev.regexList?.length > 0 ? prev.regexList : [];
         } else if (value === 'match') {
           updated.answerKeyMatch = prev.answerKeyMatch?.length > 0 ? prev.answerKeyMatch : [{ left: '', right: '' }];
+          if (!prev.matchLeftItems || !prev.matchRightItems) {
+            const pairs = updated.answerKeyMatch;
+            updated.matchLeftItems = pairs.map(p => p.left ?? '');
+            updated.matchRightItems = pairs.length ? [...pairs.map(p => p.right ?? ''), ''] : ['', ''];
+            updated.matchCorrect = pairs.map((_, i) => i);
+          }
         } else if (value === 'reorder') {
           updated.answerKeyReorder = prev.answerKeyReorder?.length > 0 ? prev.answerKeyReorder : [];
         } else if (value === 'interactive_text') {
@@ -653,28 +672,70 @@ function EditQuestion() {
     }));
   };
 
-  // Handlers for match type
-  const handleAddMatchPair = () => {
-    setFormData((prev) => ({
-      ...prev,
-      answerKeyMatch: [...prev.answerKeyMatch, { left: '', right: '' }],
-    }));
+  const getMatchState = (fd = formData) => {
+    if (fd.matchLeftItems != null && fd.matchRightItems != null) {
+      return {
+        leftItems: fd.matchLeftItems.length ? fd.matchLeftItems : [''],
+        rightItems: fd.matchRightItems.length ? fd.matchRightItems : ['', ''],
+        correct: fd.matchCorrect || (fd.matchLeftItems || []).map((_, i) => i),
+      };
+    }
+    const pairs = fd.answerKeyMatch || [{ left: '', right: '' }];
+    return {
+      leftItems: pairs.map(p => p.left ?? ''),
+      rightItems: pairs.length ? [...pairs.map(p => p.right ?? ''), ''] : ['', ''],
+      correct: pairs.map((_, i) => i),
+    };
   };
 
-  const handleUpdateMatchPair = (index, field, value) => {
-    setFormData((prev) => ({
+  const handleAddMatchLeft = () => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    setFormData(prev => ({
       ...prev,
-      answerKeyMatch: prev.answerKeyMatch.map((pair, i) =>
-        i === index ? { ...pair, [field]: value } : pair
-      ),
+      matchLeftItems: [...leftItems, ''],
+      matchRightItems: rightItems,
+      matchCorrect: [...correct, Math.min(correct[correct.length - 1] ?? 0, rightItems.length - 1)],
     }));
   };
-
-  const handleRemoveMatchPair = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      answerKeyMatch: prev.answerKeyMatch.filter((_, i) => i !== index),
-    }));
+  const handleAddMatchRight = () => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: [...rightItems, ''], matchCorrect: correct }));
+  };
+  const handleUpdateMatchLeft = (idx, value) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...leftItems];
+    next[idx] = value;
+    setFormData(prev => ({ ...prev, matchLeftItems: next, matchRightItems: rightItems, matchCorrect: correct }));
+  };
+  const handleUpdateMatchRight = (idx, value) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...rightItems];
+    next[idx] = value;
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: next, matchCorrect: correct }));
+  };
+  const handleUpdateMatchCorrect = (leftIdx, rightIdx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...correct];
+    next[leftIdx] = typeof rightIdx === 'number' ? rightIdx : parseInt(rightIdx, 10);
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: rightItems, matchCorrect: next }));
+  };
+  const handleRemoveMatchLeft = (idx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    if (leftItems.length <= 1) return;
+    const nextLeft = leftItems.filter((_, i) => i !== idx);
+    const nextCorrect = correct.filter((_, i) => i !== idx);
+    setFormData(prev => ({ ...prev, matchLeftItems: nextLeft, matchRightItems: rightItems, matchCorrect: nextCorrect }));
+  };
+  const handleRemoveMatchRight = (idx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    if (rightItems.length <= 1) return;
+    const nextRight = rightItems.filter((_, i) => i !== idx);
+    const nextCorrect = correct.map(c => {
+      if (c === idx) return 0;
+      if (c > idx) return Math.min(c - 1, nextRight.length - 1);
+      return c;
+    });
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: nextRight, matchCorrect: nextCorrect }));
   };
 
   // Handlers for reorder type
@@ -994,6 +1055,22 @@ function EditQuestion() {
       return;
     }
 
+    if (formData.qType === 'match') {
+      const lefts = (formData.matchLeftItems || []).map(s => (s && s.trim ? s.trim() : String(s ?? '')).trim());
+      const rightItemsFull = (formData.matchRightItems || []).map(s => (s && s.trim ? s.trim() : String(s ?? '')).trim());
+      const correct = formData.matchCorrect || [];
+      for (let i = 0; i < lefts.length; i++) {
+        if (lefts[i] && correct[i] != null) {
+          const rightIdx = typeof correct[i] === 'number' ? correct[i] : parseInt(correct[i], 10);
+          const rightVal = rightIdx >= 0 && rightItemsFull[rightIdx] != null ? String(rightItemsFull[rightIdx]).trim() : '';
+          if (!rightVal) {
+            setError(`عنصر اليسار "${(lefts[i] || '').slice(0, 30)}..." يحتاج عنصر يمين غير فارغ. املأ نص اليمين أو اختر عنصراً آخر.`);
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -1076,7 +1153,23 @@ function EditQuestion() {
       } else if (normalizedQType === 'true_false') {
         questionData.answerKeyBoolean = formData.answerKeyBoolean;
       } else if (normalizedQType === 'match') {
-        questionData.answerKeyMatch = formData.answerKeyMatch;
+        const lefts = (formData.matchLeftItems || []).map(s => (s && s.trim ? s.trim() : String(s ?? '')).trim()).filter(Boolean);
+        const rightItemsFull = (formData.matchRightItems || []).map(s => (s && s.trim ? s.trim() : String(s ?? '')).trim());
+        const correct = formData.matchCorrect || [];
+        if (lefts.length && rightItemsFull.length) {
+          questionData.answerKeyMatch = lefts
+            .map((left, i) => {
+              const rightIdx = typeof correct[i] === 'number' ? correct[i] : parseInt(correct[i], 10);
+              const right = rightIdx >= 0 && rightItemsFull[rightIdx] != null ? String(rightItemsFull[rightIdx]).trim() : '';
+              return right ? [left, right] : null;
+            })
+            .filter(Boolean);
+          questionData.matchRightOptions = rightItemsFull.filter(Boolean);
+        } else {
+          questionData.answerKeyMatch = (formData.answerKeyMatch || []).map(item =>
+            Array.isArray(item) ? [String(item[0] ?? '').trim(), String(item[1] ?? '').trim()] : [String(item.left ?? '').trim(), String(item.right ?? '').trim()]
+          ).filter(([l, r]) => l && r);
+        }
       } else if (normalizedQType === 'reorder') {
         questionData.answerKeyReorder = formData.answerKeyReorder;
       } else if (normalizedQType === 'interactive_text') {
@@ -1927,45 +2020,52 @@ function EditQuestion() {
             </div>
           )}
 
-          {/* Match Pairs */}
-          {formData.qType === 'match' && (
-            <div className="form-group">
-              <label>أزواج المطابقة *</label>
-              {formData.answerKeyMatch.map((pair, index) => (
-                <div key={index} className="option-item">
-                  <input
-                    type="text"
-                    value={pair.left}
-                    onChange={(e) => handleUpdateMatchPair(index, 'left', e.target.value)}
-                    placeholder={`اليسار ${index + 1}`}
-                  />
-                  <span style={{ margin: '0 8px' }}>↔</span>
-                  <input
-                    type="text"
-                    value={pair.right}
-                    onChange={(e) => handleUpdateMatchPair(index, 'right', e.target.value)}
-                    placeholder={`اليمين ${index + 1}`}
-                  />
-                  {formData.answerKeyMatch.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMatchPair(index)}
-                      className="remove-btn"
-                    >
-                      حذف
-                    </button>
-                  )}
+          {/* Match - مرن: عدد اليسار ≠ عدد اليمين */}
+          {formData.qType === 'match' && (() => {
+            const { leftItems, rightItems, correct } = getMatchState();
+            return (
+              <div className="form-group">
+                <label>توصيل (Match) — عدد اليسار واليمين مرن *</label>
+                <small style={{ display: 'block', marginBottom: 8, color: '#64748b' }}>يمكن أن يكون في اليمين عناصر إضافية (مضللة). حدد التوصيل الصحيح لكل عنصر يسار.</small>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليسار</label>
+                    {leftItems.map((val, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <input type="text" value={val} onChange={(e) => handleUpdateMatchLeft(i, e.target.value)} placeholder={`يسار ${i + 1}`} style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }} />
+                        {leftItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchLeft(i)} className="remove-btn">حذف</button>}
+                      </div>
+                    ))}
+                    <button type="button" onClick={handleAddMatchLeft} className="add-btn">+ عنصر يسار</button>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليمين (صحيح + مضللة)</label>
+                    {rightItems.map((val, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <input type="text" value={val} onChange={(e) => handleUpdateMatchRight(i, e.target.value)} placeholder={`يمين ${i + 1}`} style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }} />
+                        {rightItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchRight(i)} className="remove-btn">حذف</button>}
+                      </div>
+                    ))}
+                    <button type="button" onClick={handleAddMatchRight} className="add-btn">+ عنصر يمين</button>
+                  </div>
                 </div>
-              ))}
-              <button
-                type="button"
-                onClick={handleAddMatchPair}
-                className="add-btn"
-              >
-                + إضافة زوج
-              </button>
-            </div>
-          )}
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>التوصيل الصحيح (كل يسار → أي يمين؟)</label>
+                  {leftItems.map((_, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, color: '#64748b', minWidth: 70 }}>يسار {i + 1}</span>
+                      <span>→</span>
+                      <select value={correct[i] ?? 0} onChange={(e) => handleUpdateMatchCorrect(i, e.target.value)} style={{ flex: 1, maxWidth: 240, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                        {rightItems.map((r, ri) => (
+                          <option key={ri} value={ri}>{r.trim() || `(يمين ${ri + 1})`}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Reorder Items */}
           {formData.qType === 'reorder' && (

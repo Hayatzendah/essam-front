@@ -1,14 +1,16 @@
 import React from 'react';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 /**
  * ExercisesList - قائمة التمارين لقسم معين
  * يعرض بطاقات التمارين مع التقدم ومعلومات الصوت
  */
 function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemIndex }) {
+  const t = useTranslation();
   if (!exercises || exercises.length === 0) {
     return (
       <div className="text-center text-slate-500 text-sm bg-slate-50 border border-slate-200 rounded-xl py-8 mb-6">
-        لا توجد تمارين في هذا القسم
+        {t('exam_noExercisesInSection')}
       </div>
     );
   }
@@ -31,7 +33,7 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
           <button
             key={exercise.exerciseIndex ?? exercise.exerciseNumber ?? exercise.listeningClipId}
             onClick={() => onSelectExercise(exercise)}
-            className="w-full text-right bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-5 hover:border-red-200 hover:shadow-md transition-all"
+            className="w-full text-left bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-5 hover:border-red-200 hover:shadow-md transition-all"
           >
             <div className="flex items-center gap-3 sm:gap-4">
               {/* دائرة التقدم */}
@@ -58,25 +60,25 @@ function ExercisesList({ exercises, onSelectExercise, answers, questionIdToItemI
               {/* معلومات التمرين */}
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
-                  Übung {exercise.exerciseIndex ?? exercise.exerciseNumber}
+                  {t('exam_exercise')} {exercise.exerciseIndex ?? exercise.exerciseNumber}
                 </h3>
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-xs text-slate-500">
-                    {answeredCount}/{total} سؤال
+                    {answeredCount} {t('exam_of')} {total} {total === 1 ? t('exam_question') : t('exam_questions')}
                   </span>
                   {exercise.audioUrl && (
                     <span className="text-xs text-blue-500 flex items-center gap-1">
-                      🎧 صوت
+                      🎧 {t('exam_audio')}
                     </span>
                   )}
                   {(exercise.readingPassage || (exercise.readingCards && exercise.readingCards.length > 0)) && (
                     <span className="text-xs text-amber-600 flex items-center gap-1">
-                      📖 فقرة
+                      📖 Text
                     </span>
                   )}
                   {exercise.contentBlocks && exercise.contentBlocks.length > 0 && (
                     <span className="text-xs text-green-600 flex items-center gap-1">
-                      🗣 محتوى
+                      🗣 {t('exam_content')}
                     </span>
                   )}
                 </div>

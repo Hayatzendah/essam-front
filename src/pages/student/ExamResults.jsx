@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
+import { BRAND } from '../../constants/brand';
+import { useLanguage, useTranslation } from '../../contexts/LanguageContext';
 
 function ExamResults() {
   const navigate = useNavigate();
   const { attemptId } = useParams();
+  const { lang } = useLanguage();
+  const t = useTranslation();
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(null);
   const [error, setError] = useState('');
@@ -23,7 +27,7 @@ function ExamResults() {
       console.log('📊 Attempt results (full):', JSON.stringify(attemptData, null, 2));
 
       if (!attemptData) {
-        throw new Error('لم يتم إرجاع بيانات المحاولة');
+        throw new Error(t('results_noAttemptData'));
       }
 
       // استخراج بيانات الأسئلة من questionSnapshot
@@ -52,31 +56,8 @@ function ExamResults() {
           };
         });
         
-        // ✅ إزالة التكرارات من formattedItems (خاصة لأسئلة الاستماع)
-        // استخدام Set لتتبع الأسئلة الفريدة بناءً على questionId أو id
-        const seenQuestions = new Set();
-        const uniqueItems = formattedItems.filter((item, idx) => {
-          const questionId = item.questionId || item.id || item._id || item.question?.id || item.question?._id || item.questionSnapshot?.id || item.questionSnapshot?._id;
-          const uniqueId = questionId ? `q-${questionId}` : `idx-${idx}`;
-          
-          if (seenQuestions.has(uniqueId)) {
-            console.warn(`⚠️ Duplicate question detected at index ${idx}:`, {
-              questionId,
-              uniqueId,
-              prompt: item.prompt || item.text,
-              item
-            });
-            return false; // إزالة السؤال المكرر
-          }
-          
-          seenQuestions.add(uniqueId);
-          return true;
-        });
-        
-        console.log(`✅ Removed ${formattedItems.length - uniqueItems.length} duplicate questions from results`);
-        console.log(`✅ Total unique questions in results: ${uniqueItems.length}`);
-        
-        attemptData.items = uniqueItems;
+        // عرض كل الأسئلة المرسلة من الباكند (بدون إزالة حسب questionId حتى تظهر كل الإجابات في النتائج)
+        attemptData.items = formattedItems;
       }
 
       setAttempt(attemptData);
@@ -85,7 +66,7 @@ function ExamResults() {
       setError(
         err.response?.data?.message ||
         err.response?.data?.error ||
-        'حدث خطأ أثناء تحميل النتائج'
+        t('results_errorLoad')
       );
     } finally {
       setLoading(false);
@@ -96,8 +77,8 @@ function ExamResults() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mb-4"></div>
-          <p className="text-sm text-slate-600">جاري تحميل النتائج...</p>
+          <div className="inline-block w-12 h-12 border-4 border-slate-200 rounded-full animate-spin mb-4" style={{ borderTopColor: BRAND.red }}></div>
+          <p className="text-base text-slate-600 font-medium">{t('results_loading')}</p>
         </div>
       </div>
     );
@@ -109,12 +90,12 @@ function ExamResults() {
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
             <div className="text-5xl mb-4">❌</div>
-            <p className="text-rose-600 text-sm mb-6">{error || 'لا توجد بيانات للنتائج'}</p>
+            <p className="text-base mb-6 font-medium" style={{ color: BRAND.red }}>{error || t('results_noData')}</p>
             <button
               onClick={() => navigate('/student/liden')}
-              className="px-6 py-2.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm font-semibold"
+              className="px-6 py-3 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 transition-colors text-base font-semibold"
             >
-              العودة
+              {t('results_back')}
             </button>
           </div>
         </div>
@@ -245,87 +226,83 @@ function ExamResults() {
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={() => navigate(-1)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            className="text-base text-slate-500 hover:text-slate-700 transition-colors font-medium"
           >
-            ← رجوع
+            ← {t('results_back')}
           </button>
-          <span className="text-xs font-semibold text-rose-500">
-            نتيجة الامتحان
+          <span className="text-base font-semibold" style={{ color: BRAND.red }}>
+            {t('results_examResult')}
           </span>
         </div>
 
-        {/* عنوان */}
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-900 mb-1">
-            {attempt.exam?.title || 'امتحان'}
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+            {attempt.exam?.title || t('exam_exam')}
           </h1>
-          <p className="text-sm text-slate-600">
-            مراجعة النتيجة والإجابات
+          <p className="text-base sm:text-lg text-slate-600">
+            {t('results_reviewResult')}
           </p>
         </div>
 
         {/* بطاقة النتيجة */}
-        <div className={`bg-white rounded-2xl shadow-sm border-2 p-8 mb-6 ${
-          isPassed ? 'border-emerald-200' : 'border-rose-200'
-        }`}>
-          <div className="text-center mb-6">
-            <div className="text-5xl mb-3">
+        <div className={`bg-white rounded-2xl shadow-sm border-2 p-8 sm:p-10 mb-6 ${
+          isPassed ? 'border-emerald-200' : ''
+        }`} style={!isPassed ? { borderColor: BRAND.red } : {}}>
+          <div className="text-center mb-8">
+            <div className="text-6xl mb-4">
               {isPassed ? '🎉' : '📝'}
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">
-              {isPassed ? 'أحسنت! نجحت في الامتحان' : 'انتهى الامتحان'}
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">
+              {isPassed ? t('results_passed') : t('results_examFinished')}
             </h2>
-            <p className="text-sm text-slate-600">
+            <p className="text-base sm:text-lg text-slate-600 max-w-xl mx-auto">
               {isLebenExam 
-                ? (isPassed ? `نجحت! حصلت على ${correctCount} من 33 (الحد الأدنى للنجاح: 17)` : `حصلت على ${correctCount} من 33 (الحد الأدنى للنجاح: 17)`)
-                : (isPassed ? 'استمري في التقدم الرائع' : 'يمكنك مراجعة الأسئلة والمحاولة مرة أخرى')
+                ? (isPassed ? `${t('results_passedPrefix')} ${t('results_youHave')} ${correctCount} ${t('exam_of')} 33 (${t('results_minScoreLabel')}: 17)` : `${t('results_youHave')} ${correctCount} ${t('exam_of')} 33 (${t('results_minScoreLabel')}: 17)`)
+                : (isPassed ? t('results_wellDone') : t('results_tryAgain'))
               }
             </p>
           </div>
 
           {/* الإحصائيات */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             {/* النسبة المئوية */}
             <div className="md:col-span-1 flex items-center justify-center">
-              <div className={`w-28 h-28 rounded-full flex flex-col items-center justify-center ${
-                isPassed ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-rose-50 border-2 border-rose-200'
-              }`}>
-                <div className={`text-3xl font-bold ${isPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <div className={`w-32 h-32 rounded-full flex flex-col items-center justify-center ${
+                isPassed ? 'bg-emerald-50 border-2 border-emerald-200' : ''
+              }`} style={!isPassed ? { backgroundColor: 'rgba(221, 0, 0, 0.08)', borderWidth: 2, borderColor: BRAND.red } : {}}>
+                <div className={`text-4xl font-bold ${isPassed ? 'text-emerald-600' : ''}`} style={!isPassed ? { color: BRAND.red } : {}}>
                   {percentage}%
                 </div>
-                <div className="text-xs text-slate-500 mt-1">النسبة</div>
+                <div className="text-sm text-slate-500 mt-1 font-medium">{t('results_percent')}</div>
               </div>
             </div>
 
             {/* التفاصيل */}
-            <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                <div className="text-xs text-slate-500 mb-1">الدرجة الكلية</div>
-                <div className="text-2xl font-bold text-slate-900">{finalScore} / {totalMaxScore}</div>
+            <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
+                <div className="text-sm text-slate-500 mb-2 font-medium">{t('results_totalScore')}</div>
+                <div className="text-3xl font-bold text-slate-900">{finalScore} {t('exam_of')} {totalMaxScore}</div>
               </div>
 
-              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                <div className="text-xs text-emerald-700 mb-1">إجابات صحيحة</div>
-                <div className="text-2xl font-bold text-emerald-600">{correctCount}</div>
+              <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100">
+                <div className="text-sm text-emerald-700 mb-2 font-medium">{t('exam_correct')}</div>
+                <div className="text-3xl font-bold text-emerald-600">{correctCount}</div>
               </div>
 
-              <div className="bg-rose-50 rounded-xl p-4 border border-rose-100">
-                <div className="text-xs text-rose-700 mb-1">إجابات خاطئة</div>
-                <div className="text-2xl font-bold text-rose-600">{wrongCount}</div>
+              <div className="rounded-xl p-5 border" style={{ backgroundColor: 'rgba(221, 0, 0, 0.06)', borderColor: 'rgba(221, 0, 0, 0.25)' }}>
+                <div className="text-sm font-medium mb-2" style={{ color: BRAND.red }}>{t('exam_incorrect')}</div>
+                <div className="text-3xl font-bold" style={{ color: BRAND.red }}>{wrongCount}</div>
               </div>
             </div>
           </div>
 
           {/* تاريخ التسليم */}
           {attempt.submittedAt && (
-            <div className="text-center text-xs text-slate-400 mt-6 pt-6 border-t border-slate-100">
-              تم التسليم في: {new Date(attempt.submittedAt).toLocaleString('ar-SA', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+            <div className="text-center text-sm text-slate-400 mt-8 pt-6 border-t border-slate-100">
+              {t('results_submittedOn')} {new Date(attempt.submittedAt).toLocaleString(
+                lang === 'fr' ? 'fr-FR' : lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : lang === 'uk' ? 'uk-UA' : lang === 'tr' ? 'tr-TR' : 'en-GB',
+                { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+              )}
             </div>
           )}
         </div>
@@ -333,13 +310,13 @@ function ExamResults() {
         {/* مراجعة الأسئلة */}
         {attempt.items && attempt.items.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">
-              مراجعة الأسئلة
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-5">
+              {t('results_reviewQuestions')}
             </h3>
 
             <div className="space-y-4">
               {attempt.items.map((item, index) => {
-                const prompt = item.promptSnapshot || item.prompt || item.text || 'السؤال';
+                const prompt = item.promptSnapshot || item.prompt || item.text || t('exam_question');
                 const qType = item.qType || item.type;
                 const options = item.optionsText || item.options || [];
                 const points = item.autoScore || item.points || 0;
@@ -401,33 +378,33 @@ function ExamResults() {
                     {/* رأس السؤال */}
                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded">
-                          سؤال {index + 1}
+                        <span className="text-sm font-semibold px-2.5 py-1 rounded" style={{ backgroundColor: 'rgba(221, 0, 0, 0.12)', color: BRAND.red }}>
+                          {t('exam_question')} {index + 1}
                         </span>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                        <span className={`text-sm font-semibold px-2.5 py-1 rounded ${
                           isCorrect === null
                             ? 'bg-amber-100 text-amber-700'
                             : isCorrect
                             ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-rose-100 text-rose-700'
-                        }`}>
+                            : ''
+                        }`} style={isCorrect === false ? { backgroundColor: 'rgba(221, 0, 0, 0.12)', color: BRAND.red } : {}}>
                           {isCorrect === null 
-                            ? '⏳ بانتظار التقييم' 
+                            ? `⏳ ${t('results_pending')}` 
                             : isCorrect 
-                            ? '✓ صحيح' 
-                            : '✗ خطأ'}
+                            ? `✓ ${t('exam_correct')}`
+                            : `✗ ${t('exam_incorrect')}`}
                         </span>
                       </div>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-sm text-slate-500 font-medium">
                         {needsManualGrading 
-                          ? 'بانتظار التقييم' 
-                          : `${points} / ${maxPoints} نقطة`}
+                          ? t('results_pending') 
+                          : `${isCorrect ? points : 0} ${t('exam_of')} ${maxPoints} ${maxPoints !== 1 ? t('exam_points') : t('exam_point')}`}
                       </span>
                     </div>
 
                     {/* نص السؤال */}
                     <div className="mb-4" dir="ltr">
-                      <h4 className="text-base font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap text-left">
+                      <h4 className="text-lg font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap text-left">
                         {prompt}
                       </h4>
                     </div>
@@ -522,7 +499,7 @@ function ExamResults() {
                             {/* عرض ترتيب الطالب */}
                             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                               <div className="text-sm font-semibold text-slate-700 mb-3">
-                                ترتيبك:
+                                {t('exam_yourOrder')}
                               </div>
                               <div className="space-y-2">
                                 {studentOrderedParts.map((part, partIndex) => {
@@ -533,14 +510,14 @@ function ExamResults() {
                                       className={`p-3 rounded-lg border-2 ${
                                         isInCorrectPosition
                                           ? 'bg-emerald-50 border-emerald-200'
-                                          : 'bg-rose-50 border-rose-200'
+                                          : 'bg-red-50 border-red-200'
                                       }`}
                                     >
                                       <div className="flex items-center gap-3">
                                         <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                                           isInCorrectPosition
                                             ? 'bg-emerald-200 text-emerald-800'
-                                            : 'bg-rose-200 text-rose-800'
+                                            : 'bg-red-200 text-red-800'
                                         }`}>
                                           {partIndex + 1}
                                         </div>
@@ -549,11 +526,11 @@ function ExamResults() {
                                         </div>
                                         {isInCorrectPosition ? (
                                           <span className="text-xs text-emerald-600 font-semibold">
-                                            ✓ صحيح
+                                            ✓ {t('exam_correct')}
                                           </span>
                                         ) : (
-                                          <span className="text-xs text-rose-600 font-semibold">
-                                            ✗ خطأ
+                                          <span className="text-xs text-red-600 font-semibold">
+                                            ✗ {t('exam_incorrect')}
                                           </span>
                                         )}
                                       </div>
@@ -567,7 +544,7 @@ function ExamResults() {
                             {!isCorrect && (
                               <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
                                 <div className="text-sm font-semibold text-emerald-700 mb-3">
-                                  الترتيب الصحيح:
+                                  {t('exam_correctOrder')}
                                 </div>
                                 <div className="space-y-2">
                                   {correctOrderedParts.map((part, partIndex) => (
@@ -690,7 +667,7 @@ function ExamResults() {
                       
                       return (
                         <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                          <div className="text-sm font-semibold text-slate-700 mb-3">النص مع الإجابات:</div>
+                          <div className="text-sm font-semibold text-slate-700 mb-3">{t('exam_textWithAnswers')}</div>
                           <div className="text-base text-slate-900 leading-relaxed" dir="ltr">
                             <div className="inline-flex flex-wrap items-center gap-1">
                               {parts.map((part, partIndex) => {
@@ -723,16 +700,16 @@ function ExamResults() {
                                       <span className={`px-2 py-1 rounded border font-medium ${
                                         isCorrect
                                           ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
-                                          : 'bg-rose-100 border-rose-300 text-rose-800'
+                                          : 'bg-red-100 border-red-300 text-red-800'
                                       }`}>
                                         {studentAnswer}
                                       </span>
                                       {isCorrect ? (
                                         <span className="text-xs text-emerald-600 font-semibold">
-                                          ✓ صحيح
+                                          ✓ {t('exam_correct')}
                                         </span>
                                       ) : correctAnswers.length > 0 && (
-                                        <span className="text-xs text-emerald-600" title={`الإجابة الصحيحة: ${correctAnswers.join(' أو ')}`}>
+                                        <span className="text-xs text-emerald-600" title={`${t('life_solution')}: ${correctAnswers.join(` ${t('exam_or')} `)}`}>
                                           (✓ {correctAnswers[0]})
                                         </span>
                                       )}
@@ -764,7 +741,7 @@ function ExamResults() {
                                 isSelected && isCorrectAnswer
                                   ? 'bg-emerald-50 border-emerald-200'
                                   : isSelected && !isCorrectAnswer
-                                  ? 'bg-rose-50 border-rose-200'
+                                  ? 'bg-red-50 border-red-200'
                                   : isCorrectAnswer && !isSelected
                                   ? 'bg-emerald-50 border-emerald-200 border-dashed'
                                   : 'bg-slate-50 border-slate-100'
@@ -774,7 +751,7 @@ function ExamResults() {
                                 isSelected
                                   ? isCorrectAnswer
                                     ? 'border-emerald-500 bg-emerald-500'
-                                    : 'border-rose-500 bg-rose-500'
+                                    : 'border-red-500 bg-red-500'
                                   : isCorrectAnswer
                                   ? 'border-emerald-400'
                                   : 'border-slate-300'
@@ -793,14 +770,14 @@ function ExamResults() {
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
                                   isCorrectAnswer
                                     ? 'bg-emerald-200 text-emerald-700'
-                                    : 'bg-rose-200 text-rose-700'
+                                    : 'bg-red-200 text-red-700'
                                 }`}>
-                                  إجابتك
+                                  {t('exam_yourAnswer')}
                                 </span>
                               )}
                               {isCorrectAnswer && !isSelected && (
                                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-200 text-emerald-700">
-                                  الإجابة الصحيحة
+                                  {t('life_solution')}
                                 </span>
                               )}
                             </div>
@@ -813,15 +790,15 @@ function ExamResults() {
                     {(qType === 'true_false' || qType === 'true/false') && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <span className="text-sm text-slate-600">إجابتك:</span>
+                          <span className="text-sm text-slate-600">{t('exam_yourAnswer')}:</span>
                           <span className="text-sm font-semibold text-slate-900">
-                            {item.studentAnswerBoolean === true ? 'صحيح' : 'خطأ'}
+                            {item.studentAnswerBoolean === true ? t('exam_correct') : t('exam_incorrect')}
                           </span>
                         </div>
                         <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                          <span className="text-sm text-emerald-700">الإجابة الصحيحة:</span>
+                          <span className="text-sm text-emerald-700">{t('life_solution')}:</span>
                           <span className="text-sm font-semibold text-emerald-700">
-                            {item.answerKeyBoolean === true ? 'صحيح' : 'خطأ'}
+                            {item.answerKeyBoolean === true ? t('exam_correct') : t('exam_incorrect')}
                           </span>
                         </div>
                       </div>
@@ -831,13 +808,13 @@ function ExamResults() {
                     {(qType === 'fill' || qType === 'fill-in') && (
                       <div className="space-y-2">
                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <div className="text-xs text-slate-500 mb-1">إجابتك:</div>
+                          <div className="text-xs text-slate-500 mb-1">{t('exam_yourAnswer')}:</div>
                           <div className="text-sm font-semibold text-slate-900">
-                            {item.studentAnswerText || '(لم يتم الإجابة)'}
+                            {item.studentAnswerText || `(${t('exam_notAnswered')})`}
                           </div>
                         </div>
                         <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                          <div className="text-xs text-emerald-700 mb-1">الإجابة الصحيحة:</div>
+                          <div className="text-xs text-emerald-700 mb-1">{t('life_solution')}:</div>
                           <div className="text-sm font-semibold text-emerald-700">
                             {item.fillExact || item.answerKeyText || '-'}
                           </div>
@@ -883,7 +860,7 @@ function ExamResults() {
                         return (
                           <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                             <div className="text-xs text-yellow-800">
-                              ⚠️ لا توجد أزواج مطابقة متاحة للعرض
+                              ⚠️ {t('exam_noMatchPairs')}
                             </div>
                           </div>
                         );
@@ -892,7 +869,7 @@ function ExamResults() {
                       return (
                         <div className="space-y-3">
                           <div className="text-xs font-semibold text-slate-700 mb-2">
-                            أزواج المطابقة:
+                            {t('exam_matchPairs')}
                           </div>
                           {pairs.map((pair, pairIndex) => {
                             // ✅ قراءة إجابة الطالب (قد تكون object أو array)
@@ -939,7 +916,7 @@ function ExamResults() {
                                 className={`p-3 rounded-lg border ${
                                   isCorrect
                                     ? 'bg-emerald-50 border-emerald-200'
-                                    : 'bg-rose-50 border-rose-200'
+                                    : 'bg-red-50 border-red-200'
                                 }`}
                               >
                                 <div className="flex items-center gap-3 mb-2">
@@ -948,22 +925,22 @@ function ExamResults() {
                                   </span>
                                   <span className="text-slate-400">→</span>
                                   <span className={`text-sm font-semibold flex-1 ${
-                                    isCorrect ? 'text-emerald-700' : 'text-rose-700'
+                                    isCorrect ? 'text-emerald-700' : 'text-red-700'
                                   }`}>
-                                    {studentAnswer || '(لم يتم الإجابة)'}
+                                    {studentAnswer || `(${t('exam_notAnswered')})`}
                                   </span>
                                 </div>
                                 {!isCorrect && (
                                   <div className="mt-2 pt-2 border-t border-emerald-200">
                                     <div className="text-xs text-emerald-700">
-                                      الإجابة الصحيحة: <span className="font-semibold">{correctAnswer}</span>
+                                      {t('life_solution')}: <span className="font-semibold">{correctAnswer}</span>
                                     </div>
                                   </div>
                                 )}
                                 {isCorrect && (
                                   <div className="mt-2 pt-2 border-t border-emerald-200">
                                     <div className="text-xs text-emerald-700 font-semibold">
-                                      ✓ إجابة صحيحة
+                                      ✓ {t('exam_correct')}
                                     </div>
                                   </div>
                                 )}
@@ -978,16 +955,16 @@ function ExamResults() {
                     {qType === 'free_text' && (
                       <div className="space-y-2">
                         <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <div className="text-xs text-slate-500 mb-2 font-semibold">إجابتك النصية:</div>
+                          <div className="text-xs text-slate-500 mb-2 font-semibold">{t('exam_yourTextAnswer')}</div>
                           <div className="text-sm text-slate-900 whitespace-pre-wrap leading-relaxed">
-                            {item.textAnswer || item.studentAnswerText || '(لم تكتب إجابة)'}
+                            {item.textAnswer || item.studentAnswerText || `(${t('results_noAnswer')})`}
                           </div>
                         </div>
                         <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                           <div className="flex items-center gap-2">
                             <span className="text-amber-600">⚠️</span>
                             <span className="text-xs font-semibold text-amber-800">
-                              سيتم تقييم هذا السؤال يدويًا من قبل المعلم
+                              {t('results_manuallyGraded')}
                             </span>
                           </div>
                         </div>
@@ -998,7 +975,7 @@ function ExamResults() {
                     {qType === 'speaking' && (
                       <div className="space-y-2">
                         <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <div className="text-xs text-slate-500 mb-2 font-semibold">إجابتك الصوتية:</div>
+                          <div className="text-xs text-slate-500 mb-2 font-semibold">{t('exam_yourAudioAnswer')}</div>
                           {(() => {
                             const audioUrl = item.audioAnswerUrl || item.studentAudioAnswerUrl || item.audioAnswer || item.studentAudioAnswer || item.studentRecording?.url;
                             
@@ -1009,7 +986,7 @@ function ExamResults() {
                                 className="w-full"
                               />
                             ) : (
-                              <div className="text-sm text-slate-500 italic">(لم يتم تسجيل إجابة صوتية)</div>
+                              <div className="text-sm text-slate-500 italic">{t('results_noAudio')}</div>
                             );
                           })()}
                         </div>
@@ -1017,7 +994,7 @@ function ExamResults() {
                           <div className="flex items-center gap-2">
                             <span className="text-amber-600">⚠️</span>
                             <span className="text-xs font-semibold text-amber-800">
-                              سيتم تقييم هذا السؤال يدويًا من قبل المعلم
+                              {t('results_manuallyGraded')}
                             </span>
                           </div>
                         </div>
@@ -1033,17 +1010,17 @@ function ExamResults() {
         {/* نتائج نموذج الكتابة (Schreiben) */}
         {attempt.schreibenFormResults && Object.keys(attempt.schreibenFormResults).length > 0 && (
           <div className="mb-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">
-              نتائج نموذج الكتابة
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-5">
+              {t('results_schreibenFormResults')}
             </h3>
 
             {/* درجة النموذج */}
             {(attempt.schreibenFormScore !== undefined || attempt.schreibenFormMaxScore !== undefined) && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-700">درجة النموذج</span>
-                  <span className="text-lg font-bold text-slate-900">
-                    {attempt.schreibenFormScore ?? 0} / {attempt.schreibenFormMaxScore ?? 0}
+                  <span className="text-base font-semibold text-slate-700">{t('results_formScore')}</span>
+                  <span className="text-2xl font-bold text-slate-900">
+                    {attempt.schreibenFormScore ?? 0} {t('exam_of')} {attempt.schreibenFormMaxScore ?? 0}
                   </span>
                 </div>
               </div>
@@ -1056,39 +1033,39 @@ function ExamResults() {
                   className={`bg-white rounded-2xl shadow-sm border-2 p-5 ${
                     result.isCorrect
                       ? 'border-emerald-200'
-                      : 'border-rose-200'
-                  }`}
+                      : ''
+                  }`} style={!result.isCorrect ? { borderColor: BRAND.red } : {}}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-semibold text-slate-800 text-sm">
+                    <span className="font-semibold text-slate-800 text-base">
                       {result.label}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                      <span className={`text-sm font-semibold px-2.5 py-1 rounded ${
                         result.isCorrect
                           ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-rose-100 text-rose-700'
-                      }`}>
-                        {result.isCorrect ? '✓ صحيح' : '✗ خطأ'}
+                          : ''
+                      }`} style={!result.isCorrect ? { backgroundColor: 'rgba(221, 0, 0, 0.12)', color: BRAND.red } : {}}>
+                        {result.isCorrect ? `✓ ${t('exam_correct')}` : `✗ ${t('exam_incorrect')}`}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {result.points ?? 0} / 1
+                        {result.points ?? 0} {t('exam_of')} 1
                       </span>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-sm">
                     <div className="p-3 bg-slate-50 rounded-lg">
-                      <span className="text-xs text-slate-500 block mb-1">إجابتك:</span>
+                      <span className="text-xs text-slate-500 block mb-1">{t('exam_yourAnswer')}:</span>
                       <span className="text-slate-900 font-medium">
                         {Array.isArray(result.studentAnswer)
                           ? result.studentAnswer.join(', ')
-                          : (result.studentAnswer || '(لم يتم الإجابة)')}
+                          : (result.studentAnswer || `(${t('exam_notAnswered')})`)}
                       </span>
                     </div>
                     {!result.isCorrect && (
                       <div className="p-3 bg-emerald-50 rounded-lg">
-                        <span className="text-xs text-emerald-700 block mb-1">الإجابة الصحيحة:</span>
+                        <span className="text-xs text-emerald-700 block mb-1">{t('life_solution')}:</span>
                         <span className="text-emerald-800 font-medium">
                           {Array.isArray(result.correctAnswer)
                             ? result.correctAnswer.join(', ')
@@ -1108,9 +1085,10 @@ function ExamResults() {
           <div className="flex justify-center">
             <button
               onClick={() => navigate(-1)}
-              className="px-6 py-2.5 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-colors text-sm font-semibold"
+              className="px-8 py-3 text-white rounded-xl transition-colors text-base font-semibold shadow-md hover:opacity-90"
+              style={{ backgroundColor: BRAND.red }}
             >
-              حاول مرة أخرى
+              {t('results_tryAgainButton')}
             </button>
           </div>
         )}

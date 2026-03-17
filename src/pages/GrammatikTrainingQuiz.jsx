@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { getGrammatikTrainingQuizQuestions } from '../services/api';
-import confetti from 'canvas-confetti';
+import { BRAND } from '../constants/brand';
+import { useTranslation } from '../contexts/LanguageContext';
+import AppHeader from '../components/AppHeader';
+import AppFooter from '../components/AppFooter';
 
 function stripHtml(html) {
   if (!html || typeof html !== 'string') return '';
@@ -15,6 +18,7 @@ export default function GrammatikTrainingQuiz() {
   const [searchParams] = useSearchParams();
   const count = parseInt(searchParams.get('count') || '10', 10);
   const navigate = useNavigate();
+  const t = useTranslation();
   const isTopicMode = Boolean(examId);
 
   const [questions, setQuestions] = useState([]);
@@ -66,7 +70,7 @@ export default function GrammatikTrainingQuiz() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
-  // تهيئة Match/Reorder عند تغيير السؤال
+  // Match/Reorder init when question changes
   useEffect(() => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
@@ -146,26 +150,26 @@ export default function GrammatikTrainingQuiz() {
   }, []);
 
   const getCorrectAnswerText = (q) => {
-    const t = (q.qType || '').toLowerCase();
-    if (t === 'mcq' || t === 'multiple-choice') {
+    const qType = (q.qType || '').toLowerCase();
+    if (qType === 'mcq' || qType === 'multiple-choice') {
       const opts = q.options || [];
       const o = opts.find((x) => x && x.isCorrect);
       return o && o.text ? stripHtml(o.text) : '';
     }
-    if (t === 'true_false' || t === 'true-false') {
-      return q.answerKeyBoolean ? 'صحيح' : 'خطأ';
+    if (qType === 'true_false' || qType === 'true-false') {
+      return q.answerKeyBoolean ? t('grammar_true') : t('grammar_false');
     }
-    if (t === 'fill' || t === 'fill_blank') {
+    if (qType === 'fill' || qType === 'fill_blank') {
       const raw = q.fillExact;
-      if (Array.isArray(raw)) return raw.map((a) => String(a || '').trim()).filter(Boolean).join(' أو ');
+      if (Array.isArray(raw)) return raw.map((a) => String(a || '').trim()).filter(Boolean).join(` ${t('exam_or')} `);
       return String(raw || '').trim();
     }
-    if (t === 'match') {
+    if (qType === 'match') {
       const key = q.answerKeyMatch;
       if (!Array.isArray(key) || key.length === 0) return '';
-      return key.map(([a, b]) => `${a} ← → ${b}`).join(' ؛ ');
+      return key.map(([a, b]) => `${a} ← → ${b}`).join('; ');
     }
-    if (t === 'reorder') {
+    if (qType === 'reorder') {
       const key = q.answerKeyReorder;
       if (!Array.isArray(key) || key.length === 0) return '';
       return key.join(' ← ');
@@ -182,7 +186,6 @@ export default function GrammatikTrainingQuiz() {
     setPhase('feedback');
     if (correct) {
       setScore((prev) => prev + 1);
-      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       timerRef.current = setTimeout(goNext, 1800);
     } else {
       timerRef.current = setTimeout(goNext, 2800);
@@ -194,7 +197,7 @@ export default function GrammatikTrainingQuiz() {
     try {
       handleAnswer(fillInput);
     } catch (err) {
-      console.error('تحقق أكمل الفراغ:', err);
+      console.error('Fill check error:', err);
       setSelectedAnswer(fillInput);
       setIsCorrect(false);
       setPhase('feedback');
@@ -246,34 +249,41 @@ export default function GrammatikTrainingQuiz() {
 
   if (phase === 'loading') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-lime-200 border-t-lime-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-500">جاري تحميل الأسئلة...</p>
+      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+        <AppHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-slate-200 rounded-full animate-spin mx-auto mb-4" style={{ borderTopColor: BRAND.red }} />
+            <p className="text-slate-500 dark:text-slate-400">{t('loading')}</p>
+          </div>
         </div>
+        <AppFooter />
       </div>
     );
   }
 
   if (phase === 'finished') {
     const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-    const colorClass = pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-red-600';
+    const colorClass = pct >= 80 ? 'text-amber-600 dark:text-amber-400' : pct >= 50 ? 'text-amber-500' : 'text-red-600';
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="max-w-sm w-full mx-4 bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="text-6xl mb-4">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">النتيجة</h2>
-          <div className={`text-5xl font-bold mb-2 ${colorClass}`}>{score}/{total}</div>
-          <p className={`text-lg font-semibold mb-6 ${colorClass}`}>{pct}%</p>
-          <div className="space-y-3">
-            <button onClick={handleRetry} className="w-full py-3 bg-lime-600 hover:bg-lime-700 text-white rounded-xl font-medium transition">
-              إعادة الاختبار
-            </button>
-            <button onClick={() => navigate(isTopicMode ? `/grammatik-training/topic/${examId}` : '/grammatik-training')} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition">
-              {isTopicMode ? 'العودة للموضوع' : 'العودة للمستويات'}
-            </button>
+      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+        <AppHeader />
+        <div className="flex-1 flex items-center justify-center py-12 px-4">
+          <div className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-600 p-8 text-center">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{t('grammatikQuiz_result')}</h2>
+            <div className={`text-5xl font-bold mb-2 ${colorClass}`}>{score} {t('exam_of')} {total}</div>
+            <p className={`text-lg font-semibold mb-6 ${colorClass}`}>{pct}%</p>
+            <div className="space-y-3">
+              <button onClick={handleRetry} className="w-full py-3 text-white rounded-xl font-medium transition" style={{ background: BRAND.red }}>
+                {t('results_tryAgainButton')}
+              </button>
+              <button onClick={() => navigate(isTopicMode ? `/grammatik-training/topic/${examId}` : '/grammatik-training')} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 rounded-xl font-medium transition">
+                {isTopicMode ? t('grammatikQuiz_backToTopic') : t('grammatikQuiz_backToTopics')}
+              </button>
+            </div>
           </div>
         </div>
+        <AppFooter />
       </div>
     );
   }
@@ -289,19 +299,20 @@ export default function GrammatikTrainingQuiz() {
   const reorderComplete = isReorder && reorderItems.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+      <AppHeader />
+      <div className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <button onClick={() => navigate(isTopicMode ? `/grammatik-training/topic/${examId}` : '/grammatik-training')} className="text-base text-slate-500 hover:text-slate-700">✕ إنهاء</button>
-            <span className="text-base font-medium text-slate-600">سؤال {currentIndex + 1}/{total}</span>
+            <span className="text-base font-medium text-slate-600 dark:text-slate-400">{t('exam_question')} {currentIndex + 1} {t('exam_of')} {total}</span>
+            <button onClick={() => navigate(isTopicMode ? `/grammatik-training/topic/${examId}` : '/grammatik-training')} className="text-base text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">✕ {t('grammatikQuiz_end')}</button>
           </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div className="bg-lime-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+            <div className="h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%`, background: BRAND.red }} />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-600 p-8 mb-8">
           <p className="text-slate-700 font-medium mb-4 text-xl md:text-2xl leading-relaxed" dangerouslySetInnerHTML={{ __html: q?.prompt || '—' }} />
         </div>
 
@@ -314,11 +325,11 @@ export default function GrammatikTrainingQuiz() {
               const correctOptIdx = options.findIndex((o) => o && o.isCorrect);
               let btnClass = 'py-4 px-5 rounded-xl border-2 text-left font-medium text-lg md:text-xl transition ';
               if (phase === 'feedback') {
-                if (idx === correctOptIdx) btnClass += 'bg-green-100 border-green-500 text-green-800';
+                if (idx === correctOptIdx) btnClass += 'bg-green-100 border-green-500 text-green-800 dark:bg-green-900/30 dark:border-green-500 dark:text-green-200';
                 else if (isSelected && !isCorrect) btnClass += 'bg-red-100 border-red-500 text-red-800';
                 else btnClass += 'bg-slate-50 border-slate-200 text-slate-400';
               } else {
-                btnClass += 'bg-white border-lime-200 text-lime-800 hover:bg-lime-50 hover:border-lime-400 cursor-pointer';
+                btnClass += 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-900/20 dark:hover:border-red-400 cursor-pointer';
               }
               return (
                 <button
@@ -338,16 +349,16 @@ export default function GrammatikTrainingQuiz() {
         {isTrueFalse && (
           <div className="grid grid-cols-2 gap-4 mb-8">
             {[true, false].map((val) => {
-              const label = val ? 'صحيح' : 'خطأ';
+              const label = val ? t('grammar_true') : t('grammar_false');
               const isSelected = selectedAnswer === val;
               let btnClass = 'py-5 px-6 rounded-xl border-2 text-xl font-bold transition ';
               if (phase === 'feedback') {
                 const correct = q.answerKeyBoolean === true || q.answerKeyBoolean === 'true';
-                if (val === correct) btnClass += 'bg-green-100 border-green-500 text-green-700';
+                if (val === correct) btnClass += 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-200';
                 else if (isSelected) btnClass += 'bg-red-100 border-red-500 text-red-700';
                 else btnClass += 'bg-slate-50 border-slate-200 text-slate-400';
               } else {
-                btnClass += 'bg-white border-lime-200 text-lime-700 hover:bg-lime-50 hover:border-lime-400 cursor-pointer';
+                btnClass += 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-900/20 dark:hover:border-red-400 cursor-pointer';
               }
               return (
                 <button
@@ -376,14 +387,15 @@ export default function GrammatikTrainingQuiz() {
                   if (phase === 'question') handleFillSubmit();
                 }
               }}
-              placeholder="اكتب إجابتك..."
+              placeholder={t('grammatikQuiz_enterAnswer')}
               disabled={phase === 'feedback'}
-              className="w-full py-4 px-5 rounded-xl border-2 border-lime-200 text-slate-800 placeholder-slate-400 focus:border-lime-500 focus:ring-2 focus:ring-lime-200 text-lg md:text-xl"
+              className="w-full py-4 px-5 rounded-xl border-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:border-red-500 text-lg md:text-xl bg-white dark:bg-slate-800"
             />
             {phase === 'question' && (
               <button
                 type="button"
-                className="mt-4 w-full py-3 bg-lime-600 hover:bg-lime-700 active:scale-[0.98] text-white rounded-xl font-medium cursor-pointer select-none touch-manipulation"
+                className="mt-4 w-full py-3 active:scale-[0.98] text-white rounded-xl font-medium cursor-pointer select-none touch-manipulation"
+                style={{ background: BRAND.red }}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -391,7 +403,7 @@ export default function GrammatikTrainingQuiz() {
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                تحقق
+                {t('exam_check')}
               </button>
             )}
           </div>
@@ -410,9 +422,9 @@ export default function GrammatikTrainingQuiz() {
                     value={matchSelections[leftIdx] !== undefined && matchSelections[leftIdx] !== null ? String(matchSelections[leftIdx]) : ''}
                     onChange={(e) => setMatchSelections((prev) => ({ ...prev, [leftIdx]: e.target.value === '' ? null : parseInt(e.target.value, 10) }))}
                     disabled={phase === 'feedback'}
-                    className="flex-1 min-w-[140px] py-2 px-3 rounded-xl border-2 border-lime-200 text-slate-800 focus:border-lime-500"
+                    className="flex-1 min-w-[140px] py-2 px-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 focus:border-red-500"
                   >
-                    <option value="">اختر...</option>
+                    <option value="">Wählen...</option>
                     {matchRightItems.map((rightText, rightIdx) => (
                       <option key={rightIdx} value={String(rightIdx)}>{rightText}</option>
                     ))}
@@ -425,9 +437,10 @@ export default function GrammatikTrainingQuiz() {
                 type="button"
                 onClick={handleMatchSubmit}
                 disabled={!matchComplete}
-                className="w-full py-3 bg-lime-600 hover:bg-lime-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium"
+                className="w-full py-3 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition"
+              style={{ background: BRAND.red }}
               >
-                تحقق
+                {t('exam_check')}
               </button>
             )}
           </div>
@@ -456,28 +469,29 @@ export default function GrammatikTrainingQuiz() {
               ))}
             </div>
             {phase === 'question' && (
-              <button type="button" onClick={handleReorderSubmit} className="w-full py-3 bg-lime-600 hover:bg-lime-700 text-white rounded-xl font-medium">
-                تحقق
+              <button type="button" onClick={handleReorderSubmit} className="w-full py-3 text-white rounded-xl font-medium" style={{ background: BRAND.red }}>
+                {t('exam_check')}
               </button>
             )}
           </div>
         )}
 
         {!isMcq && !isTrueFalse && !isFill && !isMatch && !isReorder && (
-          <p className="text-slate-500 text-sm mb-8">نوع السؤال غير مدعوم في وضع التدريب السريع.</p>
+          <p className="text-slate-500 text-sm mb-8">{t('grammatikQuiz_questionTypeNotSupported')}</p>
         )}
 
         {phase === 'feedback' && (
           <div className="text-center">
-            <p className={`text-xl font-bold mb-3 ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-              {isCorrect ? 'صحيح! 🎉' : `خطأ — الإجابة الصحيحة: ${getCorrectAnswerText(q)}`}
+            <p className={`text-xl font-bold mb-3 ${isCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
+              {isCorrect ? t('grammatikQuiz_correct') : `${t('grammatikQuiz_incorrect')} ${getCorrectAnswerText(q)}`}
             </p>
-            <button type="button" onClick={goNext} className="px-6 py-2 bg-lime-600 hover:bg-lime-700 text-white rounded-lg font-medium transition">
-              التالي →
+            <button type="button" onClick={goNext} className="px-6 py-2 text-white rounded-lg font-medium transition" style={{ background: BRAND.red }}>
+              {t('exam_next')} →
             </button>
           </div>
         )}
       </div>
+      <AppFooter />
     </div>
   );
 }

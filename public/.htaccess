@@ -1,10 +1,15 @@
-# SPA fallback: عند الريفرش على أي مسار (مثل /grammatik/A1/...) يعيد السيرفر index.html
-# عشان React Router يقرأ المسار ويعرض الصفحة الصحيحة بدل صفحة بيضاء
+# SPA: إرجاع index.html فقط عندما المسار ليس ملفاً أو مجلداً موجوداً
+# حتى تُخدم ملفات الـ JS/CSS من مجلد assets بنوع MIME الصحيح
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  # لا تعيد كتابة طلبات الملفات والأدلة الموجودة فعلياً
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
+</IfModule>
+
+# ضمان MIME type صحيح لملفات JavaScript (بعض السيرفرات ترجع خطأ)
+<IfModule mod_mime.c>
+  AddType application/javascript .js
+  AddType text/css .css
 </IfModule>

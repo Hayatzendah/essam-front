@@ -53,6 +53,9 @@ function CreateQuestion() {
       { text: 'خطأ', isCorrect: false }
     ],
     answerKeyMatch: [{ left: '', right: '' }],
+    matchLeftItems: [''],
+    matchRightItems: ['', ''],
+    matchCorrect: [0],
     answerKeyReorder: [],
     points: 1,
     explanation: '',
@@ -591,6 +594,9 @@ function CreateQuestion() {
           updated.regexList = [];
         } else if (value === 'match') {
           updated.answerKeyMatch = [{ left: '', right: '' }];
+          updated.matchLeftItems = [''];
+          updated.matchRightItems = ['', ''];
+          updated.matchCorrect = [0];
         } else if (value === 'reorder') {
           updated.answerKeyReorder = [];
         } else if (value === 'free_text') {
@@ -735,28 +741,71 @@ function CreateQuestion() {
     }));
   };
 
-  // Handlers for match type
-  const handleAddMatchPair = () => {
-    setFormData((prev) => ({
-      ...prev,
-      answerKeyMatch: [...prev.answerKeyMatch, { left: '', right: '' }],
-    }));
+  // Match state helper (يسار/يمين مرن + توصيل صحيح)
+  const getMatchState = (fd = formData) => {
+    if (fd.matchLeftItems != null && fd.matchRightItems != null) {
+      return {
+        leftItems: fd.matchLeftItems.length ? fd.matchLeftItems : [''],
+        rightItems: fd.matchRightItems.length ? fd.matchRightItems : ['', ''],
+        correct: fd.matchCorrect || (fd.matchLeftItems || []).map((_, i) => i),
+      };
+    }
+    const pairs = fd.answerKeyMatch || [{ left: '', right: '' }];
+    return {
+      leftItems: pairs.map(p => p.left ?? ''),
+      rightItems: pairs.length ? [...pairs.map(p => p.right ?? ''), ''] : ['', ''],
+      correct: pairs.map((_, i) => i),
+    };
   };
 
-  const handleUpdateMatchPair = (index, field, value) => {
-    setFormData((prev) => ({
+  const handleAddMatchLeft = () => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    setFormData(prev => ({
       ...prev,
-      answerKeyMatch: prev.answerKeyMatch.map((pair, i) =>
-        i === index ? { ...pair, [field]: value } : pair
-      ),
+      matchLeftItems: [...leftItems, ''],
+      matchRightItems: rightItems,
+      matchCorrect: [...correct, Math.min(correct[correct.length - 1] ?? 0, rightItems.length - 1)],
     }));
   };
-
-  const handleRemoveMatchPair = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      answerKeyMatch: prev.answerKeyMatch.filter((_, i) => i !== index),
-    }));
+  const handleAddMatchRight = () => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: [...rightItems, ''], matchCorrect: correct }));
+  };
+  const handleUpdateMatchLeft = (idx, value) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...leftItems];
+    next[idx] = value;
+    setFormData(prev => ({ ...prev, matchLeftItems: next, matchRightItems: rightItems, matchCorrect: correct }));
+  };
+  const handleUpdateMatchRight = (idx, value) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...rightItems];
+    next[idx] = value;
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: next, matchCorrect: correct }));
+  };
+  const handleUpdateMatchCorrect = (leftIdx, rightIdx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    const next = [...correct];
+    next[leftIdx] = typeof rightIdx === 'number' ? rightIdx : parseInt(rightIdx, 10);
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: rightItems, matchCorrect: next }));
+  };
+  const handleRemoveMatchLeft = (idx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    if (leftItems.length <= 1) return;
+    const nextLeft = leftItems.filter((_, i) => i !== idx);
+    const nextCorrect = correct.filter((_, i) => i !== idx);
+    setFormData(prev => ({ ...prev, matchLeftItems: nextLeft, matchRightItems: rightItems, matchCorrect: nextCorrect }));
+  };
+  const handleRemoveMatchRight = (idx) => {
+    const { leftItems, rightItems, correct } = getMatchState();
+    if (rightItems.length <= 1) return;
+    const nextRight = rightItems.filter((_, i) => i !== idx);
+    const nextCorrect = correct.map(c => {
+      if (c === idx) return 0;
+      if (c > idx) return Math.min(c - 1, nextRight.length - 1);
+      return c;
+    });
+    setFormData(prev => ({ ...prev, matchLeftItems: leftItems, matchRightItems: nextRight, matchCorrect: nextCorrect }));
   };
 
   // Handlers for reorder type
@@ -1185,15 +1234,13 @@ function CreateQuestion() {
         return 'يجب إدخال الإجابة الصحيحة (fillExact) أو قائمة regex للأسئلة من نوع Fill';
       }
     } else if (questionData.qType === 'match') {
-      if (!questionData.answerKeyMatch || questionData.answerKeyMatch.length < 2) {
-        return 'يجب إضافة زوجين على الأقل للأسئلة من نوع Match';
-      }
-      const emptyPairs = questionData.answerKeyMatch.filter(
-        (pair) => !pair.left?.trim() || !pair.right?.trim()
-      );
-      if (emptyPairs.length > 0) {
-        return 'جميع أزواج المطابقة يجب أن تحتوي على قيم';
-      }
+      const lefts = (questionData.matchLeftItems || []).map(s => (s && s.trim ? s.trim() : String(s))).filter(Boolean);
+      const rights = (questionData.matchRightItems || []).map(s => (s && s.trim ? s.trim() : String(s))).filter(Boolean);
+      const correct = questionData.matchCorrect || [];
+      if (lefts.length < 1) return 'يجب إضافة عنصر واحد على الأقل في اليسار للأسئلة من نوع Match';
+      if (rights.length < 1) return 'يجب إضافة عنصر واحد على الأقل في اليمين للأسئلة من نوع Match';
+      const validPairs = lefts.filter((_, i) => correct[i] != null && rights[correct[i]]?.trim()).length;
+      if (validPairs < 1) return 'يجب تحديد التوصيل الصحيح (كل عنصر يسار → عنصر يمين)';
     } else if (questionData.qType === 'reorder') {
       if (!questionData.answerKeyReorder || questionData.answerKeyReorder.length < 2) {
         return 'يجب إضافة عنصرين على الأقل للأسئلة من نوع Reorder';
@@ -1493,14 +1540,24 @@ function CreateQuestion() {
         data.regexList = questionData.regexList.filter((regex) => regex?.trim());
       }
     } else if (questionData.qType === 'match') {
-      // ✅ تحويل answerKeyMatch من [{left, right}] إلى [[left, right]] (tuples)
-      data.answerKeyMatch = (questionData.answerKeyMatch ?? []).map((item) => {
-        // دعم كلا الشكلين (objects أو arrays) للتوافق
-        if (Array.isArray(item)) {
-          return [String(item[0] ?? '').trim(), String(item[1] ?? '').trim()];
-        }
-        return [String(item.left ?? '').trim(), String(item.right ?? '').trim()];
-      });
+      const lefts = (questionData.matchLeftItems || []).map(s => (s && s.trim ? s.trim() : String(s)).trim()).filter(Boolean);
+      const rights = (questionData.matchRightItems || []).map(s => (s && s.trim ? s.trim() : String(s)).trim()).filter(Boolean);
+      const correct = questionData.matchCorrect || [];
+      if (lefts.length && rights.length) {
+        data.answerKeyMatch = lefts
+          .map((left, i) => {
+            const rightIdx = correct[i];
+            const right = rightIdx != null && rights[rightIdx] ? rights[rightIdx] : '';
+            return right ? [left, right] : null;
+          })
+          .filter(Boolean);
+        data.matchRightOptions = rights;
+      } else {
+        data.answerKeyMatch = (questionData.answerKeyMatch ?? []).map((item) => {
+          if (Array.isArray(item)) return [String(item[0] ?? '').trim(), String(item[1] ?? '').trim()];
+          return [String(item.left ?? '').trim(), String(item.right ?? '').trim()];
+        }).filter(([l, r]) => l && r);
+      }
     } else if (questionData.qType === 'reorder') {
       data.answerKeyReorder = questionData.answerKeyReorder.filter((item) => item?.trim());
     } else if (questionData.qType === 'interactive_text') {
@@ -2468,47 +2525,52 @@ function CreateQuestion() {
                 </div>
               )}
 
-              {/* Match Pairs */}
-              {formData.qType === 'match' && (
-                <div className="form-group">
-                  <label>أزواج المطابقة *</label>
-                  {formData.answerKeyMatch.map((pair, index) => (
-                    <div key={index} className="option-item">
-                      <input
-                        type="text"
-                        value={pair.left}
-                        onChange={(e) => handleUpdateMatchPair(index, 'left', e.target.value)}
-                        placeholder={`اليسار ${index + 1}`}
-                        className="option-input"
-                      />
-                      <span style={{ margin: '0 8px' }}>↔</span>
-                      <input
-                        type="text"
-                        value={pair.right}
-                        onChange={(e) => handleUpdateMatchPair(index, 'right', e.target.value)}
-                        placeholder={`اليمين ${index + 1}`}
-                        className="option-input"
-                      />
-                      {formData.answerKeyMatch.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMatchPair(index)}
-                          className="remove-btn"
-                        >
-                          حذف
-                        </button>
-                      )}
+              {/* Match - مرن (يسار/يمين مستقلان + توصيل صحيح) */}
+              {formData.qType === 'match' && (() => {
+                const { leftItems, rightItems, correct } = getMatchState();
+                return (
+                  <div className="form-group">
+                    <label>توصيل (Match) — عدد اليسار واليمين مرن *</label>
+                    <small style={{ display: 'block', marginBottom: 8, color: '#64748b' }}>يمكن أن يكون في اليمين عناصر إضافية (مضللة). حدد التوصيل الصحيح لكل عنصر يسار.</small>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليسار</label>
+                        {leftItems.map((val, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <input type="text" value={val} onChange={(e) => handleUpdateMatchLeft(i, e.target.value)} placeholder={`يسار ${i + 1}`} className="option-input" style={{ flex: 1 }} />
+                            {leftItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchLeft(i)} className="remove-btn">حذف</button>}
+                          </div>
+                        ))}
+                        <button type="button" onClick={handleAddMatchLeft} className="add-option-btn">+ عنصر يسار</button>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليمين (صحيح + مضللة)</label>
+                        {rightItems.map((val, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <input type="text" value={val} onChange={(e) => handleUpdateMatchRight(i, e.target.value)} placeholder={`يمين ${i + 1}`} className="option-input" style={{ flex: 1 }} />
+                            {rightItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchRight(i)} className="remove-btn">حذف</button>}
+                          </div>
+                        ))}
+                        <button type="button" onClick={handleAddMatchRight} className="add-option-btn">+ عنصر يمين</button>
+                      </div>
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleAddMatchPair}
-                    className="add-option-btn"
-                  >
-                    + إضافة زوج
-                  </button>
-                </div>
-              )}
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>التوصيل الصحيح (كل يسار → أي يمين؟)</label>
+                      {leftItems.map((_, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, color: '#64748b', minWidth: 70 }}>يسار {i + 1}</span>
+                          <span>→</span>
+                          <select value={correct[i] ?? 0} onChange={(e) => handleUpdateMatchCorrect(i, e.target.value)} style={{ flex: 1, maxWidth: 240, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                            {rightItems.map((r, ri) => (
+                              <option key={ri} value={ri}>{r.trim() || `(يمين ${ri + 1})`}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Reorder Items */}
               {formData.qType === 'reorder' && (
@@ -3105,47 +3167,52 @@ function CreateQuestion() {
                 </div>
               )}
 
-              {/* Match Pairs */}
-              {formData.qType === 'match' && (
-                <div className="form-group">
-                  <label>أزواج المطابقة *</label>
-                  {formData.answerKeyMatch.map((pair, index) => (
-                    <div key={index} className="option-item">
-                      <input
-                        type="text"
-                        value={pair.left}
-                        onChange={(e) => handleUpdateMatchPair(index, 'left', e.target.value)}
-                        placeholder={`اليسار ${index + 1}`}
-                        className="option-input"
-                      />
-                      <span style={{ margin: '0 8px' }}>↔</span>
-                      <input
-                        type="text"
-                        value={pair.right}
-                        onChange={(e) => handleUpdateMatchPair(index, 'right', e.target.value)}
-                        placeholder={`اليمين ${index + 1}`}
-                        className="option-input"
-                      />
-                      {formData.answerKeyMatch.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMatchPair(index)}
-                          className="remove-btn"
-                        >
-                          حذف
-                        </button>
-                      )}
+              {/* Match - مرن (يسار/يمين مستقلان + توصيل صحيح) */}
+              {formData.qType === 'match' && (() => {
+                const { leftItems, rightItems, correct } = getMatchState();
+                return (
+                  <div className="form-group">
+                    <label>توصيل (Match) — عدد اليسار واليمين مرن *</label>
+                    <small style={{ display: 'block', marginBottom: 8, color: '#64748b' }}>يمكن أن يكون في اليمين عناصر إضافية (مضللة). حدد التوصيل الصحيح لكل عنصر يسار.</small>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليسار</label>
+                        {leftItems.map((val, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <input type="text" value={val} onChange={(e) => handleUpdateMatchLeft(i, e.target.value)} placeholder={`يسار ${i + 1}`} className="option-input" style={{ flex: 1 }} />
+                            {leftItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchLeft(i)} className="remove-btn">حذف</button>}
+                          </div>
+                        ))}
+                        <button type="button" onClick={handleAddMatchLeft} className="add-option-btn">+ عنصر يسار</button>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>عناصر اليمين (صحيح + مضللة)</label>
+                        {rightItems.map((val, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <input type="text" value={val} onChange={(e) => handleUpdateMatchRight(i, e.target.value)} placeholder={`يمين ${i + 1}`} className="option-input" style={{ flex: 1 }} />
+                            {rightItems.length > 1 && <button type="button" onClick={() => handleRemoveMatchRight(i)} className="remove-btn">حذف</button>}
+                          </div>
+                        ))}
+                        <button type="button" onClick={handleAddMatchRight} className="add-option-btn">+ عنصر يمين</button>
+                      </div>
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleAddMatchPair}
-                    className="add-option-btn"
-                  >
-                    + إضافة زوج
-                  </button>
-                </div>
-              )}
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>التوصيل الصحيح (كل يسار → أي يمين؟)</label>
+                      {leftItems.map((_, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, color: '#64748b', minWidth: 70 }}>يسار {i + 1}</span>
+                          <span>→</span>
+                          <select value={correct[i] ?? 0} onChange={(e) => handleUpdateMatchCorrect(i, e.target.value)} style={{ flex: 1, maxWidth: 240, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                            {rightItems.map((r, ri) => (
+                              <option key={ri} value={ri}>{r.trim() || `(يمين ${ri + 1})`}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Reorder Items */}
               {formData.qType === 'reorder' && (

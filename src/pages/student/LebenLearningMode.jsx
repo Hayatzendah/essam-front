@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { examsAPI } from '../../services/examsAPI';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 function LebenLearningMode() {
   const navigate = useNavigate();
   const location = useLocation();
+  const t = useTranslation();
   const { learningType, state } = location.state || {}; // 'general' أو 'state'
   
   const [questions, setQuestions] = useState([]);
@@ -86,7 +88,7 @@ function LebenLearningMode() {
           }
         }
       } else {
-        setError('نوع التعلم غير صحيح');
+        setError(t('life_invalidMode'));
         setLoading(false);
         return;
       }
@@ -104,7 +106,7 @@ function LebenLearningMode() {
       });
 
       if (formattedQuestions.length === 0) {
-        setError('لا توجد أسئلة متاحة');
+        setError(t('life_noQuestionsAvailable'));
         console.error('❌ No questions loaded');
       } else {
         console.log(`✅ Successfully loaded ${formattedQuestions.length} questions`);
@@ -121,11 +123,11 @@ function LebenLearningMode() {
       
       // ✅ معالجة خطأ 403 بشكل خاص
       if (err.response?.status === 403) {
-        setError('❌ خطأ 403: ليس لديك صلاحية للوصول. تأكد من أنك تستخدم endpoints التعلم الصحيحة');
+        setError('❌ Fehler 403: Keine Berechtigung. Bitte die richtigen Lern-Endpoints verwenden.');
       } else if (err.response?.status === 400) {
-        setError(err.response?.data?.message || 'خطأ في البيانات المرسلة. تأكد من أن limit <= 100');
+        setError(err.response?.data?.message || 'Ungültige Daten. Bitte limit ≤ 100 verwenden.');
       } else {
-        setError(err.response?.data?.message || 'حدث خطأ أثناء تحميل الأسئلة');
+        setError(err.response?.data?.message || t('life_loadingError'));
       }
     } finally {
       setLoading(false);
@@ -189,7 +191,7 @@ function LebenLearningMode() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-red-600 mb-4"></div>
-          <p className="text-slate-600">جاري تحميل الأسئلة...</p>
+          <p className="text-slate-600">{t('life_questionsLoading')}</p>
         </div>
       </div>
     );
@@ -200,12 +202,12 @@ function LebenLearningMode() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="max-w-md mx-auto px-4">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <p className="text-red-600 text-center mb-4">{error || 'لا توجد أسئلة متاحة'}</p>
+            <p className="text-red-600 text-center mb-4">{error || t('life_noQuestionsAvailable')}</p>
             <button
               onClick={() => navigate('/student/leben')}
               className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition"
             >
-              العودة للصفحة الرئيسية
+              {t('backToHome')}
             </button>
           </div>
         </div>
@@ -228,7 +230,7 @@ function LebenLearningMode() {
     return text;
   };
 
-  const questionText = formatQuestionText(currentQuestion.prompt || currentQuestion.text || 'السؤال');
+  const questionText = formatQuestionText(currentQuestion.prompt || currentQuestion.text || t('life_question'));
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -237,22 +239,21 @@ function LebenLearningMode() {
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={() => navigate('/student/leben')}
-            className="text-sm text-slate-500 hover:text-slate-700 transition"
+            className="text-base font-medium text-slate-500 hover:text-slate-700 transition"
           >
-            ← العودة
+            ← {t('life_back')}
           </button>
-          <div className="text-sm text-slate-600">
-            {learningType === 'general' ? 'تعلم الأسئلة العامة' : `تعلم أسئلة ${state}`}
+          <div className="text-base sm:text-lg font-medium text-slate-600">
+            {learningType === 'general' ? t('life_learnGeneralTitle') : t('life_learnStateTitle')}
           </div>
         </div>
 
-        {/* Progress Bar */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-slate-700">
-              السؤال {currentIndex + 1} من {questions.length}
+            <span className="text-base font-medium text-slate-700">
+              {currentIndex + 1} {t('life_progressOf')} {questions.length} {learningType === 'general' ? t('life_learnGeneralTitle') : t('life_learnStateTitle')}
             </span>
-            <span className="text-sm text-slate-500">
+            <span className="text-base text-slate-500">
               {Math.round(progress)}%
             </span>
           </div>
@@ -265,9 +266,9 @@ function LebenLearningMode() {
         </div>
 
         {/* Question Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-6">
           {/* Question Text */}
-          <h2 className="text-xl font-semibold text-slate-900 mb-6 text-left" dir="ltr">
+          <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-6 text-left leading-relaxed" dir="ltr">
             {questionText}
           </h2>
 
@@ -280,12 +281,12 @@ function LebenLearningMode() {
                   <div className="w-full bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center p-4">
                     <img
                       src={currentQuestion.images[0].url}
-                      alt={currentQuestion.images[0].description || 'Question Image'}
+                      alt={currentQuestion.images[0].description || t('life_questionImage')}
                       className="max-w-full max-h-96 rounded-lg object-contain"
                     />
                   </div>
                   {currentQuestion.images[0].description && (
-                    <p className="text-xs text-slate-600 mt-2 text-center font-medium">
+                    <p className="text-sm text-slate-600 mt-2 text-center font-medium">
                       {currentQuestion.images[0].description}
                     </p>
                   )}
@@ -298,7 +299,7 @@ function LebenLearningMode() {
                       <div className="w-full h-40 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center">
                         <img
                           src={img.url}
-                          alt={img.description || `Bild ${imgIndex + 1}`}
+                          alt={img.description || `${t('life_image')} ${imgIndex + 1}`}
                           className="max-w-full max-h-full rounded-lg object-contain"
                         />
                       </div>
@@ -317,7 +318,7 @@ function LebenLearningMode() {
               <div className="w-full bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center p-4">
                 <img
                   src={currentQuestion.media.url}
-                  alt="Question"
+                  alt={t('life_question')}
                   className="max-w-full max-h-96 rounded-lg object-contain"
                 />
               </div>
@@ -338,7 +339,7 @@ function LebenLearningMode() {
                     key={index}
                     onClick={() => handleOptionClick(index)}
                     disabled={showAnswer}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition text-base ${
+                    className={`w-full text-left p-4 sm:p-5 rounded-lg border-2 transition text-base sm:text-lg ${
                       showCorrect
                         ? 'bg-green-50 border-green-500 text-green-900'
                         : showIncorrect
@@ -351,8 +352,8 @@ function LebenLearningMode() {
                   >
                     <div className="flex items-center">
                       <span className="text-left flex-1" dir="ltr">{option.text}</span>
-                      {showCorrect && <span className="text-green-600 ml-auto">✓ صحيح</span>}
-                      {showIncorrect && <span className="text-red-600 ml-auto">✗ خطأ</span>}
+                      {showCorrect && <span className="text-green-600 ml-auto text-base font-medium">✓ {t('exam_correct')}</span>}
+                      {showIncorrect && <span className="text-red-600 ml-auto text-base font-medium">✗ {t('exam_incorrect')}</span>}
                     </div>
                   </button>
                 );
@@ -371,7 +372,7 @@ function LebenLearningMode() {
                     key={index}
                     onClick={() => handleOptionClick(index)}
                     disabled={showAnswer}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition text-base ${
+                    className={`w-full text-left p-4 sm:p-5 rounded-lg border-2 transition text-base sm:text-lg ${
                       showCorrect
                         ? 'bg-green-50 border-green-500 text-green-900'
                         : showIncorrect
@@ -384,8 +385,8 @@ function LebenLearningMode() {
                   >
                     <div className="flex items-center">
                       <span className="text-left flex-1" dir="ltr">{option.text}</span>
-                      {showCorrect && <span className="text-green-600 ml-auto">✓ صحيح</span>}
-                      {showIncorrect && <span className="text-red-600 ml-auto">✗ خطأ</span>}
+                      {showCorrect && <span className="text-green-600 ml-auto text-base font-medium">✓ {t('exam_correct')}</span>}
+                      {showIncorrect && <span className="text-red-600 ml-auto text-base font-medium">✗ {t('exam_incorrect')}</span>}
                     </div>
                   </button>
                 );
@@ -393,10 +394,10 @@ function LebenLearningMode() {
             </div>
           ) : (
             <div className="mb-6">
-              <p className="text-slate-600 text-sm mb-2">نوع السؤال: {currentQuestion.qType}</p>
+              <p className="text-slate-600 text-base mb-2">{t('life_questionType')} {currentQuestion.qType}</p>
               {showAnswer && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-green-900 font-medium">الإجابة الصحيحة: {correctAnswerText}</p>
+                  <p className="text-green-900 font-medium">{t('life_solution')}: {correctAnswerText}</p>
                 </div>
               )}
             </div>
@@ -406,25 +407,24 @@ function LebenLearningMode() {
           {!showAnswer && (
             <button
               onClick={handleShowAnswer}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition font-medium mb-4"
+              className="w-full bg-black hover:bg-slate-800 text-white py-3 rounded-lg transition font-medium text-base mb-4"
             >
-              إظهار الإجابة الصحيحة
+              {t('life_showSolution')}
             </button>
           )}
 
-          {/* Explanation */}
           {showAnswer && currentQuestion.explanation && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <h3 className="font-semibold text-blue-900 mb-2">شرح الإجابة:</h3>
-              <p className="text-blue-800">{currentQuestion.explanation}</p>
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">{t('life_explanation')}</h3>
+              <p className="text-base text-blue-800 leading-relaxed">{currentQuestion.explanation}</p>
             </div>
           )}
 
           {/* Correct Answer Display */}
           {showAnswer && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <p className="text-green-900 font-medium">
-                ✓ الإجابة الصحيحة: {correctAnswerText}
+              <p className="text-base sm:text-lg text-green-900 font-medium">
+                ✓ {t('life_correctAnswer')} {correctAnswerText}
               </p>
             </div>
           )}
@@ -435,25 +435,25 @@ function LebenLearningMode() {
           <button
             onClick={handlePrev}
             disabled={currentIndex === 0}
-            className={`px-6 py-3 rounded-lg font-medium transition ${
+            className={`px-6 py-3 rounded-lg font-medium text-base transition ${
               currentIndex === 0
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 : 'bg-slate-600 hover:bg-slate-700 text-white'
             }`}
           >
-            ← السابق
+            ← {t('life_back')}
           </button>
 
           <button
             onClick={handleNext}
             disabled={currentIndex === questions.length - 1}
-            className={`px-6 py-3 rounded-lg font-medium transition ${
+            className={`px-6 py-3 rounded-lg font-medium text-base transition ${
               currentIndex === questions.length - 1
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 : 'bg-red-600 hover:bg-red-700 text-white'
             }`}
           >
-            التالي →
+            {t('life_next')} →
           </button>
         </div>
       </div>

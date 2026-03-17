@@ -29,6 +29,9 @@ const emptyQuestion = () => ({
   answerKeyBoolean: true,
   fillExact: '',
   answerKeyMatch: [{ left: '', right: '' }],
+  matchLeftItems: [''],
+  matchRightItems: ['', ''],
+  matchCorrect: [0],
   answerKeyReorder: [],
   reorderInput: '',
   points: 1,
@@ -215,27 +218,94 @@ function BulkCreateQuestions() {
     }));
   };
 
-  const addMatchPair = (qId) => {
+  const getMatchState = (q) => {
+    if (q.matchLeftItems != null && q.matchRightItems != null) {
+      return {
+        leftItems: q.matchLeftItems.length ? q.matchLeftItems : [''],
+        rightItems: q.matchRightItems.length ? q.matchRightItems : ['', ''],
+        correct: q.matchCorrect || (q.matchLeftItems || []).map((_, i) => i),
+      };
+    }
+    const pairs = q.answerKeyMatch || [{ left: '', right: '' }];
+    return {
+      leftItems: pairs.map(p => p.left ?? ''),
+      rightItems: pairs.length ? [...pairs.map(p => p.right ?? ''), ''] : ['', ''],
+      correct: pairs.map((_, i) => i),
+    };
+  };
+
+  const addMatchLeft = (qId) => {
     setQuestions(prev => prev.map(q => {
       if (q.id !== qId) return q;
-      return { ...q, answerKeyMatch: [...q.answerKeyMatch, { left: '', right: '' }] };
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      const next = [...leftItems, ''];
+      const nextCorrect = [...correct, Math.min(correct[correct.length - 1] ?? 0, rightItems.length - 1)];
+      return { ...q, matchLeftItems: next, matchRightItems: rightItems, matchCorrect: nextCorrect };
+    }));
+  };
+  const addMatchRight = (qId) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      return { ...q, matchLeftItems: leftItems, matchRightItems: [...rightItems, ''], matchCorrect: correct };
+    }));
+  };
+  const updateMatchLeft = (qId, idx, value) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      const next = [...leftItems];
+      next[idx] = value;
+      return { ...q, matchLeftItems: next, matchRightItems: rightItems, matchCorrect: correct };
+    }));
+  };
+  const updateMatchRight = (qId, idx, value) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      const next = [...rightItems];
+      next[idx] = value;
+      return { ...q, matchLeftItems: leftItems, matchRightItems: next, matchCorrect: correct };
+    }));
+  };
+  const updateMatchCorrect = (qId, leftIdx, rightIdx) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      const next = [...correct];
+      next[leftIdx] = typeof rightIdx === 'number' ? rightIdx : parseInt(rightIdx, 10);
+      return { ...q, matchLeftItems: leftItems, matchRightItems: rightItems, matchCorrect: next };
+    }));
+  };
+  const removeMatchLeft = (qId, idx) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      if (leftItems.length <= 1) return q;
+      const nextLeft = leftItems.filter((_, i) => i !== idx);
+      const nextCorrect = correct.filter((_, i) => i !== idx);
+      return { ...q, matchLeftItems: nextLeft, matchRightItems: rightItems, matchCorrect: nextCorrect };
+    }));
+  };
+  const removeMatchRight = (qId, idx) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id !== qId) return q;
+      const { leftItems, rightItems, correct } = getMatchState(q);
+      if (rightItems.length <= 1) return q;
+      const nextRight = rightItems.filter((_, i) => i !== idx);
+      const nextCorrect = correct.map(c => {
+        if (c === idx) return 0;
+        if (c > idx) return Math.min(c - 1, nextRight.length - 1);
+        return c;
+      });
+      return { ...q, matchLeftItems: leftItems, matchRightItems: nextRight, matchCorrect: nextCorrect };
     }));
   };
 
-  const updateMatchPair = (qId, pairIdx, side, value) => {
-    setQuestions(prev => prev.map(q => {
-      if (q.id !== qId) return q;
-      const pairs = [...q.answerKeyMatch];
-      pairs[pairIdx] = { ...pairs[pairIdx], [side]: value };
-      return { ...q, answerKeyMatch: pairs };
-    }));
-  };
-
-  const removeMatchPair = (qId, pairIdx) => {
-    setQuestions(prev => prev.map(q => {
-      if (q.id !== qId || q.answerKeyMatch.length <= 1) return q;
-      return { ...q, answerKeyMatch: q.answerKeyMatch.filter((_, i) => i !== pairIdx) };
-    }));
+  const ensureMatchState = (q) => {
+    if (q.qType !== 'match') return q;
+    const { leftItems, rightItems, correct } = getMatchState(q);
+    return { ...q, matchLeftItems: leftItems, matchRightItems: rightItems, matchCorrect: correct };
   };
 
   // --- Build payload per question ---
@@ -256,12 +326,20 @@ function BulkCreateQuestions() {
     } else if (q.qType === 'fill') {
       data.fillExact = q.fillExact.trim();
     } else if (q.qType === 'match') {
-      data.answerKeyMatch = q.answerKeyMatch
-        .filter(p => p.left.trim() && p.right.trim())
-        .map(p => [p.left.trim(), p.right.trim()]);
+      const lefts = (q.matchLeftItems || []).map(s => (s && s.trim ? s.trim() : String(s)).trim()).filter(Boolean);
+      const rights = (q.matchRightItems || []).map(s => (s && s.trim ? s.trim() : String(s)).trim()).filter(Boolean);
+      const correct = q.matchCorrect || [];
+      data.answerKeyMatch = lefts
+        .map((left, i) => {
+          const rightIdx = correct[i];
+          const right = rightIdx != null && rights[rightIdx] ? rights[rightIdx] : '';
+          return right ? [left, right] : null;
+        })
+        .filter(Boolean);
+      data.matchRightOptions = rights;
     } else if (q.qType === 'reorder') {
       data.answerKeyReorder = q.reorderInput
-        ? q.reorderInput.split(',').map(s => s.trim()).filter(Boolean)
+        ? q.reorderInput.split('|').map(s => s.trim()).filter(Boolean)
         : q.answerKeyReorder;
     }
 
@@ -2011,7 +2089,13 @@ function BulkCreateQuestions() {
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>نوع السؤال</label>
                     <select
                       value={q.qType}
-                      onChange={(e) => updateQuestion(q.id, 'qType', e.target.value)}
+                      onChange={(e) => {
+                      const v = e.target.value;
+                      updateQuestion(q.id, 'qType', v);
+                      if (v === 'match') {
+                        setQuestions(prev => prev.map(qq => qq.id === q.id ? ensureMatchState({ ...qq, qType: 'match' }) : qq));
+                      }
+                    }}
                       style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13, marginTop: 2 }}
                     >
                       {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -2113,46 +2197,62 @@ function BulkCreateQuestions() {
                   </div>
                 )}
 
-                {/* Match */}
-                {q.qType === 'match' && (
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>أزواج التوصيل:</label>
-                    {q.answerKeyMatch.map((pair, pi) => (
-                      <div key={pi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <input
-                          type="text" value={pair.left}
-                          onChange={(e) => updateMatchPair(q.id, pi, 'left', e.target.value)}
-                          placeholder="يسار" style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}
-                        />
-                        <span style={{ color: '#94a3b8' }}>→</span>
-                        <input
-                          type="text" value={pair.right}
-                          onChange={(e) => updateMatchPair(q.id, pi, 'right', e.target.value)}
-                          placeholder="يمين" style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}
-                        />
-                        {q.answerKeyMatch.length > 1 && (
-                          <button type="button" onClick={() => removeMatchPair(q.id, pi)}
-                            style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>
-                        )}
+                {/* Match - مرن: عدد اليسار ≠ عدد اليمين، والتوصيل الصحيح يحدد أزواج الإجابة */}
+                {q.qType === 'match' && (() => {
+                  const { leftItems, rightItems, correct } = getMatchState(q);
+                  return (
+                    <div>
+                      <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>عدد عناصر اليسار واليمين مرن. في اليمين يمكن إضافة خيارات مضللة.</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>عناصر اليسار</label>
+                          {leftItems.map((val, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <input type="text" value={val} onChange={(e) => updateMatchLeft(q.id, i, e.target.value)} placeholder={`يسار ${i + 1}`} style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }} />
+                              {leftItems.length > 1 && <button type="button" onClick={() => removeMatchLeft(q.id, i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addMatchLeft(q.id)} style={{ fontSize: 12, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>+ عنصر يسار</button>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>عناصر اليمين (صحيح + مضللة)</label>
+                          {rightItems.map((val, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <input type="text" value={val} onChange={(e) => updateMatchRight(q.id, i, e.target.value)} placeholder={`يمين ${i + 1}`} style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }} />
+                              {rightItems.length > 1 && <button type="button" onClick={() => removeMatchRight(q.id, i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addMatchRight(q.id)} style={{ fontSize: 12, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>+ عنصر يمين</button>
+                        </div>
                       </div>
-                    ))}
-                    <button type="button" onClick={() => addMatchPair(q.id)}
-                      style={{ fontSize: 12, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-                      + زوج جديد
-                    </button>
-                  </div>
-                )}
+                      <div style={{ marginTop: 12 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>التوصيل الصحيح (كل يسار → أي يمين؟)</label>
+                        {leftItems.map((_, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, color: '#64748b', minWidth: 60 }}>يسار {i + 1}</span>
+                            <span style={{ color: '#94a3b8' }}>→</span>
+                            <select value={correct[i] ?? 0} onChange={(e) => updateMatchCorrect(q.id, i, e.target.value)} style={{ flex: 1, maxWidth: 220, padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13 }}>
+                              {rightItems.map((r, ri) => (
+                                <option key={ri} value={ri}>{r.trim() || `(يمين ${ri + 1})`}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Reorder */}
                 {q.qType === 'reorder' && (
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>الترتيب الصحيح (مفصول بفواصل):</label>
-                    <input
-                      type="text"
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>الترتيب الصحيح (مفصول بالعلامة |):</label>
+                    <textarea
                       value={q.reorderInput || ''}
                       onChange={(e) => updateQuestion(q.id, 'reorderInput', e.target.value)}
-                      placeholder="مثال: الأول, الثاني, الثالث"
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13, marginTop: 2 }}
+                      placeholder="مثال: الأول | الثاني | الثالث"
+                      rows={4}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 13, marginTop: 2, resize: 'vertical', minHeight: 90 }}
                     />
                   </div>
                 )}

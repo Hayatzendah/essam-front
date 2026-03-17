@@ -521,6 +521,7 @@ input[type="text"].inline-block {
   overflow-y: visible;
   max-height: none !important;
   min-height: 4em;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -682,4 +683,105 @@ input[type="text"].inline-block {
   .media-image {
     max-width: 100%;
   }
+
+  /* منع فيضان النص الأفقي على الموبايل — نص القراءة يلتف داخل العرض */
+  .reading-text-card,
+  .reading-text-card .exam-reading-content,
+  .exam-page .exam-reading-content {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  /* فراغ صغير فوق وأسفل نص القراءة على الموبايل حتى لا يلتصق الخط الفاصل بالنص */
+  .exam-page .exam-reading-content,
+  .exam-page .reading-text-card .exam-reading-content {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+  .exam-page .exam-reading-content .rich-text-content > * + * {
+    margin-top: 0.75rem !important;
+  }
+  .exam-page .exam-reading-content .rich-text-content,
+  .exam-page .exam-reading-content .exam-passage-text,
+  .exam-page .exam-reading-content p,
+  .exam-page .exam-reading-content div {
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .exam-page .exam-question-card .exam-reading-content .rich-text-content,
+  .exam-page .exam-question-card .exam-reading-content p,
+  .exam-page .exam-question-card .exam-reading-content div {
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    max-width: 100% !important;
+  }
+  .exam-page .exam-question-card {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  /* تقييد عرض العناصر ذات العرض الثابت من Word/Quill داخل نص القراءة على الموبايل */
+  .exam-page .exam-reading-content [style*="min-width"] {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* ضمان ظهور خط (Überschrift / hr / border-bottom) بشكل واضح على الموبايل */
+  .exam-page .exam-reading-content hr,
+  .exam-page .exam-passage-text hr {
+    display: block !important;
+    height: 0;
+    border: none;
+    border-top: 2px solid #000 !important;
+    margin: 0.5rem 0 0.75rem 0 !important;
+    padding: 0;
+    min-height: 0;
+  }
+  .exam-page .exam-reading-content [style*="border-bottom"],
+  .exam-page .exam-passage-text [style*="border-bottom"] {
+    border-bottom-width: 2px !important;
+    border-bottom-style: solid !important;
+    padding-bottom: 0.25rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+/* تكبير الخطوط في صفحة الامتحان لقراءة أوضح — كل واجهات الامتحانات */
+.exam-page .text-\[10px\],
+.exam-page .text-\[11px\] {
+  font-size: 0.9375rem !important;
+}
+.exam-page .text-xs {
+  font-size: 1rem !important;
+}
+.exam-page .text-sm {
+  font-size: 1.125rem !important;
+}
+.exam-page .text-base {
+  font-size: 1.1875rem !important;
+}
+.exam-page .text-lg {
+  font-size: 1.375rem !important;
+}
+.exam-page .text-xl {
+  font-size: 1.5rem !important;
+}
+.exam-page .text-2xl {
+  font-size: 1.625rem !important;
+}
+.exam-page .rich-text-content,
+.exam-page .exam-reading-content,
+.exam-page .exam-passage-text {
+  font-size: 1.125rem !important;
+  line-height: 1.65;
+}
+.exam-page .exam-card-entry-content {
+  font-size: 1.125rem !important;
+}
+/* الشريط الجانبي للأقسام وقائمة التمارين */
+.exam-page aside h3 {
+  font-size: 1.125rem !important;
+}
+.exam-page aside .rounded-xl.p-3 {
+  font-size: 1rem !important;
 }

@@ -3,10 +3,19 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getGrammarTopic } from '../../services/api';
 import { sanitizeHtml, normalizeWordHtml } from '../../utils/sanitizeHtml';
+import { BRAND } from '../../constants/brand';
+import { useTranslation } from '../../contexts/LanguageContext';
 import './GrammarTopicPage.css';
+
+/** إزالة وسوم HTML للحصول على النص فقط — لاستخدامه في كشف العنوان المكرر */
+function stripHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 // Exercise Block Component
 const ExerciseBlock = ({ block }) => {
+  const t = useTranslation();
   const exerciseData = block.data || {};
   const questions = exerciseData.questions || [];
   const showResultsImmediately = exerciseData.showResultsImmediately !== false;
@@ -73,32 +82,32 @@ const ExerciseBlock = ({ block }) => {
   if (questions.length === 0) return null;
 
   return (
-    <div key={block.id} className="mb-6" dir="ltr">
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+    <div key={block.id} className="mb-6 grammar-exercise-block" dir="ltr">
+      <div className="rounded-xl p-6 border grammar-exercise-container" style={{ backgroundColor: '#FFF9EB', borderColor: '#F5EED9' }}>
         {/* عنوان التمرين */}
         {exerciseData.title && (
-          <h3 className="text-lg font-bold text-amber-900 mb-4 text-left flex items-center gap-2">
-            <span>✏️</span>
+          <h3 className="grammar-exercise-title text-lg font-bold text-slate-900 mb-4 text-left">
             {exerciseData.title}
           </h3>
         )}
 
         {/* النتيجة الإجمالية */}
         {showResults && (
-          <div className="mb-6 p-4 bg-white rounded-lg border border-amber-200">
+          <div className="mb-6 p-4 bg-white rounded-lg border" style={{ borderColor: `${BRAND.gold}99` }}>
             <div className="flex items-center justify-between">
               <div className="text-left">
-                <span className="text-sm text-amber-700">النتيجة:</span>
-                <span className="text-2xl font-bold text-amber-900 ml-2">
-                  {getScore().correct} / {getScore().total}
+                <span className="text-base text-slate-700">{t('grammatikQuiz_result')}:</span>
+                <span className="text-2xl font-bold text-slate-900 ml-2">
+                  {getScore().correct} {t('exam_of')} {getScore().total}
                 </span>
               </div>
               {allowRetry && (
                 <button
                   onClick={handleResetAll}
-                  className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+                  className="px-4 py-2 rounded-lg text-base font-medium transition-colors text-black"
+                  style={{ backgroundColor: BRAND.gold }}
                 >
-                  إعادة المحاولة
+                  {t('results_tryAgainButton')}
                 </button>
               )}
             </div>
@@ -123,9 +132,12 @@ const ExerciseBlock = ({ block }) => {
                     : 'bg-white border-slate-200'
                 }`}
               >
-                {/* رقم السؤال */}
+                {/* رقم السؤال — أصفر ذهبي ورقم أسود */}
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="w-6 h-6 flex items-center justify-center bg-amber-500 text-white rounded-full text-xs font-bold">
+                  <span
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold"
+                    style={{ backgroundColor: BRAND.gold, color: BRAND.black }}
+                  >
                     {qIndex + 1}
                   </span>
                   {isSubmitted && (
@@ -134,15 +146,15 @@ const ExerciseBlock = ({ block }) => {
                         ? 'bg-green-100 text-green-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
-                      {questionIsCorrect ? '✓ صحيح' : '✗ خطأ'}
+                      {questionIsCorrect ? `✓ ${t('exam_correct')}` : `✗ ${t('exam_incorrect')}`}
                     </span>
                   )}
                 </div>
 
-                {/* نص السؤال */}
+                {/* نص السؤال — خط أكبر */}
                 {question.type === 'word_order' ? (
                   /* عرض السؤال مع منطقة الإجابة inline */
-                  <div className="text-base font-medium text-slate-900 mb-4 text-left">
+                  <div className="grammar-question-text text-lg font-medium text-slate-900 mb-4 text-left">
                     {question.prompt.split(/\.{3,}|_{3,}/).map((part, i, arr) => (
                       <span key={i}>
                         {part}
@@ -154,24 +166,22 @@ const ExerciseBlock = ({ block }) => {
                               value={currentAnswer || ''}
                               onChange={(e) => handleAnswer(qIndex, e.target.value)}
                               disabled={isSubmitted && !allowRetry}
-                              className={`inline-block min-w-48 mx-1 px-2 py-1 border-b-2 bg-transparent outline-none text-sm ${
+                              className={`inline-block min-w-52 mx-1 px-2 py-1.5 border-b-2 bg-transparent outline-none grammar-question-input text-base ${
                                 isSubmitted
                                   ? questionIsCorrect
                                     ? 'border-green-500 text-green-700'
                                     : 'border-red-500 text-red-700'
-                                  : 'border-amber-400 focus:border-amber-500'
+                                  : 'focus:border-slate-500'
                               }`}
-                              placeholder="..."
+                              style={!isSubmitted ? { borderColor: `${BRAND.gold}cc` } : {}}
+                              placeholder={t('grammar_writeAnswer')}
                             />
                           ) : (
                             /* وضع السحب - الكلمات المختارة inline */
-                            <span className={`inline-flex flex-wrap gap-1 min-w-48 mx-1 px-2 py-1 border-b-2 align-middle ${
-                              isSubmitted
-                                ? questionIsCorrect
-                                  ? 'border-green-500'
-                                  : 'border-red-500'
-                                : 'border-amber-400'
-                            }`}>
+                            <span
+                              className={`inline-flex flex-wrap gap-1 min-w-52 mx-1 px-2 py-1.5 border-b-2 align-middle ${isSubmitted ? (questionIsCorrect ? 'border-green-500' : 'border-red-500') : ''}`}
+                              style={!isSubmitted ? { borderColor: `${BRAND.gold}cc` } : {}}
+                            >
                               {Array.isArray(currentAnswer) && currentAnswer.length > 0 ? (
                                 currentAnswer.map((word, wordIndex) => (
                                   <button
@@ -184,17 +194,14 @@ const ExerciseBlock = ({ block }) => {
                                       }
                                     }}
                                     disabled={isSubmitted && !allowRetry}
-                                    className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                                      isSubmitted && !allowRetry
-                                        ? 'bg-slate-200 text-slate-600 cursor-not-allowed'
-                                        : 'bg-amber-500 text-white hover:bg-amber-600 cursor-pointer'
-                                    }`}
+                                    className={`px-2 py-0.5 rounded text-sm font-medium transition-colors ${isSubmitted && !allowRetry ? 'bg-slate-200 text-slate-600 cursor-not-allowed' : 'cursor-pointer text-black'}`}
+                                    style={!(isSubmitted && !allowRetry) ? { backgroundColor: BRAND.gold } : {}}
                                   >
                                     {word} ×
                                   </button>
                                 ))
                               ) : (
-                                <span className="text-slate-400 text-sm">...</span>
+                                <span className="text-slate-400 text-base">...</span>
                               )}
                             </span>
                           )
@@ -203,7 +210,7 @@ const ExerciseBlock = ({ block }) => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-base font-medium text-slate-900 mb-4 text-left">
+                  <p className="grammar-question-text text-lg font-medium text-slate-900 mb-4 text-left">
                     {question.prompt}
                   </p>
                 )}
@@ -226,9 +233,10 @@ const ExerciseBlock = ({ block }) => {
                                 ? 'bg-red-100 border-red-400'
                                 : 'bg-slate-50 border-slate-200'
                               : isSelected
-                              ? 'bg-amber-100 border-amber-400'
-                              : 'bg-slate-50 border-slate-200 hover:bg-amber-50'
+                              ? 'border-slate-400'
+                              : 'bg-slate-50 border-slate-200 hover:bg-slate-50'
                           }`}
+                          style={!isSubmitted && isSelected ? { backgroundColor: `${BRAND.gold}30`, borderColor: BRAND.gold } : {}}
                         >
                           <input
                             type="radio"
@@ -237,7 +245,8 @@ const ExerciseBlock = ({ block }) => {
                             checked={isSelected}
                             onChange={() => handleAnswer(qIndex, option)}
                             disabled={isSubmitted && !allowRetry}
-                            className="w-4 h-4 text-amber-500"
+                            className="w-4 h-4"
+                            style={{ accentColor: BRAND.gold }}
                           />
                           <span className="text-sm text-slate-800">{option}</span>
                           {isSubmitted && isCorrectOption && (
@@ -262,24 +271,23 @@ const ExerciseBlock = ({ block }) => {
                           ? questionIsCorrect
                             ? 'border-green-400 bg-green-50'
                             : 'border-red-400 bg-red-50'
-                          : 'border-slate-300 focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
+                          : 'border-slate-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-400'
                       }`}
-                      placeholder="اكتب إجابتك هنا..."
+                      placeholder={t('grammar_writeAnswer')}
                     />
                     {isSubmitted && !questionIsCorrect && (
                       <p className="mt-2 text-sm text-green-700">
-                        الإجابة الصحيحة: <span className="font-semibold">{question.correctAnswer}</span>
+                        {t('grammar_correct')} <span className="font-semibold">{question.correctAnswer}</span>
                       </p>
                     )}
                   </div>
                 )}
 
-                {/* صح أو خطأ */}
                 {question.type === 'true_false' && (
                   <div className="flex gap-4">
                     {[
-                      { value: 'true', label: 'صحيح (Richtig)' },
-                      { value: 'false', label: 'خطأ (Falsch)' }
+                      { value: 'true', label: t('grammar_true') },
+                      { value: 'false', label: t('grammar_false') }
                     ].map((opt) => {
                       const isSelected = currentAnswer === opt.value;
                       const isCorrectOption = opt.value === question.correctAnswer;
@@ -295,9 +303,10 @@ const ExerciseBlock = ({ block }) => {
                                 ? 'bg-red-100 border-red-400'
                                 : 'bg-slate-50 border-slate-200'
                               : isSelected
-                              ? 'bg-amber-100 border-amber-400'
-                              : 'bg-slate-50 border-slate-200 hover:bg-amber-50'
+                              ? 'bg-slate-100 border-slate-400'
+                              : 'bg-slate-50 border-slate-200 hover:bg-slate-50'
                           }`}
+                          style={!isSubmitted && isSelected ? { backgroundColor: `${BRAND.gold}30`, borderColor: BRAND.gold } : {}}
                         >
                           <input
                             type="radio"
@@ -306,7 +315,8 @@ const ExerciseBlock = ({ block }) => {
                             checked={isSelected}
                             onChange={() => handleAnswer(qIndex, opt.value)}
                             disabled={isSubmitted && !allowRetry}
-                            className="w-4 h-4 text-amber-500"
+                            className="w-4 h-4"
+                            style={{ accentColor: BRAND.gold }}
                           />
                           <span className="text-sm">{opt.label}</span>
                         </label>
@@ -351,7 +361,7 @@ const ExerciseBlock = ({ block }) => {
                     {/* الإجابة الصحيحة عند الخطأ */}
                     {isSubmitted && !questionIsCorrect && (
                       <p className="mt-3 text-sm text-green-700">
-                        الإجابة الصحيحة: <span className="font-semibold">{question.correctAnswer}</span>
+                        {t('grammar_correct')} <span className="font-semibold">{question.correctAnswer}</span>
                       </p>
                     )}
                   </div>
@@ -361,7 +371,7 @@ const ExerciseBlock = ({ block }) => {
                 {isSubmitted && question.explanation && (
                   <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-800">
-                      <span className="font-semibold">💡 شرح: </span>
+                      <span className="font-semibold">💡 Erklärung: </span>
                       {question.explanation}
                     </p>
                   </div>
@@ -371,9 +381,10 @@ const ExerciseBlock = ({ block }) => {
                 {showResultsImmediately && !isSubmitted && currentAnswer && (
                   <button
                     onClick={() => handleSubmitQuestion(qIndex)}
-                    className="mt-4 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+                    className="mt-4 px-4 py-2 rounded-lg text-base font-medium transition-colors text-black"
+                    style={{ backgroundColor: BRAND.gold }}
                   >
-                    تحقق من الإجابة
+                    {t('exam_check')}
                   </button>
                 )}
 
@@ -381,14 +392,14 @@ const ExerciseBlock = ({ block }) => {
                 {isSubmitted && allowRetry && !showResults && (
                   <button
                     onClick={() => handleRetry(qIndex)}
-                    className="mt-4 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors"
-                  >
-                    إعادة المحاولة
-                  </button>
-                )}
-              </div>
-            );
-          })}
+className="mt-4 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors"
+                >
+                  {t('results_tryAgainButton')}
+                </button>
+              )}
+            </div>
+          );
+        })}
         </div>
 
         {/* زر إرسال الكل */}
@@ -396,9 +407,10 @@ const ExerciseBlock = ({ block }) => {
           <div className="mt-6 flex justify-center">
             <button
               onClick={handleSubmitAll}
-              className="px-6 py-3 bg-amber-500 text-white rounded-lg font-semibold hover:bg-amber-600 transition-colors"
+              className="px-6 py-3 rounded-lg font-semibold text-base text-black transition-colors"
+              style={{ backgroundColor: BRAND.gold }}
             >
-              إرسال الإجابات
+              {t('grammar_submitAnswers')}
             </button>
           </div>
         )}
@@ -410,6 +422,7 @@ const ExerciseBlock = ({ block }) => {
 export default function GrammarTopicPage() {
   const { level, topicSlug } = useParams();
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const [topic, setTopic] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -435,7 +448,7 @@ export default function GrammarTopicPage() {
         if (err.response?.status === 401) {
           // 401 = Token منتهي أو غير صالح
           console.error('🔒 401 Unauthorized - Token منتهي أو غير صالح');
-          setError('انتهت صلاحية جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.');
+          setError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
 
           // حذف tokens القديمة
           localStorage.removeItem('accessToken');
@@ -449,9 +462,9 @@ export default function GrammarTopicPage() {
         } else if (err.response?.status === 403) {
           // 403 = Forbidden - ما عندك صلاحية
           console.error('🚫 403 Forbidden - ليس لديك صلاحية');
-          setError('عذراً، ليس لديك صلاحية للوصول لهذا المحتوى.');
+          setError('Sie haben keine Berechtigung für diesen Inhalt.');
         } else {
-          setError('حدث خطأ أثناء تحميل محتوى القواعد. جرّبي مرة أخرى.');
+          setError('Fehler beim Laden des Grammatikthemas. Bitte versuchen Sie es erneut.');
         }
       } finally {
         setLoading(false);
@@ -482,7 +495,7 @@ export default function GrammarTopicPage() {
   // Empty State Component
   const EmptyState = () => (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
-      <p className="text-slate-500 text-sm text-center">لا يوجد محتوى متاح لهذا الموضوع.</p>
+      <p className="text-slate-500 text-sm text-center">Kein Inhalt für dieses Thema verfügbar.</p>
     </div>
   );
 
@@ -610,70 +623,71 @@ export default function GrammarTopicPage() {
     }
   };
 
+  // تخطي أول بلوك إذا كان عنواناً مكرراً (نفس عنوان الموضوع)
+  const contentBlocksToRender = Array.isArray(topic?.contentBlocks) && topic.contentBlocks.length > 0
+    ? topic.contentBlocks.filter((block, index) => {
+        if (index !== 0) return true;
+        if (block?.type !== 'intro' && block?.type !== 'paragraph') return true;
+        const text = block?.data?.text ?? '';
+        const plain = stripHtml(text);
+        return plain !== (topic?.title ?? '').trim();
+      })
+    : [];
+
   return (
-    <div className="grammar-topic-page min-h-screen bg-slate-50">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* الشريط العلوي */}
-        <div className="flex items-center justify-between mb-6">
+    <div className="grammar-topic-page">
+      <div className="grammar-topic-inner max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
+        {/* الشريط العلوي — رجوع فقط على اليسار */}
+        <div className="mb-6">
           <button
-            onClick={() => navigate(-1)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            onClick={() => navigate('/grammatik')}
+            className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
           >
-            ← رجوع لقائمة المواضيع
+            ← {t('grammar_backToTopics')}
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            Deutsch Learning App
-          </span>
         </div>
 
-        {/* الهيدر */}
+        {/* الهيدر — خط أكبر مثل صفحة الامتحانات؛ dir="ltr" لظهور النص الألماني من اليسار في النسخة العربية */}
         {!loading && topic && (
-          <div className="mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">
+          <div className="mb-8 text-left grammar-topic-header" dir="ltr">
+            <h1 className="grammar-topic-title text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-2">
               {topic.title}{" "}
-              <span className="text-red-600">– مستوى {displayLevel}</span>
+              <span style={{ color: BRAND.red }}>– {displayLevel}</span>
             </h1>
-            <p className="text-sm text-slate-600 max-w-xl">
+            <p className="grammar-topic-desc text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
               {topic.shortDescription || topic.description || ""}
             </p>
           </div>
         )}
 
-
-        {/* حالة التحميل */}
         {loading && (
-          <div className="py-10 text-center text-slate-500 text-sm">
-            جاري تحميل المحتوى…
+          <div className="py-10 text-center text-slate-500 dark:text-slate-400 text-base">
+            {t('grammar_loadingContent')}
           </div>
         )}
 
-        {/* حالة الخطأ */}
+        {/* حالة الخطأ — نفس أسلوب Prüfungen */}
         {error && !loading && (
-          <div className="py-4 mb-4 text-center text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl">
-            {error}
+          <div className="rounded-xl py-4 px-4 border-2 mb-6" style={{ color: BRAND.red, backgroundColor: `${BRAND.red}12`, borderColor: BRAND.red }}>
+            <p className="font-medium text-center">{error}</p>
           </div>
         )}
 
         {/* محتوى القاعدة */}
         {!loading && !error && topic && (
           <>
-            {/* Empty State */}
             {!hasContent && !topic.contentHtml && <EmptyState />}
 
-            {/* Content Blocks */}
-            {hasContent && (
-              <div className="grammar-topic-page-content bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
-                {Array.isArray(topic.contentBlocks) && topic.contentBlocks.length > 0 && (
-                  <>
-                    {topic.contentBlocks.map(renderContentBlock)}
-                  </>
-                )}
+            {/* Content Blocks — بدون العنوان المكرر */}
+            {hasContent && contentBlocksToRender.length > 0 && (
+              <div className="grammar-topic-page-content bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl shadow-lg p-6 md:p-8 mb-6">
+                {contentBlocksToRender.map(renderContentBlock)}
               </div>
             )}
 
-            {/* Legacy HTML Content (fallback) */}
+            {/* Legacy HTML Content (fallback) — إخفاء أول عنوان إذا كان مكرراً عبر CSS */}
             {!hasContent && topic.contentHtml && (
-              <div className="grammar-topic-page-content bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-4">
+              <div className="grammar-topic-page-content bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl shadow-lg p-6 md:p-8 mb-6 grammar-topic-legacy-html">
                 <div
                   className="prose prose-slate max-w-none grammar-topic-content"
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizeWordHtml(topic.contentHtml)) }}
@@ -685,14 +699,14 @@ export default function GrammarTopicPage() {
             <div className="flex justify-center">
               <button
                 onClick={() => navigate(`/grammatik/${level}/${topicSlug}/exercise`)}
-                className="px-6 py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-sm"
+                className="px-6 py-3 text-white text-base font-semibold rounded-xl shadow-md transition-colors hover:opacity-95"
+                style={{ background: BRAND.red }}
               >
-                🎯 ابدأ التمرين
+                → {t('grammar_startExercise')}
               </button>
             </div>
           </>
         )}
-
       </div>
     </div>
   );

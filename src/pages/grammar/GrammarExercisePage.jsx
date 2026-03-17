@@ -3,10 +3,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getGrammarTopic } from '../../services/api';
 import api from '../../services/api';
+import { BRAND } from '../../constants/brand';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 export default function GrammarExercisePage() {
   const { level, topicSlug } = useParams();
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const [topic, setTopic] = useState(null);
   const [attemptId, setAttemptId] = useState(null);
@@ -50,7 +53,7 @@ export default function GrammarExercisePage() {
 
         // 2. التحقق من وجود examId في الموضوع
         if (!topicData.examId) {
-          setError('عذراً، التمرين لهذا الموضوع قيد الإعداد من قبل المدرس. يرجى المحاولة لاحقاً.');
+          setError('Die Übung für dieses Thema wird noch vom Lehrer eingerichtet. Bitte versuchen Sie es später erneut.');
           setLoading(false);
           return;
         }
@@ -133,7 +136,7 @@ export default function GrammarExercisePage() {
           if (options.length === 0 && (qType === 'true_false' || qType === 'TRUE_FALSE')) {
             console.warn(`⚠️ No options found for True/False question ${idx}, creating default options`);
             // إنشاء options افتراضية لـ True/False
-            options = ['صح', 'خطأ'];
+            options = ['Richtig', 'Falsch'];
           }
           
           // Log للتحقق
@@ -207,7 +210,7 @@ export default function GrammarExercisePage() {
         if (err.response?.status === 401) {
           // 401 = Token منتهي أو غير صالح
           console.error('🔒 401 Unauthorized - Token منتهي أو غير صالح');
-          setError('انتهت صلاحية جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.');
+          setError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
 
           // حذف tokens القديمة
           localStorage.removeItem('accessToken');
@@ -222,14 +225,14 @@ export default function GrammarExercisePage() {
           // 403 = Forbidden - ما عندك صلاحية (لكن مسجل دخول)
           console.error('🚫 403 Forbidden - ليس لديك صلاحية لإنشاء امتحانات');
           console.error('💡 Hint: يبدو أن حسابك كطالب لا يملك صلاحية إنشاء الامتحانات');
-          setError('عذراً، لا يمكنك إنشاء تمارين كطالب. تواصل مع المدرس للحصول على الصلاحيات المطلوبة.');
+          setError('Als Schüler/in können Sie keine Übungen starten. Wenden Sie sich an die Lehrkraft für die nötigen Berechtigungen.');
         } else if (err.response?.status === 400) {
           // 400 = Bad Request - خطأ في البيانات المرسلة
           console.error('⚠️ 400 Bad Request - خطأ في البيانات المرسلة');
           console.error('📋 Response data:', err.response?.data);
           setError(`خطأ في البيانات: ${err.response?.data?.message || err.response?.data?.error || 'تحقق من الـ Console'}`);
         } else {
-          setError('حدث خطأ أثناء تحميل التمرين. جرّبي مرة أخرى.');
+          setError(t('grammar_exercise_error'));
         }
       } finally {
         setLoading(false);
@@ -468,8 +471,7 @@ export default function GrammarExercisePage() {
 
     if (unansweredNumbers.length > 0) {
       alert(
-        `⚠️ يرجى الإجابة على جميع الأسئلة قبل التسليم.\n` +
-        `الأسئلة غير المجاوبة: ${unansweredNumbers.join(', ')}`
+        `${t('grammar_answerAllBeforeSubmit')}\n\n${unansweredNumbers.join(', ')}`
       );
       return; // ما نبعتش للباك
     }
@@ -529,7 +531,7 @@ export default function GrammarExercisePage() {
       // التحقق من أن answers غير فارغ قبل الإرسال
       if (payload.answers.length === 0) {
         console.error('❌ ERROR: Payload is empty! answers array is empty.');
-        alert('⚠️ لا توجد إجابات للإرسال. يرجى التأكد من الإجابة على جميع الأسئلة.');
+        alert(t('grammar_noAnswersToSubmit'));
         setSubmitting(false);
         return;
       }
@@ -604,7 +606,7 @@ export default function GrammarExercisePage() {
         // navigate(`/grammar/${slug}/${level}`);
       } else {
         // معالجة أخطاء أخرى
-        const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message || 'حدث خطأ أثناء إرسال الإجابات';
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message || t('grammar_errorSending');
         alert(`❌ ${errorMessage}`);
       }
       
@@ -622,14 +624,14 @@ export default function GrammarExercisePage() {
 
     if (!blankPattern.test(text)) {
       // إذا ما في فراغ، نعرض النص عادي
-      return <span style={{ fontSize: '1.125rem', fontWeight: '600' }}>{text}</span>;
+      return <span style={{ fontSize: '1.25rem', fontWeight: '600' }}>{text}</span>;
     }
 
     // تقسيم النص عند الفراغ
     const parts = text.split(blankPattern);
 
     return (
-      <span style={{ display: 'inline', fontSize: '1.125rem', fontWeight: '600' }}>
+      <span style={{ display: 'inline', fontSize: '1.25rem', fontWeight: '600' }}>
         <span>{parts[0]}</span>
         <input
           type="text"
@@ -673,7 +675,7 @@ export default function GrammarExercisePage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-sm text-slate-500">جاري تحضير التمرين…</div>
+          <div className="text-sm text-slate-500">{t('grammar_preparing')}</div>
         </div>
       </div>
     );
@@ -687,13 +689,13 @@ export default function GrammarExercisePage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-4 mb-4 max-w-md">
-            ⚠️ لم يتم تحميل التمرين بشكل صحيح. يرجى المحاولة مرة أخرى.
+            {t('grammar_exercise_error')}
           </div>
           <button
             onClick={() => navigate(-1)}
             className="text-sm text-slate-600 hover:text-slate-800"
           >
-            ← رجوع
+            ← {t('grammar_back')}
           </button>
         </div>
       </div>
@@ -711,7 +713,7 @@ export default function GrammarExercisePage() {
             onClick={() => navigate(-1)}
             className="text-sm text-slate-600 hover:text-slate-800"
           >
-            ← رجوع
+            ← {t('grammar_back')}
           </button>
         </div>
       </div>
@@ -772,7 +774,7 @@ export default function GrammarExercisePage() {
                         سؤال {idx + 1}
                       </span>
                       <span className="text-xs">
-                        {isCorrect ? '✅ صحيح' : '❌ خطأ'}
+                        {isCorrect ? `✅ ${t('exam_correct')}` : `❌ ${t('exam_incorrect')}`}
                       </span>
                       <span className="text-xs text-slate-500">
                         ({autoScore} / {points} نقطة)
@@ -797,7 +799,7 @@ export default function GrammarExercisePage() {
                 onClick={() => window.location.reload()}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                إعادة التمرين
+                {t('grammar_retryExercise')}
               </button>
             </div>
           </div>
@@ -815,55 +817,53 @@ export default function GrammarExercisePage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-sm text-slate-500">جاري تحميل الأسئلة…</div>
+          <div className="text-sm text-slate-500">{t('loading')}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {/* الشريط العلوي */}
-        <div className="flex items-center justify-between mb-6">
+    <div className="grammar-exercise-page">
+      <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
+        {/* الشريط العلوي — رجوع فقط على اليسار (بدون عنوان مكرر على اليمين) */}
+        <div className="mb-6">
           <button
             onClick={() => navigate(-1)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
           >
-            ← رجوع
+            ← {t('grammar_back')}
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            {topic?.title}
-          </span>
         </div>
 
-        {/* عنوان التمرين */}
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-900 mb-1">
-            تمارين {topic?.title}
+        <div className="mb-8 text-left grammar-exercise-header">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+            {t('grammar_exercisesOn')} <span style={{ color: BRAND.red }}>{topic?.title}</span>
           </h1>
-          <p className="text-sm text-slate-600">
-            {attemptItems.length} سؤال • أجيبي على جميع الأسئلة ثم اضغطي "إرسال الإجابات"
+          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
+            {attemptItems.length} {attemptItems.length === 1 ? t('grammar_tasksCount') : t('grammar_tasksCountPlural')} · {t('grammar_answerAllAndSubmit')}
           </p>
         </div>
 
-        {/* عرض كل الأسئلة */}
-        <div className="space-y-6 mb-6">
+        {/* عرض كل الأسئلة — بطاقات بنفس أسلوب Prüfungen */}
+        <div className="space-y-6 mb-8">
           {attemptItems.map((item, itemIndex) => {
             console.log(`📝 Item ${itemIndex}:`, item);
 
             return (
-              <div key={itemIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 text-left">
-                {/* رقم السؤال */}
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-semibold px-2 py-1 bg-red-600 text-white rounded">
-                    سؤال {itemIndex + 1}
+              <div key={itemIndex} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl shadow-lg p-6 text-left">
+                {/* Nummer und Anweisung */}
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <span className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: BRAND.red, color: 'white' }}>
+                    {t('grammar_task')} {itemIndex + 1}
                   </span>
-                  {item.qType && (
+                  {item.qType === 'fill' && (
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{t('grammar_insertCorrectForm')}</span>
+                  )}
+                  {item.qType && item.qType !== 'fill' && (
                     <span className="text-[10px] text-slate-400">
-                      {item.qType === 'mcq' && 'اختيار من متعدد'}
-                      {item.qType === 'fill' && 'املأ الفراغ'}
-                      {item.qType === 'true_false' && 'صح أو خطأ'}
+                      {item.qType === 'mcq' && t('grammar_multipleChoice')}
+                      {item.qType === 'true_false' && t('grammar_trueOrFalse')}
                     </span>
                   )}
                 </div>
@@ -871,8 +871,8 @@ export default function GrammarExercisePage() {
                 {/* MCQ */}
                 {item.qType === 'mcq' && (
                   <>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
-                      {item.prompt || item.text || 'نص السؤال'}
+                    <h3 className="text-xl font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                      {item.prompt || item.text || t('exam_question')}
                     </h3>
                     <div className="space-y-2">
                       {item.options && item.options.length > 0 ? (
@@ -917,7 +917,7 @@ export default function GrammarExercisePage() {
                           );
                         })
                       ) : (
-                        <p className="text-sm text-slate-400">لا توجد خيارات متاحة</p>
+                        <p className="text-sm text-slate-400">{t('grammar_noOptionsAvailable')}</p>
                       )}
                     </div>
                   </>
@@ -926,8 +926,8 @@ export default function GrammarExercisePage() {
                 {/* True/False */}
                 {item.qType === 'true_false' && (
                   <>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
-                      {item.prompt || item.text || 'نص السؤال'}
+                    <h3 className="text-xl font-semibold text-slate-900 mb-3" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                      {item.prompt || item.text || t('exam_question')}
                     </h3>
                     <div className="space-y-2">
                       {(() => {
@@ -962,7 +962,7 @@ export default function GrammarExercisePage() {
                             <div className="w-3 h-3 rounded-full bg-red-600"></div>
                           )}
                         </div>
-                        <span style={{ textAlign: 'left' }}>صح</span>
+                        <span style={{ textAlign: 'left' }}>{t('grammar_true')}</span>
                       </button>
                       <button
                               type="button"
@@ -983,7 +983,7 @@ export default function GrammarExercisePage() {
                             <div className="w-3 h-3 rounded-full bg-red-600"></div>
                           )}
                         </div>
-                        <span style={{ textAlign: 'left' }}>خطأ</span>
+                        <span style={{ textAlign: 'left' }}>{t('grammar_false')}</span>
                       </button>
                           </>
                         );
@@ -995,13 +995,13 @@ export default function GrammarExercisePage() {
                 {/* Fill */}
                 {item.qType === 'fill' && (
                   <div>
-                    <div className="text-lg font-semibold text-slate-900 mb-4" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
+                    <div className="text-xl font-semibold text-slate-900 mb-4" dir="ltr" style={{ textAlign: 'left', fontFamily: 'inherit' }}>
                       {(() => {
                         // البحث عن الإجابة باستخدام questionId
                         const answer = answers.find((a) => a.questionId === item.questionId);
                         const fillValue = answer?.textAnswer || '';
                         return renderFillQuestion(
-                        item.prompt || item.text || 'نص السؤال',
+                        item.prompt || item.text || t('exam_question'),
                           fillValue,
                         (value) => {
                           // حفظ تلقائي عند الكتابة
@@ -1017,14 +1017,15 @@ export default function GrammarExercisePage() {
           })}
         </div>
 
-        {/* زر إرسال الإجابات */}
-        <div className="flex justify-end mt-8">
+        {/* زر إرسال الإجابات — محاذاة لليسار */}
+        <div className="flex justify-start mt-8">
           <button
             onClick={handleSubmit}
             disabled={submitting || !attemptId}
-            className="px-6 py-3 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
+            className="px-6 py-3 text-white text-base font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-md"
+            style={{ background: BRAND.red }}
           >
-            {submitting ? 'جاري الإرسال…' : '✅ إرسال الإجابات'}
+            {submitting ? t('exam_submitting') : t('exam_submitAnswers')}
           </button>
         </div>
       </div>

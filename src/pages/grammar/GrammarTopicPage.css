@@ -1,3 +1,107 @@
+/* تكبير الخط في صفحة القواعد — مثل صفحة الامتحانات */
+.grammar-topic-page .grammar-topic-title {
+  font-size: 1.5rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-topic-title {
+    font-size: 1.875rem !important;
+  }
+}
+@media (min-width: 768px) {
+  .grammar-topic-page .grammar-topic-title {
+    font-size: 2.25rem !important;
+  }
+}
+.grammar-topic-page .grammar-topic-desc {
+  font-size: 1.0625rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-topic-desc {
+    font-size: 1.125rem !important;
+  }
+}
+.grammar-topic-page .grammar-topic-page-content,
+.grammar-topic-page .grammar-topic-page-content.grammar-topic-legacy-html {
+  font-size: 1.125rem !important;
+}
+.grammar-topic-page .grammar-topic-page-content .grammar-topic-content,
+.grammar-topic-page .grammar-topic-page-content .rich-text-content {
+  font-size: 1.125rem !important;
+  line-height: 1.7 !important;
+}
+.grammar-topic-page .grammar-topic-page-content h1,
+.grammar-topic-page .grammar-topic-page-content h2,
+.grammar-topic-page .grammar-topic-page-content h3 {
+  font-size: 1.3125rem !important;
+  line-height: 1.4 !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-topic-page-content h1,
+  .grammar-topic-page .grammar-topic-page-content h2,
+  .grammar-topic-page .grammar-topic-page-content h3 {
+    font-size: 1.5rem !important;
+  }
+}
+.grammar-topic-page .grammar-topic-page-content p {
+  font-size: 1.125rem !important;
+  margin-bottom: 0.75rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-topic-page-content p {
+    font-size: 1.1875rem !important;
+  }
+}
+/* تمارين داخل الموضوع — أسئلة وفقرات أوضح */
+.grammar-topic-page .grammar-exercise-block .grammar-exercise-title {
+  font-size: 1.25rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-exercise-block .grammar-exercise-title {
+    font-size: 1.375rem !important;
+  }
+}
+.grammar-topic-page .grammar-exercise-block .grammar-question-text,
+.grammar-topic-page .grammar-exercise-block .grammar-question-text p {
+  font-size: 1.125rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-exercise-block .grammar-question-text,
+  .grammar-topic-page .grammar-exercise-block .grammar-question-text p {
+    font-size: 1.25rem !important;
+  }
+}
+.grammar-topic-page .grammar-exercise-block .grammar-question-input {
+  font-size: 1.0625rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-exercise-block .grammar-question-input {
+    font-size: 1.125rem !important;
+  }
+}
+.grammar-topic-page .grammar-exercise-block .option-label span,
+.grammar-topic-page .grammar-exercise-block label span {
+  font-size: 1.0625rem !important;
+}
+@media (min-width: 640px) {
+  .grammar-topic-page .grammar-exercise-block .option-label span,
+  .grammar-topic-page .grammar-exercise-block label span {
+    font-size: 1.125rem !important;
+  }
+}
+.grammar-topic-page .grammar-topic-inner .text-sm {
+  font-size: 1rem !important;
+}
+.grammar-topic-page .grammar-topic-inner .text-base {
+  font-size: 1.0625rem !important;
+}
+
+/* إخفاء أول عنوان في المحتوى القديم (غالباً عنوان مكرر أحمر) */
+.grammar-topic-page .grammar-topic-legacy-html .grammar-topic-content > h1:first-child,
+.grammar-topic-page .grammar-topic-legacy-html .grammar-topic-content > h2:first-child,
+.grammar-topic-page .grammar-topic-legacy-html .grammar-topic-content > h3:first-child {
+  display: none !important;
+}
+
 /* منع تكسير الكلمات في منتصفها — محتوى القواعد (ألماني/عربي) */
 .grammar-topic-page .grammar-topic-page-content {
   word-break: normal !important;

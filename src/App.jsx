@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './contexts/LanguageContext';
 import Login from './pages/Login';
 import AdminLogin from './pages/AdminLogin';
 import Register from './pages/Register';
@@ -44,6 +45,10 @@ import DialogePage from './pages/DialogePage';
 import GrammatikTrainingPage from './pages/GrammatikTrainingPage';
 import GrammatikTrainingQuiz from './pages/GrammatikTrainingQuiz';
 import GrammatikTrainingTopicPage from './pages/GrammatikTrainingTopicPage';
+import ImpressumPage from './pages/ImpressumPage';
+import AGBPage from './pages/AGBPage';
+import DatenschutzPage from './pages/DatenschutzPage';
+import KontaktPage from './pages/KontaktPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -75,6 +80,7 @@ function AdminRoute({ children }) {
 function App() {
   return (
     <Router>
+      <LanguageProvider>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -363,7 +369,12 @@ function App() {
         <Route path="/grammatik-training/topic/:examId" element={<GrammatikTrainingTopicPage />} />
         <Route path="/grammatik-training/quiz/topic/:examId" element={<GrammatikTrainingQuiz />} />
         <Route path="/grammatik-training/quiz/:level" element={<GrammatikTrainingQuiz />} />
+        <Route path="/impressum" element={<ImpressumPage />} />
+        <Route path="/agb" element={<AGBPage />} />
+        <Route path="/datenschutz" element={<DatenschutzPage />} />
+        <Route path="/kontakt" element={<KontaktPage />} />
       </Routes>
+      </LanguageProvider>
     </Router>
   );
 }

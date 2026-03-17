@@ -46,19 +46,21 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   min-height: 100vh;
-  direction: ltr;
+  /* direction inherited from html (set by LanguageContext: rtl for Arabic, ltr otherwise) */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* عدم تكسير الكلمات: إذا لم تتسع الكلمة كاملة في نهاية السطر تُنقل كلها للسطر التالي */
   word-break: normal;
   overflow-wrap: normal;
   hyphens: none;
   -webkit-hyphens: none;
   -ms-hyphens: none;
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 /* Custom Animations */
@@ -97,9 +99,26 @@ body {
   animation: glow 3s ease-in-out infinite;
 }
 
+/* بطاقة قلبت صفحة كتاب */
+@keyframes flipPageIn {
+  from {
+    transform: perspective(900px) rotateY(-92deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(900px) rotateY(0);
+    opacity: 1;
+  }
+}
+.animate-flip-page {
+  animation: flipPageIn 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: right center;
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 /* Custom scrollbar */

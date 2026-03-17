@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getVocabularyTopics, getVocabularyWords } from "../services/api";
+import { useTranslation } from "../contexts/LanguageContext";
 
 // إعداد بسيط لعناوين التوبيكات حسب الـ slug
 const TOPIC_CONFIG = {
@@ -75,6 +76,7 @@ const TOPIC_CONFIG = {
 export default function WortschatzTopicPage() {
   const { level, topicSlug } = useParams();
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,7 @@ export default function WortschatzTopicPage() {
 
   const topicConfig = TOPIC_CONFIG[topicSlug] || {
     icon: "📝",
-    title: "موضوع مفردات",
+    title: "Wortschatzthema",
     description: "",
   };
 
@@ -105,7 +107,7 @@ export default function WortschatzTopicPage() {
         );
 
         if (!foundTopic) {
-          setError("الموضوع غير موجود");
+          setError(t("wortschatz_topicNotFound"));
           setLoading(false);
           return;
         }
@@ -138,7 +140,7 @@ export default function WortschatzTopicPage() {
         setItems(sortedWords);
       } catch (err) {
         console.error('Error loading vocabulary:', err);
-        setError("حدث خطأ أثناء تحميل الكلمات. جرّبي مرة أخرى.");
+        setError(t("wortschatz_errorLoad"));
       } finally {
         setLoading(false);
       }
@@ -157,35 +159,32 @@ export default function WortschatzTopicPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* الشريط العلوي */}
-        <div className="flex items-center justify-between mb-6">
+        {/* الشريط العلوي — رجوع فقط على اليسار */}
+        <div className="mb-6">
           <button
             onClick={() => navigate(-1)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
           >
-            ← رجوع لقائمة المواضيع
+            ← {t('wortschatz_backToTopics')}
           </button>
-          <span className="text-xs font-semibold text-red-600">
-            Deutsch Learning App
-          </span>
         </div>
 
-        {/* الهيدر */}
+        {/* الهيدر — بدون أيقونة */}
         <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">
-            {displayTopic.icon || topicConfig.icon} {displayTopic.title || topicConfig.title}{" "}
-            <span className="text-red-600">– مستوى {displayLevel}</span>
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white mb-1">
+            {displayTopic.title || (topicConfig.title === "Wortschatzthema" ? t("wortschatz_topicDefault") : topicConfig.title)}{" "}
+            <span className="text-red-600">– {displayLevel}</span>
           </h1>
-          <p className="text-sm text-slate-600 max-w-xl">
+          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-xl">
             {displayTopic.description || displayTopic.shortDescription || topicConfig.description ||
-              "تدرّبي على الكلمات الأساسية لهذا الموضوع، ثم جرّبي حلّ تمارين قصيرة لتثبيت المفردات في الذاكرة."}
+              t("wortschatz_topicDescription")}
           </p>
         </div>
 
         {/* حالة التحميل */}
         {loading && (
           <div className="py-10 text-center text-slate-500 text-sm">
-            جاري تحميل الكلمات…
+            {t("wortschatz_loadingWords")}
           </div>
         )}
 
@@ -199,18 +198,18 @@ export default function WortschatzTopicPage() {
         {/* لو ما في داتا */}
         {!loading && !error && items.length === 0 && (
           <div className="py-10 text-center text-slate-500 text-sm">
-            لا توجد كلمات مضافة لهذا الموضوع حتى الآن.
+            {t("wortschatz_noWords")}
           </div>
         )}
 
         {/* قائمة الكلمات */}
         {!loading && !error && items.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-5">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">
-              قائمة الكلمات ({items.length})
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-6 wortschatz-words-list">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-4">
+              {t("wortschatz_wordList")} ({items.length})
             </h2>
 
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y-2 divide-[#DD0000]">
               {items.map((word) => {
                 // دعم meanings array أو meaning string (للتوافق مع البيانات القديمة)
                 const meaningsArray = word.meanings || (word.meaning ? [{ text: word.meaning }] : []);
@@ -260,32 +259,33 @@ export default function WortschatzTopicPage() {
                 return (
                   <div
                     key={word._id || word.id}
-                    className="py-4"
+                    className="py-4 wortschatz-word-entry"
                   >
                     <div className="flex flex-col space-y-2">
-                      <div className="text-xl font-semibold text-slate-900" dir="ltr">
+                      <div className="wortschatz-word-term text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white" dir="ltr">
                         {word.word || word.germanWord}
                       </div>
                       
-                      {/* عرض المعاني بنفس الترتيب وبفاصل | */}
+                      {/* عرض المعاني — بما فيها العربية */}
                       {meaningParts.length > 0 && (
-                        <div className="flex flex-wrap gap-2 items-center" dir="ltr">
+                        <div className="flex flex-wrap gap-2 items-center wortschatz-word-meanings text-slate-900 dark:text-slate-100" dir="auto">
                           {meaningParts.map((text, index) => (
-                            <span 
-                              key={index} 
-                              className="inline-block text-base text-slate-700"
+                            <span
+                              key={index}
+                              className="inline-block text-lg sm:text-xl font-semibold"
+                              dir={/[\u0600-\u06FF]/.test(text) ? 'rtl' : 'ltr'}
                             >
                               {text}
-                              {index < meaningParts.length - 1 && <span className="mx-2 text-slate-400">|</span>}
+                              {index < meaningParts.length - 1 && <span className="mx-2 font-normal text-slate-600 dark:text-slate-400">|</span>}
                             </span>
                           ))}
                         </div>
                       )}
                       
-                      {/* عرض المثال - Beispiel في الجهة اليسرى */}
+                      {/* عرض المثال — أكبر وداكن */}
                       {word.exampleSentence && (
-                        <div className="text-base text-slate-500 flex items-center gap-2" dir="ltr">
-                          <span className="font-medium">Beispiel:</span>
+                        <div className="text-xl sm:text-2xl text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-2" dir="ltr">
+                          <span className="font-bold">{t("wortschatz_example")}</span>
                           <span>{word.exampleSentence}</span>
                         </div>
                       )}

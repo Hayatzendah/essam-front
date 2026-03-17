@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { useLanguage } from '../contexts/LanguageContext';
 import registerImage from '../images/47163.jpg';
 
 function Register() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,12 +21,12 @@ function Register() {
     setSuccess('');
 
     if (password !== confirmPassword) {
-      setError('كلمتا المرور غير متطابقتين.');
+      setError(t('registerErrorPasswordMismatch'));
       return;
     }
 
     if (password.length < 6) {
-      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setError(t('registerErrorPasswordShort'));
       return;
     }
 
@@ -35,7 +37,7 @@ function Register() {
       try {
         const emailCheck = await authAPI.checkEmail(email);
         if (emailCheck.exists) {
-          setError('البريد الإلكتروني مستخدم بالفعل. جرب بريداً آخر أو سجل الدخول');
+          setError(t('registerErrorEmailInUse'));
           setLoading(false);
           return;
         }
@@ -63,7 +65,7 @@ function Register() {
       } catch (loginError) {
         console.error('Auto-login failed after registration:', loginError);
         // إذا فشل تسجيل الدخول التلقائي، اعرض رسالة نجاح واطلب من المستخدم تسجيل الدخول يدوياً
-        setSuccess('تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول الآن.');
+        setSuccess(t('registerSuccess'));
         setTimeout(() => {
           navigate('/login');
         }, 2000);
@@ -80,11 +82,10 @@ function Register() {
       console.error('===================================');
 
       if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
-        setError('لا يمكن الاتصال بالخادم. تأكد من أن API يعمل على https://api.deutsch-tests.com');
+        setError(t('registerErrorNetwork'));
       } else if (err.response?.status === 400) {
-        // خطأ 400 - Bad Request
         const errorData = err.response?.data;
-        let errorMessage = 'بيانات غير صحيحة';
+        let errorMessage = t('registerErrorInvalidData');
 
         if (errorData?.message) {
           errorMessage = errorData.message;
@@ -93,22 +94,19 @@ function Register() {
         } else if (typeof errorData === 'string') {
           errorMessage = errorData;
         } else if (errorData?.errors) {
-          // إذا كان هناك أخطاء متعددة
           errorMessage = Object.values(errorData.errors).flat().join(', ');
         }
 
-        // ترجمة رسائل الخطأ الشائعة
         if (errorMessage.toLowerCase().includes('email already') ||
             errorMessage.toLowerCase().includes('already in use') ||
             errorMessage.toLowerCase().includes('email exists')) {
-          errorMessage = 'البريد الإلكتروني مستخدم بالفعل. جرب بريداً آخر أو سجل الدخول';
+          errorMessage = t('registerErrorEmailInUse');
         }
 
         setError(errorMessage);
       } else if (err.response?.status === 409) {
-        // Conflict - Email already exists
         const errorData = err.response?.data;
-        let errorMessage = 'البريد الإلكتروني مستخدم بالفعل';
+        let errorMessage = t('registerErrorEmailInUseConflict');
 
         if (errorData?.message) {
           errorMessage = errorData.message;
@@ -116,15 +114,13 @@ function Register() {
           errorMessage = errorData.error;
         }
 
-        // إضافة نص توضيحي
-        errorMessage += `. البريد "${email.trim().toLowerCase()}" موجود في النظام. جرب بريداً آخر أو سجل الدخول`;
-
+        errorMessage += `. ${t('registerErrorEmailInUse')}`;
         setError(errorMessage);
       } else if (err.response?.status === 500) {
-        setError('حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً');
+        setError(t('registerErrorServer'));
       } else {
         setError(
-          err.response?.data?.message || err.response?.data?.error || 'حدث خطأ أثناء التسجيل'
+          err.response?.data?.message || err.response?.data?.error || t('registerErrorGeneric')
         );
       }
     } finally {
@@ -148,7 +144,7 @@ function Register() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19l-7-7 7-7m8 14l-7-7 7-7" />
           </svg>
-          <span className="text-sm font-medium">الرئيسية</span>
+          <span className="text-sm font-medium">{t('home')}</span>
         </Link>
       </div>
 
@@ -157,19 +153,18 @@ function Register() {
         <div className="hidden lg:flex flex-1 items-center justify-center bg-white">
         <div className="max-w-lg px-8 pr-8">
           <div className="mb-6 text-sm font-semibold text-red-600">
-            Deutsch Learning App
+            {t('appTagline')}
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-4 leading-snug">
-            حساب واحد، كل اختبارات الألمانية في مكان واحد 🤍
+            {t('registerHeadline')}
           </h1>
           <p className="text-slate-600 text-sm mb-8">
-            بعد إنشاء الحساب يمكنك حلّ اختبارات &quot;Leben in Deutschland&quot;،
-            امتحانات Goethe و TELC، ومتابعة نتائجك وتقدّمك بسهولة.
+            {t('registerIntro')}
           </p>
           <div className="relative rounded-2xl overflow-hidden">
             <img
               src={registerImage}
-              alt="تعلم الألمانية"
+              alt={t('home_heroAlt')}
               className="w-full h-auto object-cover"
             />
           </div>
@@ -184,10 +179,10 @@ function Register() {
               <span className="text-2xl">📝</span>
             </div>
             <h2 className="text-lg font-semibold text-slate-900">
-              إنشاء حساب جديد
+              {t('registerTitle')}
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              سجّل كطالب لبدء حل اختبارات الألمانية.
+              {t('registerSubtitle')}
             </p>
           </div>
 
@@ -195,14 +190,14 @@ function Register() {
             {/* الإيميل */}
             <div className="space-y-1 text-sm">
               <label className="block font-medium text-slate-700">
-                البريد الإلكتروني
+                {t('email')}
               </label>
               <input
                 type="email"
                 required
                 dir="ltr"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-50"
-                placeholder="you@example.com"
+                placeholder={t('emailPlaceholder')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -211,7 +206,7 @@ function Register() {
             {/* كلمة المرور */}
             <div className="space-y-1 text-sm">
               <label className="block font-medium text-slate-700">
-                كلمة المرور
+                {t('password')}
               </label>
               <input
                 type="password"
@@ -222,20 +217,20 @@ function Register() {
                 onChange={(e) => setPassword(e.target.value)}
               />
               <p className="text-[11px] text-slate-400">
-                يفضّل أن تحتوي على حروف كبيرة وصغيرة وأرقام.
+                {t('registerPasswordHint')}
               </p>
             </div>
 
             {/* تأكيد كلمة المرور */}
             <div className="space-y-1 text-sm">
               <label className="block font-medium text-slate-700">
-                تأكيد كلمة المرور
+                {t('confirmPassword')}
               </label>
               <input
                 type="password"
                 required
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-50"
-                placeholder="أعد كتابة كلمة المرور"
+                placeholder={t('confirmPasswordPlaceholder')}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
@@ -248,7 +243,7 @@ function Register() {
             )}
 
             {success && (
-              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+              <p className="text-xs text-green-600 bg-green-50 border border-green-100 rounded-md px-3 py-2">
                 {success}
               </p>
             )}
@@ -258,16 +253,16 @@ function Register() {
               disabled={loading}
               className="w-full rounded-md bg-red-600 text-white text-sm font-semibold py-2.5 mt-2 hover:bg-red-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? "جارٍ إنشاء الحساب..." : "إنشاء حساب كطالب"}
+              {loading ? t('registerLoading') : t('createStudentAccount')}
             </button>
 
             <p className="text-xs text-center text-slate-500 mt-3">
-              لديك حساب بالفعل؟{" "}
+              {t('alreadyHaveAccount')}{' '}
               <Link
                 to={searchParams.get('redirect') ? `/login?redirect=${searchParams.get('redirect')}` : '/login'}
                 className="text-red-600 font-medium hover:text-red-700"
               >
-                سجّل الدخول
+                {t('loginLink')}
               </Link>
             </p>
           </form>

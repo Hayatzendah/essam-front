@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { getQuizNouns } from "../services/api";
-import confetti from "canvas-confetti";
+import { BRAND } from "../constants/brand";
+import { useTranslation } from "../contexts/LanguageContext";
 
 export default function DerDieDasQuiz() {
   const { level } = useParams();
   const [searchParams] = useSearchParams();
   const count = parseInt(searchParams.get("count") || "10", 10);
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const [nouns, setNouns] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -72,12 +74,6 @@ export default function DerDieDasQuiz() {
 
     if (correct) {
       setScore((prev) => prev + 1);
-      // Fire confetti
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
       timerRef.current = setTimeout(goNext, 3000);
     } else {
       timerRef.current = setTimeout(goNext, 5000);
@@ -110,48 +106,46 @@ export default function DerDieDasQuiz() {
   // Loading
   if (phase === "loading") {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500">جاري تحميل الأسئلة...</p>
+          <div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-600 rounded-full animate-spin mx-auto mb-4" style={{ borderTopColor: BRAND.red }} />
+          <p className="text-slate-500 dark:text-slate-400">{t('loading')}</p>
         </div>
       </div>
     );
   }
 
-  // Score screen
+  // Result card
   if (phase === "finished") {
     const pct = total > 0 ? Math.round((score / total) * 100) : 0;
     const colorClass =
       pct >= 80
-        ? "text-green-600"
+        ? "text-green-600 dark:text-green-400"
         : pct >= 50
         ? "text-amber-500"
         : "text-red-600";
 
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="max-w-sm w-full mx-4 bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="text-6xl mb-4">
-            {pct >= 80 ? "🎉" : pct >= 50 ? "👍" : "💪"}
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">النتيجة</h2>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center py-4 px-4">
+        <div className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-600 p-6 text-center">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{t('grammatikQuiz_result')}</h2>
           <div className={`text-5xl font-bold mb-2 ${colorClass}`}>
-            {score}/{total}
+            {score} {t('exam_of')} {total}
           </div>
           <p className={`text-lg font-semibold mb-6 ${colorClass}`}>{pct}%</p>
           <div className="space-y-3">
             <button
               onClick={handleRetry}
-              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition"
+              className="w-full py-3 text-white rounded-xl font-medium transition hover:opacity-90"
+              style={{ background: BRAND.red }}
             >
-              إعادة الاختبار
+              {t('results_tryAgainButton')}
             </button>
             <button
               onClick={() => navigate("/derdiedas")}
-              className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition"
+              className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 rounded-xl font-medium transition"
             >
-              العودة للمستويات
+              {t('derdiedas_backToOverview')}
             </button>
           </div>
         </div>
@@ -178,41 +172,43 @@ export default function DerDieDasQuiz() {
 
     return (
       base +
-      "bg-white border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-400 cursor-pointer"
+      "bg-white dark:bg-slate-800 border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-400 cursor-pointer"
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-5xl w-[80%] mx-auto px-4 py-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <div className="w-full max-w-5xl mx-auto px-3 sm:px-4 py-8">
         {/* Progress */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+              {t('exam_question')} {currentIndex + 1} {t('exam_of')} {total}
+            </span>
             <button
               onClick={() => navigate("/derdiedas")}
-              className="text-sm text-slate-400 hover:text-slate-600"
+              className="text-sm text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
             >
-              ✕ إنهاء
+              ✕ {t('grammatikQuiz_end')}
             </button>
-            <span className="text-sm font-medium text-slate-600">
-              Frage {currentIndex + 1}/{total}
-            </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
             <div
-              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
+              className="h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%`, background: BRAND.red }}
             />
           </div>
         </div>
 
         {/* Question Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-8 py-[8.19rem] text-center mb-8">
-          <p className="text-sm text-slate-400 mb-4">اختر الأداة الصحيحة:</p>
-          <div className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-            <span className="text-purple-400">___</span> {noun?.singular}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-600 px-4 sm:px-8 py-8 sm:py-[8.19rem] mb-8 w-full min-w-0 overflow-hidden">
+          <p className="text-sm text-slate-400 dark:text-slate-500 mb-4 text-center">Wähle den richtigen Artikel:</p>
+          <div className="text-center mb-2 w-full min-w-0 overflow-hidden" style={{ fontSize: 'clamp(0.75rem, 3vw + 0.75rem, 2.25rem)' }}>
+            <span className="font-bold text-slate-900 dark:text-white break-words">
+              <span className="inline-block min-w-[2ch] mx-0.5 align-baseline" style={{ color: BRAND.red }}>___</span> {noun?.singular}
+            </span>
           </div>
-          <p className="text-2xl text-slate-500">
+          <p className="text-center w-full min-w-0 overflow-hidden text-slate-500 dark:text-slate-400 break-words" style={{ fontSize: 'clamp(0.65rem, 2.5vw + 0.65rem, 1.5rem)' }}>
             die {noun?.plural}
           </p>
         </div>
@@ -239,13 +235,14 @@ export default function DerDieDasQuiz() {
                 isCorrect ? "text-green-600" : "text-red-600"
               }`}
             >
-              {isCorrect ? "صحيح! 🎉" : `خطأ — الإجابة الصحيحة: ${noun?.article}`}
+              {isCorrect ? `${t('derdiedas_correct')} 🎉` : `${t('derdiedas_incorrect')} ${noun?.article}`}
             </p>
             <button
               onClick={goNext}
-              className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition"
+              className="px-6 py-2 text-white rounded-xl font-medium transition hover:opacity-90"
+              style={{ background: BRAND.red }}
             >
-              التالي →
+              {t('exam_next')} →
             </button>
           </div>
         )}

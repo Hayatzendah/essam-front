@@ -1,25 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import { getPublicExams } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
-import UserProfileDropdown from '../components/UserProfileDropdown';
+import { BRAND } from '../constants/brand';
+import { useTranslation } from '../contexts/LanguageContext';
+import AppHeader from '../components/AppHeader';
+import AppFooter from '../components/AppFooter';
 
 export default function LesenHoerenPage() {
   const navigate = useNavigate();
-  const { levels, levelNames, loading: levelsLoading } = useLevels('lesen_hoeren');
+  const t = useTranslation();
+  const { levelNames, loading: levelsLoading } = useLevels('lesen_hoeren');
   const [activeLevel, setActiveLevel] = useState('');
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Set default level when levels load
   useEffect(() => {
     if (levelNames.length > 0 && !activeLevel) {
       setActiveLevel(levelNames[0]);
     }
   }, [levelNames, activeLevel]);
 
-  // Load exams when level is selected
   useEffect(() => {
     if (!activeLevel) return;
     const load = async () => {
@@ -32,11 +35,16 @@ export default function LesenHoerenPage() {
           limit: 50,
         });
         const rawExams = data.items || data || [];
-        rawExams.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        // Sort by creation date (oldest first)
+        rawExams.sort((a, b) => {
+          const dateA = new Date(a.createdAt || a.created || 0).getTime();
+          const dateB = new Date(b.createdAt || b.created || 0).getTime();
+          return dateA - dateB;
+        });
         setExams(Array.isArray(rawExams) ? rawExams : []);
       } catch (err) {
         console.error('Error loading Lesen & Hören exams:', err);
-        setError('حدث خطأ أثناء تحميل الامتحانات.');
+        setError(t('pruefungen_errorLoad'));
         setExams([]);
       } finally {
         setLoading(false);
@@ -49,58 +57,58 @@ export default function LesenHoerenPage() {
     navigate(`/pruefungen/exam/${examId}`);
   };
 
-  // لا توجد مستويات تحتوي على قسم Lesen & Hören
-  if (!levelsLoading && levels.length === 0) {
+  // No levels available
+  if (!levelsLoading && levelNames.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-md w-full text-center">
-          <div className="w-20 h-20 bg-cyan-100 rounded-xl flex items-center justify-center mx-auto mb-4 text-4xl">
-            📖
+      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+        <AppHeader />
+        <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12 flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
+            <div className="h-14 w-14 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${BRAND.red}18` }}>
+              <BookOpen className="w-7 h-7" style={{ color: BRAND.red }} strokeWidth={1.8} />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{t('nav_lesenHoeren')}</h1>
+            <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+              {t('lesenHoeren_subtitle')}
+            </p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-2.5 rounded-xl font-medium transition-colors text-white"
+              style={{ background: BRAND.red }}
+            >
+              {t('backToHome')}
+            </button>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Lesen & Hören</h1>
-          <p className="text-slate-600 mb-6">
-            القراءة والاستماع: نصوص وتمارين استماع للمستويات A1 – C1. لم يتم تفعيل أي مستوى لهذا القسم بعد — من إدارة المستويات يمكنك إضافة قسم &quot;Lesen &amp; Hören&quot; للمستوى المطلوب.
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-medium transition-colors"
-          >
-            العودة للرئيسية
-          </button>
         </div>
+        <AppFooter />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+      <AppHeader />
+      <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
+        <div className="mb-6">
           <button
             onClick={() => navigate('/')}
-            className="text-sm text-slate-500 hover:text-slate-700"
+            className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
           >
-            ← العودة للرئيسية
+            ← {t('backToHome')}
           </button>
-          {localStorage.getItem('accessToken') ? (
-            <UserProfileDropdown />
-          ) : (
-            <span className="text-xs font-semibold text-slate-600">Deutsch Learning App</span>
-          )}
         </div>
 
         <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
-            Lesen &amp; Hören
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-3">
+            <span style={{ color: BRAND.red }}>{t('nav_lesenHoeren')}</span>
           </h1>
-          <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
-            القراءة والاستماع: نصوص وتمارين استماع للمستويات. اختر المستوى ثم اختر الامتحان.
+          <p className="text-slate-600 dark:text-slate-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+            {t('lesenHoeren_subtitle')}
           </p>
         </div>
 
-        {/* Tabs للمستويات */}
         {levelsLoading ? (
-          <div className="text-center text-slate-500 text-sm py-6">جاري تحميل المستويات…</div>
+          <div className="text-center text-slate-500 dark:text-slate-400 text-base py-6">{t('levelsLoading')}</div>
         ) : (
           <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
             {levelNames.map((level) => (
@@ -108,13 +116,14 @@ export default function LesenHoerenPage() {
                 key={level}
                 type="button"
                 onClick={() => setActiveLevel(level)}
-                className={`px-4 py-2 text-sm rounded-full border transition ${
+                className={`px-5 py-2.5 rounded-xl border-2 font-semibold text-base transition ${
                   activeLevel === level
-                    ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-cyan-500 hover:text-cyan-600'
+                    ? 'text-white border-transparent shadow-md'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:border-[#DD0000] hover:text-[#DD0000]'
                 }`}
+                style={activeLevel === level ? { background: BRAND.red } : {}}
               >
-                مستوى {level}
+                {level}
               </button>
             ))}
           </div>
@@ -123,57 +132,66 @@ export default function LesenHoerenPage() {
         {activeLevel && (
           <>
             {loading && (
-              <div className="text-center text-slate-500 text-sm mt-10">جاري تحميل الامتحانات…</div>
+              <div className="text-center text-slate-500 dark:text-slate-400 text-base py-6">{t('pruefungen_examsLoading')}</div>
             )}
             {error && !loading && (
-              <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl py-4">
-                {error}
+              <div className="text-center rounded-xl py-4 px-4 border-2 mb-8" style={{ color: BRAND.red, backgroundColor: `${BRAND.red}12`, borderColor: BRAND.red }}>
+                <p className="font-medium">{error}</p>
               </div>
             )}
             {!loading && !error && exams.length === 0 && (
-              <div className="text-center text-slate-600 text-sm mt-10 bg-slate-50 border border-slate-200 rounded-xl py-8 max-w-lg mx-auto">
-                <p className="font-medium text-slate-700 mb-2">لا توجد امتحانات منشورة لهذا المستوى حالياً.</p>
-                <p className="text-slate-500 text-xs">
-                  تظهر هنا فقط الامتحانات ذات الحالة &quot;منشور (Published)&quot;. إذا أنشأت امتحاناً واخترت &quot;مسودة (Draft)&quot; فغيّر الحالة إلى &quot;منشور&quot; من تعديل الامتحان في لوحة الإدارة.
-                </p>
+              <div className="text-center text-slate-500 dark:text-slate-400 text-base py-10 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl">
+                {t('noExamsForLevel')}
               </div>
             )}
             {!loading && !error && exams.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir="ltr">
-                {exams.map((exam) => (
-                  <button
-                    key={exam.id || exam._id}
-                    type="button"
-                    onClick={() => handleExamClick(exam.id || exam._id)}
-                    className="group text-left bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="h-10 w-10 rounded-xl bg-cyan-50 flex items-center justify-center text-xl">
-                        📖
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-12">
+                {exams.map((exam) => {
+                  const id = exam.id || exam._id;
+                  const title = exam.title || 'Text Lesen & Hören';
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleExamClick(id)}
+                      className="group text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${BRAND.red}18` }}>
+                          <BookOpen className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: BRAND.red }} strokeWidth={1.8} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white" dir="ltr">
+                            {title}
+                          </h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                            {activeLevel} — Text Lesen & Hören
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">{exam.title}</h3>
-                        <p className="text-[11px] text-slate-400">{exam.level}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-600 mb-3 line-clamp-2">
-                      {exam.description || 'امتحان قراءة واستماع'}
-                    </p>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500">
-                        {exam.timeLimitMin ? `${exam.timeLimitMin} دقيقة` : 'بدون وقت محدد'}
+                      <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 mb-4 leading-relaxed line-clamp-2">
+                        {exam.description || 'Prüfung Lesen & Hören'}
+                        {exam.timeLimitMin ? ` · ${exam.timeLimitMin} ${t('pruefungen_min')}` : ` · ${t('pruefungen_noTimeLimit')}`}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-base font-semibold group-hover:underline" style={{ color: BRAND.red }}>
+                        {t('startExam')}
+                        <span>↗</span>
                       </span>
-                      <span className="text-cyan-600 font-semibold group-hover:underline">
-                        ابدأ الامتحان ↗
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </>
         )}
+
+        {!activeLevel && levelNames.length > 0 && (
+          <div className="text-center text-slate-500 dark:text-slate-400 text-base mt-10">
+            {t('chooseLevelToShowExams')}
+          </div>
+        )}
       </div>
+      <AppFooter />
     </div>
   );
 }

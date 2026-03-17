@@ -1,105 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getPublicExams, getProviderSkills } from "../services/api";
+import { GraduationCap, FileText, Building2, Briefcase, Home, Globe, Headphones, BookOpen, PenLine, MessageCircle, Puzzle, FileCheck } from "lucide-react";
+import { getPublicExams, getProviderSkills, createAttempt } from "../services/api";
 import { useLevels } from "../hooks/useLevels";
-import UserProfileDropdown from "../components/UserProfileDropdown";
+import { BRAND } from "../constants/brand";
+import { useTranslation } from "../contexts/LanguageContext";
+import AppHeader from "../components/AppHeader";
+import AppFooter from "../components/AppFooter";
+
+const PROVIDER_ICONS = { goethe: GraduationCap, telc: FileText, oesd: Building2, dtb: Briefcase, dtz: Home, ecl: Globe };
+const SKILL_ICONS = { hoeren: Headphones, lesen: BookOpen, schreiben: PenLine, sprechen: MessageCircle, sprachbausteine: Puzzle };
 
 const PROVIDERS = [
-  {
-    id: "goethe",
-    name: "Goethe-Institut",
-    icon: "🎓",
-    levels: "A1 – C1",
-    allowedLevels: ["A1", "A2", "B1", "B2", "C1"],
-    description:
-      "امتحانات معترف فيها عالميًا، مناسبة للدراسة، العمل، والهجرة. بتلاقي نماذج وتدريبات لكل مستوى مع شرح لطريقة الامتحان."
-  },
-  {
-    id: "telc",
-    name: "telc",
-    icon: "📋",
-    levels: "A1 – C1",
-    allowedLevels: ["A1", "A2", "B1", "B2", "C1"],
-    description:
-      "امتحانات تركّز على اللغة في الحياة اليومية والعمل، وفي نماذج خاصة للمهاجرين وللشهادات المهنية."
-  },
-  {
-    id: "oesd",
-    name: "ÖSD",
-    icon: "🏛️",
-    levels: "A1 – C1",
-    allowedLevels: ["A1", "A2", "B1", "B2", "C1"],
-    description:
-      "نظام امتحانات نمساوي، مناسب للدراسة والعمل في ألمانيا والنمسا وسويسرا، مع تركيز قوي على الفهم والتعبير."
-  },
-  {
-    id: "dtb",
-    name: "DTB",
-    icon: "💼",
-    levels: "A2 – C1",
-    allowedLevels: ["A2", "B1", "B2", "C1"],
-    description:
-      "امتحانات لغة مهنية مخصّصة للعمل في ألمانيا، مع تركيز على مفردات ومواقف من بيئة الشغل."
-  },
-  {
-    id: "dtz",
-    name: "DTZ",
-    icon: "🏠",
-    levels: "B1",
-    allowedLevels: ["B1"],
-    description:
-      "امتحان مخصص للمهاجرين وبرامج الاندماج، مناسب للحصول على الإقامة الدائمة أو الجنسية."
-  },
-  {
-    id: "ecl",
-    name: "ECL",
-    icon: "🇪🇺",
-    levels: "A2 – C1",
-    allowedLevels: ["A2", "B1", "B2", "C1"],
-    description:
-      "نظام امتحانات أوروبي يركّز على التواصل العملي في المواقف اليومية والرسمية، مع تقييم واضح لكل مهارة."
-  }
+  { id: "goethe", name: "Goethe-Institut", levels: "A1 – C1", allowedLevels: ["A1", "A2", "B1", "B2", "C1"], description: "Weltweit anerkannte Prüfungen für Studium, Arbeit und Migration. Mit Modelltests und Übungen für jedes Niveau." },
+  { id: "telc", name: "telc", levels: "A1 – C1", allowedLevels: ["A1", "A2", "B1", "B2", "C1"], description: "Prüfungen für Alltag und Beruf, mit speziellen Formaten für Zuwanderer und berufliche Zertifikate." },
+  { id: "oesd", name: "ÖSD", levels: "A1 – C1", allowedLevels: ["A1", "A2", "B1", "B2", "C1"], description: "Österreichisches Prüfungssystem für Studium und Arbeit in D-A-CH, mit starkem Fokus auf Verstehen und Ausdruck." },
+  { id: "dtb", name: "DTB", levels: "A2 – C1", allowedLevels: ["A2", "B1", "B2", "C1"], description: "Berufssprachliche Prüfungen für die Arbeit in Deutschland, mit Fokus auf Wortschatz und Situationen im Beruf." },
+  { id: "dtz", name: "DTZ", levels: "B1", allowedLevels: ["B1"], description: "Prüfung für Zuwanderer und Integrationskurse, u. a. für Niederlassung oder Einbürgerung." },
+  { id: "ecl", name: "ECL", levels: "A2 – C1", allowedLevels: ["A2", "B1", "B2", "C1"], description: "Europäisches Prüfungssystem mit Fokus auf praktische Kommunikation in Alltag und Beruf." }
 ];
 
 const EXAM_SKILLS = [
-  {
-    id: "hoeren",
-    title: "Hören – الاستماع",
-    icon: "🎧",
-    description:
-      "بتسمعي محادثات، إعلانات، رسائل صوتية أو حوارات، وبتجاوبي على أسئلة اختيار من متعدد أو صح/خطأ. في العادة بيكون في 2–3 Teile داخل قسم الاستماع."
-  },
-  {
-    id: "lesen",
-    title: "Lesen – القراءة",
-    icon: "📖",
-    description:
-      "نصوص من الحياة اليومية، رسائل، إيميلات، أو مقالات قصيرة. الأسئلة بتكون اختيار من متعدد، مطابقة، أو تعبئة فراغات، وغالبًا 3–4 Teile حسب نوع الامتحان."
-  },
-  {
-    id: "schreiben",
-    title: "Schreiben – الكتابة",
-    icon: "✍️",
-    description:
-      "كتابة رسالة، إيميل، أو نص قصير حسب المستوى. أحيانًا Teil واحد أو اثنين، مع نقاط لازم تغطيها في الإجابة عشان تاخدي العلامة الكاملة."
-  },
-  {
-    id: "sprechen",
-    title: "Sprechen – المحادثة",
-    icon: "💬",
-    description:
-      "محادثة مع الممتحِن أو متقدّم ثاني، فيها تعارف بسيط، وصف صور، أو نقاش حول موضوع معيّن، وغالبًا مقسومة إلى 2–3 Teile."
-  },
-  {
-    id: "sprachbausteine",
-    title: "Sprachbausteine – القواعد اللغوية",
-    icon: "🧩",
-    description:
-      "تمارين لاختيار الكلمة أو التركيب الصحيح ضمن نص أو جمل، وبتركّز على القواعد والمفردات والتراكيب اللغوية."
-  }
+  { id: "hoeren", title: "Hören", description: "Dialoge, Anzeigen, Nachrichten oder Gespräche anhören und Multiple-Choice- oder Richtig/Falsch-Fragen beantworten. Meist 2–3 Teile." },
+  { id: "lesen", title: "Lesen", description: "Texte aus dem Alltag, Briefe, E-Mails oder kurze Artikel. Aufgaben als Multiple Choice, Zuordnung oder Lückentext, oft 3–4 Teile." },
+  { id: "schreiben", title: "Schreiben", description: "Brief, E-Mail oder kurzer Text je nach Niveau. Oft ein oder zwei Teile mit klaren Bewertungskriterien." },
+  { id: "sprechen", title: "Sprechen", description: "Gespräch mit Prüfer oder anderem Kandidaten: Vorstellung, Bildbeschreibung, Diskussion. Meist 2–3 Teile." },
+  { id: "sprachbausteine", title: "Sprachbausteine", description: "Übungen zur richtigen Wortwahl und Grammatik in Lückentexten oder Sätzen." }
 ];
 
 export default function PruefungenPage() {
+  const t = useTranslation();
   const { levelNames } = useLevels('pruefungen');
   const [activeLevel, setActiveLevel] = useState("A1");
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -109,6 +39,7 @@ export default function PruefungenPage() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [startingExamId, setStartingExamId] = useState(null);
   const navigate = useNavigate();
 
   // Load skills when provider is selected (or level changes)
@@ -134,7 +65,7 @@ export default function PruefungenPage() {
       setSkills((data.skills || []).filter(s => allowedSkills.includes(s.skill)));
     } catch (err) {
       console.error("Error loading skills:", err);
-      setError("حدث خطأ أثناء تحميل المهارات.");
+      setError(t("pruefungen_errorSkills"));
     } finally {
       setLoadingSkills(false);
     }
@@ -157,9 +88,9 @@ export default function PruefungenPage() {
       if (err.response?.status === 401) {
         navigate("/login?redirect=" + encodeURIComponent(window.location.pathname));
       } else if (err.response?.status === 404) {
-        setError("لا توجد امتحانات متاحة لهذه المهارة.");
+        setError(t("pruefungen_noExamsForSkill"));
       } else {
-        setError("حدث خطأ أثناء تحميل الامتحانات. حاول مرة أخرى.");
+        setError(t("pruefungen_errorLoad"));
       }
     } finally {
       setLoading(false);
@@ -183,8 +114,31 @@ export default function PruefungenPage() {
     setExams([]);
   };
 
-  const handleExamClick = (examId) => {
-    navigate(`/pruefungen/exam/${examId}`);
+  const handleExamClick = async (examId) => {
+    const token = localStorage.getItem("accessToken");
+    if (!token) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      return;
+    }
+    try {
+      setStartingExamId(examId);
+      setError("");
+      const data = await createAttempt(examId, "exam");
+      if (data?.attemptId) {
+        navigate(`/student/exam/${data.attemptId}?examId=${examId}`);
+      } else {
+        setError(t("pruefungen_errorStart"));
+      }
+    } catch (err) {
+      console.error("Error starting exam:", err);
+      if (err.response?.status === 401) {
+        navigate(`/login?redirect=${encodeURIComponent("/pruefungen")}`);
+      } else {
+        setError(err.response?.data?.message || err.response?.data?.error || t("pruefungen_errorStart"));
+      }
+    } finally {
+      setStartingExamId(null);
+    }
   };
 
   const handleBackToSkills = () => {
@@ -200,38 +154,19 @@ export default function PruefungenPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        {/* شريط أعلى بسيط */}
-        <div className="flex items-center justify-between mb-8">
-          <button
-            onClick={() => navigate("/")}
-            className="text-sm text-slate-500 hover:text-slate-700"
-          >
-            ← العودة للرئيسية
-          </button>
-          {localStorage.getItem("accessToken") ? (
-            <UserProfileDropdown />
-          ) : (
-            <span className="text-xs font-semibold text-red-600">
-              Deutsch Learning App
-            </span>
-          )}
-        </div>
-
-        {/* العنوان الرئيسي */}
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+      <AppHeader />
+      <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
         <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
-            الامتحانات الرسمية <span className="text-red-600">Prüfungen</span>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-3">
+            <span style={{ color: BRAND.red }}>{t('pruefungen_title')}</span>
           </h1>
-          <p className="text-slate-600 text-sm md:text-base max-w-2xl mx-auto">
-            من خلال هذا القسم بتقدري تجهزي لامتحانات Goethe, TELC, ÖSD, DTB, DTZ, ECL
-            وتشوفي شكل الامتحان، تقسيمه لمهارات الاستماع، القراءة، الكتابة،
-            والمحادثة، مع تدريبات عملية لكل مستوى. 📝
+          <p className="text-slate-600 dark:text-slate-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+            {t('pruefungen_subtitle')}
           </p>
         </div>
 
-        {/* Tabs للمستويات */}
+        <p className="text-center text-slate-700 dark:text-slate-200 font-semibold mb-3">{t('pruefungen_chooseLevel')}</p>
         <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
           {(selectedProvider
             ? PROVIDERS.find(p => p.id === selectedProvider)?.allowedLevels || levelNames
@@ -241,13 +176,14 @@ export default function PruefungenPage() {
               key={level}
               type="button"
               onClick={() => { setActiveLevel(level); setSelectedSkill(null); setExams([]); }}
-              className={`px-4 py-2 text-sm rounded-full border transition ${
+              className={`px-5 py-2.5 rounded-xl border-2 font-semibold text-base transition ${
                 activeLevel === level
-                  ? "bg-red-600 text-white border-red-600 shadow-sm"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-red-500 hover:text-red-600"
+                  ? "text-white border-transparent shadow-md"
+                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:border-[#DD0000] hover:text-[#DD0000]"
               }`}
+              style={activeLevel === level ? { background: BRAND.red } : {}}
             >
-              مستوى {level}
+              {level}
             </button>
           ))}
         </div>
@@ -255,50 +191,48 @@ export default function PruefungenPage() {
         {/* إذا ما في جهة مختارة - عرض كروت الجهات */}
         {!selectedProvider && (
           <>
-            {/* عنوان قسم الجهات */}
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-2">
-                اختاري الجهة المنظمة للامتحان
+            <div className="text-center mb-8">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                {t('pruefungen_chooseProvider')}
               </h2>
-              <p className="text-xs text-slate-500 max-w-xl mx-auto">
-                كل جهة إلها طريقة خاصة في الامتحان وتقسيم الدرجات، لكن الكل
-                بيعتمد على المهارات الأربع الأساسية.
+              <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
+                {t('pruefungen_chooseProviderDesc')}
               </p>
             </div>
 
-            {/* كروت الجهات الممتحنة */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-12">
-              {PROVIDERS.filter(p => p.allowedLevels.includes(activeLevel)).map((provider) => (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={() => handleProviderClick(provider.id)}
-                  className="group text-left bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center text-xl">
-                      {provider.icon}
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-12">
+              {PROVIDERS.filter(p => p.allowedLevels.includes(activeLevel)).map((provider) => {
+                const IconComponent = PROVIDER_ICONS[provider.id] || FileText;
+                return (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    onClick={() => handleProviderClick(provider.id)}
+                    className="group text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                  >
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${BRAND.red}18` }}>
+                        <IconComponent className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: BRAND.red }} strokeWidth={1.8} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                          {t('provider_' + provider.id)}
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                          {t('pruefungen_levels')}: {provider.levels}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        {provider.name}
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        المستويات: {provider.levels}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-600 mb-3">
-                    {provider.description}
-                  </p>
-                  <div className="flex items-center justify-between text-[11px] text-red-600">
-                    <span className="font-semibold group-hover:underline">
-                      عرض امتحانات {provider.name}
+                    <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
+                      {t('provider_' + provider.id + '_desc')}
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-base font-semibold group-hover:underline" style={{ color: BRAND.red }}>
+                      {t('pruefungen_viewExams')}
+                      <span>→</span>
                     </span>
-                    <span>↗</span>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </>
         )}
@@ -308,60 +242,61 @@ export default function PruefungenPage() {
           <div className="mb-12">
             <button
               onClick={handleBackToProviders}
-              className="mb-6 text-sm text-slate-500 hover:text-slate-700 flex items-center gap-2"
+              className="mb-6 text-base font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center gap-2"
             >
-              ← الرجوع لاختيار جهة أخرى
+              ← {t('pruefungen_backToProviders')}
             </button>
 
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                {PROVIDERS.find((p) => p.id === selectedProvider)?.name} — {activeLevel}
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {t('provider_' + selectedProvider)} – {activeLevel}
               </h2>
-              <p className="text-sm text-slate-500">
-                اختاري المهارة اللي بدك تتدربي عليها
+              <p className="text-base text-slate-500 dark:text-slate-400">
+                {t('pruefungen_choosePart')}
               </p>
             </div>
 
             {loadingSkills && (
-              <div className="text-center text-slate-500 text-sm mt-10">
-                جاري تحميل المهارات…
+              <div className="text-center text-slate-500 text-base mt-10">
+                {t('pruefungen_loading')}
               </div>
             )}
 
             {error && !loadingSkills && (
-              <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl py-4">
-                {error}
+              <div className="text-center rounded-xl py-4 px-4 border-2" style={{ color: BRAND.red, backgroundColor: `${BRAND.red}12`, borderColor: BRAND.red }}>
+                <p className="font-medium">{error}</p>
               </div>
             )}
 
             {!loadingSkills && !error && skills.length === 0 && (
-              <div className="text-center text-slate-500 text-sm mt-10 bg-slate-50 border border-slate-200 rounded-xl py-8">
-                لا توجد مهارات متاحة حالياً لهذا المستوى والجهة.
+              <div className="text-center text-slate-500 dark:text-slate-400 text-base mt-10 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl py-8">
+                {t('pruefungen_noSkills')}
               </div>
             )}
 
             {!loadingSkills && !error && skills.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {skills.map((skill) => {
                   const info = EXAM_SKILLS.find((s) => s.id === skill.skill);
+                  const SkillIcon = SKILL_ICONS[skill.skill] || FileCheck;
                   return (
                     <button
                       key={skill.skill}
                       type="button"
                       onClick={() => handleSkillClick(skill.skill)}
-                      className="group text-left bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
+                      className="group text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
                     >
-                      <div className="h-12 w-12 rounded-xl bg-red-50 flex items-center justify-center text-2xl mb-3">
-                        {info?.icon || "📝"}
+                      <div className="h-14 w-14 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${BRAND.red}18` }}>
+                        <SkillIcon className="w-7 h-7" style={{ color: BRAND.red }} strokeWidth={1.8} />
                       </div>
-                      <h3 className="text-sm font-semibold text-slate-900 mb-1">
-                        {skill.label || info?.title || skill.skill}
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">
+                        {skill.label || t('skill_' + skill.skill) || skill.skill}
                       </h3>
-                      <p className="text-xs text-slate-500 mb-3">
-                        {skill.count} {skill.count === 1 ? "امتحان" : "امتحانات"}
+                      <p className="text-base text-slate-500 dark:text-slate-400 mb-3">
+                        {skill.count} {skill.count === 1 ? t('pruefungen_oneExam') : t('pruefungen_exams')}
                       </p>
-                      <span className="text-[11px] text-red-600 font-semibold group-hover:underline">
-                        عرض الامتحانات ↗
+                      <span className="text-lg font-semibold group-hover:underline" style={{ color: BRAND.red }}>
+                        {t('pruefungen_viewExamsArrow')}
                       </span>
                     </button>
                   );
@@ -376,142 +311,85 @@ export default function PruefungenPage() {
           <div className="mb-12">
             <button
               onClick={handleBackToSkills}
-              className="mb-6 text-sm text-slate-500 hover:text-slate-700 flex items-center gap-2"
+              className="mb-6 text-base font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center gap-2"
             >
-              ← الرجوع للمهارات
+              ← {t('pruefungen_backToParts')}
             </button>
 
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                {EXAM_SKILLS.find((s) => s.id === selectedSkill)?.title || selectedSkill}
+            <div className="text-center mb-8">
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {t('skill_' + selectedSkill) || selectedSkill}
               </h2>
-              <p className="text-sm text-slate-500">
-                {PROVIDERS.find((p) => p.id === selectedProvider)?.name} — {activeLevel}
+              <p className="text-base text-slate-500 dark:text-slate-400">
+                {t('provider_' + selectedProvider)} — {activeLevel}
               </p>
             </div>
 
             {loading && (
-              <div className="text-center text-slate-500 text-sm mt-10">
-                جاري تحميل الامتحانات…
+              <div className="text-center text-slate-500 text-base mt-10">
+                {t('pruefungen_examsLoading')}
               </div>
             )}
 
             {error && !loading && (
-              <div className="text-center text-red-600 text-sm mt-10 bg-red-50 border border-red-100 rounded-xl py-4">
-                {error}
+              <div className="text-center rounded-xl py-4 px-4 border-2 mt-10" style={{ color: BRAND.red, backgroundColor: `${BRAND.red}12`, borderColor: BRAND.red }}>
+                <p className="font-medium">{error}</p>
               </div>
             )}
 
             {!loading && !error && exams.length === 0 && (
-              <div className="text-center text-slate-500 text-sm mt-10 bg-slate-50 border border-slate-200 rounded-xl py-8">
-                لا توجد امتحانات متاحة حالياً لهذه المهارة.
+              <div className="text-center text-slate-500 dark:text-slate-400 text-base mt-10 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl py-8">
+                {t('pruefungen_noExamsForSkill')}
               </div>
             )}
 
             {!loading && !error && exams.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir="ltr">
-                {exams.map((exam) => (
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" dir="ltr">
+                {exams.map((exam) => {
+                  const examId = exam.id || exam._id;
+                  const isStarting = startingExamId === examId;
+                  return (
                   <button
-                    key={exam.id || exam._id}
+                    key={examId}
                     type="button"
-                    onClick={() => handleExamClick(exam.id || exam._id)}
-                    className="group text-left bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
+                    onClick={() => handleExamClick(examId)}
+                    disabled={isStarting}
+                    className="group text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-wait disabled:hover:translate-y-0"
                   >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-xl">
-                        📝
+                    <div className="flex items-start gap-4 mb-3">
+                      <div className="h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${BRAND.red}18` }}>
+                        <FileCheck className="w-6 h-6" style={{ color: BRAND.red }} strokeWidth={1.8} />
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white line-clamp-2">
                           {exam.title}
                         </h3>
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-base text-slate-500 dark:text-slate-400 mt-0.5">
                           {exam.level} • {exam.provider}
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-600 mb-3 line-clamp-2">
-                      {exam.description || "امتحان تجريبي شامل"}
+                    <p className="text-base text-slate-600 dark:text-slate-300 mb-4 line-clamp-2 leading-relaxed">
+                      {exam.description || t('pruefungen_modellpruefung')}
                     </p>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500">
-                        {exam.timeLimitMin ? `${exam.timeLimitMin} دقيقة` : "بدون وقت محدد"}
+                    <div className="flex items-center justify-between text-base">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {exam.timeLimitMin ? `${exam.timeLimitMin} ${t('pruefungen_min')}` : t('pruefungen_noTimeLimit')}
                       </span>
-                      <span className="text-red-600 font-semibold group-hover:underline">
-                        ابدأ الامتحان ↗
+                      <span className="font-semibold group-hover:underline text-lg" style={{ color: BRAND.red }}>
+                        {isStarting ? t('pruefungen_wirdGestartet') : t('pruefungen_jetztStarten')}
                       </span>
                     </div>
                   </button>
-                ))}
+                );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* قسم بنية الامتحان */}
-        {!selectedProvider && (
-          <>
-            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-3xl p-8 mb-10">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                  كيف بيكون شكل الامتحان؟
-                </h2>
-                <p className="text-sm text-slate-600 max-w-2xl mx-auto">
-                  أغلب الامتحانات الرسمية بتتكوّن من أربع مهارات رئيسية، وكل مهارة ممكن
-                  تكون مقسومة لأجزاء (Teile) بعدد معيّن حسب الجهة والمستوى.
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {EXAM_SKILLS.map((skill) => (
-                  <div
-                    key={skill.id}
-                    className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm"
-                  >
-                    <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center text-2xl mb-3">
-                      {skill.icon}
-                    </div>
-                    <h3 className="text-sm font-semibold text-slate-900 mb-2">
-                      {skill.title}
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {skill.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* قسم كيف تستخدمي */}
-            <div className="bg-white border border-slate-100 rounded-3xl p-8">
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                  كيف تستخدمي قسم الامتحانات؟
-                </h2>
-              </div>
-
-              <div className="max-w-2xl mx-auto">
-                <ol className="space-y-4">
-                  {[
-                    'من الصفحة الرئيسية اضغطي على بطاقة "Prüfungen".',
-                    "اختاري الجهة المنظمة للامتحان من الكروت الموجودة فوق.",
-                    "اختاري المستوى المناسب إلك (A1, A2, B1, B2, C1...).",
-                    "اطّلعي على شكل الامتحان وتقسيمه لكل مهارة مع الأمثلة.",
-                    "ابدئي حل تدريبات محاكية للامتحان الحقيقي عن طريق الكويزات.",
-                  ].map((step, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="h-6 w-6 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
-                        {index + 1}
-                      </div>
-                      <p className="text-sm text-slate-700">{step}</p>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </div>
-          </>
-        )}
       </div>
+      <AppFooter />
     </div>
   );
 }
